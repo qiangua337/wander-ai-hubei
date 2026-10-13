@@ -1,0 +1,11 @@
+node_modules/
+dist/
+*.tsbuildinfo
+.sites/
+.openai/.local/
+*.log
+.openai/
+.wrangler/
+.env
+.env.*
+.dev.vars*
