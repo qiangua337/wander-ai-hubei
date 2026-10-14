@@ -28,6 +28,10 @@ input[type="date"] { color-scheme: light; }
 .modal-enter { animation: enter .22s ease-out; }
 .hero-copy { animation: hero-enter .7s ease-out both; }
 .search-panel { animation: hero-enter .7s ease-out .15s both; }
+.section-title { font-size: clamp(27px, 3vw, 36px); font-weight: 600; letter-spacing: -.025em; line-height: 1.4; }
+.city-scroll { scrollbar-width: thin; scrollbar-color: #c2daca transparent; }
+.itinerary-day summary::-webkit-details-marker { display: none; }
+button:focus-visible, a:focus-visible, summary:focus-visible { outline: 2px solid var(--color-pine); outline-offset: 4px; }
 @keyframes enter { from { opacity: 0; transform: translateY(14px) scale(.98); } to { opacity: 1; transform: none; } }
 @keyframes hero-enter { from { opacity: 0; transform: translateY(16px); } to { opacity: 1; transform: none; } }
 @media (prefers-reduced-motion: reduce) { html { scroll-behavior: auto; } *, *::before, *::after { animation-duration: .01ms !important; transition-duration: .01ms !important; } }
