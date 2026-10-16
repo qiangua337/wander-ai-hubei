@@ -10,7 +10,9 @@ const variants = {
   white: 'bg-white text-pine hover:bg-cream shadow-sm',
 };
 export function Button({ variant = 'primary', className = '', children, type = 'button', ...props }: ButtonProps) {
-  return <button type={type} className={`inline-flex min-h-11 items-center justify-center gap-2 rounded-xl px-5 text-sm font-semibold transition duration-200 focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-pine disabled:cursor-not-allowed disabled:opacity-45 ${variants[variant]} ${className}`} {...props}>{children}</button>;
+  const padding = /(^|\s)px-\S+/.test(className) ? '' : 'px-5';
+  const fontSize = /(^|\s)text-(xs|sm|base|lg|xl|[2-9]xl|\[\d)/.test(className) ? '' : 'text-sm';
+  return <button type={type} className={`inline-flex min-h-11 items-center justify-center gap-2 rounded-xl ${padding} ${fontSize} font-semibold transition duration-200 focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-pine disabled:cursor-not-allowed disabled:opacity-45 ${variants[variant]} ${className}`} {...props}>{children}</button>;
 }
 
 type FieldProps = { label: string; icon: ReactNode; children: ReactNode; className?: string };

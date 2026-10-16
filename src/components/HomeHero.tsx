@@ -1,0 +1,18 @@
+import { ArrowDown, ArrowRight, ArrowUpRight, CalendarDays, MapPin, Search, Sparkles, Users } from 'lucide-react';
+import { cities } from '../data';
+import { Button, Field, InputField, SelectField } from './ui';
+import type { FormEvent } from 'react';
+
+export function HomeHero({ selection, date, travelers, onCity, onDate, onTravelers, onSearch, onPlan }: { selection: string; date: string; travelers: string; onCity: (id: string) => void; onDate: (date: string) => void; onTravelers: (n: string) => void; onSearch: (event: FormEvent) => void; onPlan: () => void }) {
+  return <section aria-labelledby="hero-title" className="hero-expanse relative isolate bg-pine-deep px-5 pb-10 pt-14 text-white sm:pt-20 lg:px-10 lg:pb-12 lg:pt-20">
+    <img src="/images/xiling.jpg" alt="宜昌西陵峡灯影峡的长江、层叠山峦与江岸亭阁" fetchPriority="high" width="1920" height="1280" className="absolute inset-0 -z-20 h-full w-full object-cover object-[60%_center]" /><div className="hero-shade absolute inset-0 -z-10" />
+    <div className="mx-auto max-w-[1440px]">
+      <div className="grid items-end gap-10 lg:grid-cols-[1.4fr_1fr]">
+        <div className="hero-copy"><p className="mb-7 flex items-center gap-3 font-display text-[10px] font-semibold tracking-[3px] text-seafoam"><span className="h-px w-10 bg-seafoam" /> WANDER INTO HUBEI</p><h1 id="hero-title" className="hero-title">山河有约。<br /><span className="font-light text-[#f0e6cd]">湖北，慢慢走。</span></h1><p className="mt-6 max-w-md text-sm leading-8 text-white/80 sm:text-base">湖北全境旅行指南与行程规划。<br />从想去的风景，到每天的吃、住、行，一次安排好。</p><div className="mt-8 flex flex-wrap gap-3"><Button onClick={onPlan} variant="white" className="min-h-13 px-6"><Sparkles size={17} />开始规划我的行程<ArrowUpRight size={17} /></Button><a href="#destinations" className="inline-flex min-h-13 items-center gap-3 px-3 text-sm font-medium text-white/90">先看看目的地<ArrowRight size={17} /></a></div></div>
+        <div className="hidden justify-self-end border-l border-white/30 pl-6 text-white/80 lg:block"><p className="text-[10px] tracking-[2px] text-seafoam">A LITTLE FURTHER, A LITTLE SLOWER</p><p className="mt-5 text-xl font-light leading-relaxed">在峡江的转弯处，<br />遇见旅程的另一种可能。</p><p className="mt-7 flex items-center gap-2 text-xs"><MapPin size={14} />宜昌 · 西陵峡 / 灯影峡</p></div>
+      </div>
+      <form onSubmit={onSearch} aria-label="搜索湖北旅行" className="search-panel mt-12 rounded-2xl border border-white/20 bg-white p-5 text-ink shadow-2xl sm:p-6 lg:mt-14"><div className="grid items-end gap-4 sm:grid-cols-2 lg:grid-cols-[1.3fr_1.1fr_.8fr_1fr]"><Field label="想去哪里" icon={<MapPin size={15} />}><SelectField aria-label="选择湖北城市" value={selection} onChange={event => onCity(event.target.value)}><option value="all">还没想好 · 看全部湖北</option>{cities.map(city => <option key={city.id} value={city.id}>{city.shortName}</option>)}</SelectField></Field><Field label="什么时候出发" icon={<CalendarDays size={15} />}><InputField aria-label="出行日期" placeholder="YYYY-MM-DD（可选）" pattern="[0-9]{4}-[0-9]{2}-[0-9]{2}" maxLength={10} value={date} onChange={event => onDate(event.target.value)} /></Field><Field label="几个人一起" icon={<Users size={15} />}><SelectField aria-label="出行人数" value={travelers} onChange={event => onTravelers(event.target.value)}>{[1, 2, 3, 4, 5, 6].map(n => <option value={n} key={n}>{n} 位旅行者</option>)}</SelectField></Field><Button type="submit" variant="orange" className="h-12 w-full"><Search size={17} />发现目的地</Button></div></form>
+      <div className="mt-6 flex flex-wrap items-center justify-between gap-4 text-[10px] text-white/65"><p>17 个市州 · 70 个精选去处 · 吃住行完整参考</p><a href="#popular" className="flex min-h-9 items-center gap-2">往下看，找到心动的一站<ArrowDown size={14} /></a></div>
+    </div>
+  </section>;
+}

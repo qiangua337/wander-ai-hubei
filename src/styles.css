@@ -3,15 +3,15 @@
 @theme {
   --font-sans: "Noto Sans SC Variable", "Microsoft YaHei", "PingFang SC", sans-serif;
   --font-display: "Manrope Variable", "Noto Sans SC Variable", sans-serif;
-  --color-pine: #135b54;
-  --color-pine-deep: #0c413d;
+  --color-pine: #1b5144;
+  --color-pine-deep: #142f29;
   --color-seafoam: #c2daca;
   --color-terracotta: #cb714e;
   --color-terracotta-deep: #b65d3c;
   --color-cream: #fcfaf6;
   --color-sage: #edf3ed;
   --color-ink: #22352f;
-  --color-muted: #71817a;
+  --color-muted: #5f7066;
   --color-line: #e1e7e1;
   --color-sand: #f5f2ea;
 }
@@ -22,13 +22,21 @@ button, a, input, select { -webkit-tap-highlight-color: transparent; }
 button:not(:disabled) { cursor: pointer; }
 ::selection { background: #c2daca; color: #0c413d; }
 input[type="date"] { color-scheme: light; }
-.hero-shade { background: linear-gradient(180deg, rgba(8,38,36,.32) 0%, rgba(8,38,36,.52) 46%, rgba(8,38,36,.45) 76%, rgba(8,38,36,.7) 100%); }
+.hero-shade { background: linear-gradient(90deg, rgba(9,32,27,.83) 0%, rgba(9,32,27,.58) 48%, rgba(9,32,27,.18) 100%), linear-gradient(180deg, rgba(9,32,27,.05) 40%, rgba(9,32,27,.55) 100%); }
 .photo-credit { text-shadow: 0 1px 5px rgba(0,0,0,.5); }
 .cta-pattern { background-image: repeating-radial-gradient(ellipse at 80% 140%, transparent 0, transparent 34px, rgba(194,218,202,.08) 35px, transparent 36px); }
 .modal-enter { animation: enter .22s ease-out; }
 .hero-copy { animation: hero-enter .7s ease-out both; }
 .search-panel { animation: hero-enter .7s ease-out .15s both; }
-.section-title { font-size: clamp(27px, 3vw, 36px); font-weight: 600; letter-spacing: -.025em; line-height: 1.4; }
+.section-title { font-size: clamp(30px, 3.8vw, 50px); font-weight: 500; letter-spacing: -.035em; line-height: 1.4; }
+.hero-title { font-size: clamp(40px, 6.1vw, 88px); font-weight: 600; letter-spacing: -.045em; line-height: 1.2; }
+.hero-expanse { min-height: min(900px, 90vh); }
+.eyebrow { margin-bottom: 18px; font-family: var(--font-display); font-size: 10px; font-weight: 700; letter-spacing: 2px; color: var(--color-terracotta); }
+.itinerary-day { scroll-margin-top: 110px; }
+.planned-trip .itinerary-day { scroll-margin-top: 150px; }
+textarea:focus-visible, input[type="checkbox"]:focus-visible { outline: 2px solid var(--color-pine); outline-offset: 3px; }
+summary::-webkit-details-marker { display: none; }
+@media (max-width: 640px) { .hero-expanse { min-height: 0; } .hero-shade { background: linear-gradient(90deg, rgba(9,32,27,.8), rgba(9,32,27,.45)); } }
 .city-scroll { scrollbar-width: thin; scrollbar-color: #c2daca transparent; }
 .itinerary-day summary::-webkit-details-marker { display: none; }
 button:focus-visible, a:focus-visible, summary:focus-visible { outline: 2px solid var(--color-pine); outline-offset: 4px; }
