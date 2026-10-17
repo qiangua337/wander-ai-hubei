@@ -135,3 +135,7 @@
 - 神农架国家公园：坪阡镇住宿与当地生活，https://www.snjnationalpark.com/sqgj/stcy/202211/t4512886.shtml
 
 GitHub 页面结构与表单信息分组的灵感记录在 DESIGN-NOTES.md；未复制参考项目代码或图片。
+
+## 字体补充
+
+2026-10-17 增加本地打包的 Noto Serif SC（Fontsource Variable 5.3.1），按 SIL Open Font License 1.1 使用。原授权全文随站点发布于 /fonts/OFL-NotoSerifSC.txt；未修改字体。
