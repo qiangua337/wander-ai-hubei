@@ -139,3 +139,11 @@ GitHub 页面结构与表单信息分组的灵感记录在 DESIGN-NOTES.md；未
 ## 字体补充
 
 2026-10-17 增加本地打包的 Noto Serif SC（Fontsource Variable 5.3.1），按 SIL Open Font License 1.1 使用。原授权全文随站点发布于 /fonts/OFL-NotoSerifSC.txt；未修改字体。
+
+## 荆楚文化导览
+
+- [湖北省博物馆 · 曾侯乙编钟](https://www.hbww.org.cn/zgzb/p/4695.html)：出土地点、全套数量及铭文中的音律信息。
+- [宜昌市政府 · 三峡大坝—屈原故里旅游区](https://www.yichang.gov.cn/content-32045-1001487-1.html)：屈原文化与峡江文物背景。
+- [湖北省政府 · 荆州楚文化线路](https://media.hubei.gov.cn/zyxmt/push/weixin/202307/t20230724_4764864.shtml)：荆州文博与城市文化线索，沿用原城市条目来源。
+
+图中的 suizhou-bells.jpg 是擂鼓墩二号墓编钟，不是曾侯乙编钟；署名与 CC BY-SA 4.0 许可沿用上方既有记录。三组导览为编辑组织的阅读与参观建议，不代表实时开放、预约、演出或交通安排。

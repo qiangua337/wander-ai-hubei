@@ -1,39 +1,36 @@
-import { ArrowDown, ArrowRight, ArrowUpRight, CalendarDays, MapPin, Search, Users } from 'lucide-react';
+import { ArrowRight, ArrowUpRight, CalendarDays, MapPin, Search, Users } from 'lucide-react';
 import { cities } from '../data';
 import { Button, Field, InputField, SelectField } from './ui';
 import type { FormEvent } from 'react';
 
-export function HomeHero({ selection, date, travelers, onCity, onDate, onTravelers, onSearch, onPlan }: { selection: string; date: string; travelers: string; onCity: (id: string) => void; onDate: (date: string) => void; onTravelers: (n: string) => void; onSearch: (event: FormEvent) => void; onPlan: () => void }) {
+type HeroProps = { selection: string; date: string; travelers: string; onCity: (id: string) => void; onDate: (date: string) => void; onTravelers: (n: string) => void; onSearch: (event: FormEvent) => void; onPlan: () => void; onOpenPlace: (id: string) => void };
+export function HomeHero({ selection, date, travelers, onCity, onDate, onTravelers, onSearch, onPlan, onOpenPlace }: HeroProps) {
   return <section aria-labelledby="hero-title" className="home-cover">
-    <div className="cover-grid page-width">
-      <div className="cover-copy hero-copy">
-        <p className="cover-kicker"><span className="h-px w-8 bg-terracotta" />湖北旅行 · 一份慢行指南</p>
-        <h1 id="hero-title" className="hero-title">把假期，<br /><span>交给山河。</span></h1>
-        <p className="cover-description">从江城的一碗过早，到峡江深处的一阵风。<br className="hidden sm:block" />在湖北，找到值得停留的地方。</p>
-        <p className="mt-4 text-xs leading-7 text-muted">湖北全境旅行指南与行程规划，<br />把每天的路线、住宿与餐桌，一起安排妥当。</p>
-        <div className="mt-8 flex flex-wrap items-center gap-x-7 gap-y-3 sm:mt-10">
-          <Button onClick={onPlan} className="min-h-13 px-6">规划我的旅程<ArrowUpRight size={17} strokeWidth={1.5} /></Button>
-          <a href="#popular" className="text-link">先看心动的风景<ArrowRight size={16} strokeWidth={1.5} /></a>
+    <div className="cover-stage">
+      <figure className="cover-image"><img src="/images/enshi.jpg" alt="恩施大峡谷的喀斯特峰丛、独立石柱与山间聚落" fetchPriority="high" width="3840" height="1782" /><div className="cover-image-shade" /><figcaption className="cover-caption"><MapPin size={14} strokeWidth={1.5} /><span>恩施 · 大峡谷</span><span>峰丛与地缝之间，看见山河的形成</span></figcaption></figure>
+      <div className="page-width cover-grid">
+        <div className="cover-copy hero-copy">
+          <p className="cover-kicker"><span className="cover-seal">荆楚</span><span>湖北全域旅行指南</span></p>
+          <h1 id="hero-title" className="hero-title">江山入画，<br />荆楚入心。</h1>
+          <p className="cover-description">从一江峡水，到一城烟火。<br />看得见山河，也读得懂来处。</p>
+          <div className="cover-services"><span>逐日路线</span><span>住宿片区</span><span>地方风味</span></div>
+          <div className="cover-actions"><Button variant="orange" onClick={onPlan} className="min-h-12 px-6">规划我的旅程<ArrowUpRight size={17} strokeWidth={1.5} /></Button><a href="#popular" className="cover-browse">先看湖北的风景<ArrowRight size={16} strokeWidth={1.5} /></a></div>
+          <p className="cover-note">选一座城，连起风景、餐桌与每一晚的落脚处。</p>
         </div>
-        <div className="cover-edition"><span>WANDER INTO HUBEI</span><span>山水 / 人文 / 地方风味</span></div>
+        <aside aria-label="从文化出发" className="cover-discovery"><p className="cover-discovery-label">山河之外，还有这些来处</p>
+          <button onClick={() => onOpenPlace('suizhou-museum')} className="cover-discovery-card"><img src="/images/suizhou-bells.jpg" alt="随州出土的擂鼓墩二号墓编钟" width="200" height="140" loading="lazy" /><span><span className="block text-[10px] text-white/65">随州 · 曾随文化</span><strong className="mt-2 block font-editorial text-lg font-normal">礼乐与青铜</strong></span><ArrowUpRight size={17} strokeWidth={1.3} /></button>
+          <button onClick={() => onOpenPlace('jingzhou-wall')} className="cover-discovery-card"><img src="/images/jingzhou.jpg" alt="荆州古城宾阳楼与城墙" width="200" height="140" loading="lazy" /><span><span className="block text-[10px] text-white/65">荆州 · 城市记忆</span><strong className="mt-2 block font-editorial text-lg font-normal">古城与楚韵</strong></span><ArrowUpRight size={17} strokeWidth={1.3} /></button>
+        </aside>
       </div>
-      <figure className="cover-image hero-copy">
-        <img src="/images/xiling.jpg" alt="宜昌西陵峡灯影峡的长江、层叠山峦与江岸亭阁" fetchPriority="high" width="1920" height="1280" />
-        <div aria-hidden="true" className="cover-image-shade" />
-        <span aria-hidden="true" className="cover-image-word">Hubei.</span>
-        <figcaption className="cover-caption"><span><span className="mb-2 block font-display text-[10px] tracking-[.18em] text-white/65">THE JOURNEY BEGINS</span>宜昌 · 西陵峡 / 灯影峡</span><a href="#popular" aria-label="向下探索湖北目的地" className="cover-down"><ArrowDown size={20} strokeWidth={1.2} /></a></figcaption>
-      </figure>
     </div>
-    <div className="page-width">
-      <form onSubmit={onSearch} aria-label="搜索湖北旅行" className="cover-search search-panel">
-        <div className="cover-search-intro"><span className="font-display text-[10px] tracking-[.14em] text-terracotta">YOUR NEXT JOURNEY</span><p className="mt-2 font-editorial text-xl">从哪里开始？</p></div>
-        <div className="cover-fields">
-          <Field label="想去哪里" icon={<MapPin size={14} strokeWidth={1.5} />}><SelectField aria-label="选择湖北城市" value={selection} onChange={event => onCity(event.target.value)}><option value="all">还没想好 · 全部湖北</option>{cities.map(city => <option key={city.id} value={city.id}>{city.shortName}</option>)}</SelectField></Field>
-          <Field label="什么时候出发" icon={<CalendarDays size={14} strokeWidth={1.5} />}><InputField aria-label="出行日期" placeholder="YYYY-MM-DD（可选）" pattern="[0-9]{4}-[0-9]{2}-[0-9]{2}" maxLength={10} value={date} onChange={event => onDate(event.target.value)} /></Field>
-          <Field label="几个人一起" icon={<Users size={14} strokeWidth={1.5} />}><SelectField aria-label="出行人数" value={travelers} onChange={event => onTravelers(event.target.value)}>{[1, 2, 3, 4, 5, 6].map(n => <option value={n} key={n}>{n} 位旅行者</option>)}</SelectField></Field>
-          <Button type="submit" className="h-13 w-full"><Search size={16} strokeWidth={1.5} />发现目的地</Button>
-        </div>
-      </form>
-    </div>
+    <div className="page-width"><form onSubmit={onSearch} aria-label="搜索湖北旅行" className="cover-search">
+      <div className="cover-search-intro"><span>行前小笺</span><p>下一站，去哪里？</p></div>
+      <div className="cover-fields">
+        <Field label="想去哪里" icon={<MapPin size={14} strokeWidth={1.5} />}><SelectField aria-label="选择湖北城市" value={selection} onChange={event => onCity(event.target.value)}><option value="all">还没想好 · 全部湖北</option>{cities.map(city => <option key={city.id} value={city.id}>{city.shortName}</option>)}</SelectField></Field>
+        <Field label="什么时候出发" icon={<CalendarDays size={14} strokeWidth={1.5} />}><InputField aria-label="出行日期" placeholder="年-月-日（可选）" pattern="[0-9]{4}-[0-9]{2}-[0-9]{2}" maxLength={10} value={date} onChange={event => onDate(event.target.value)} /></Field>
+        <Field label="几个人一起" icon={<Users size={14} strokeWidth={1.5} />}><SelectField aria-label="出行人数" value={travelers} onChange={event => onTravelers(event.target.value)}>{[1, 2, 3, 4, 5, 6].map(n => <option value={n} key={n}>{n} 位旅行者</option>)}</SelectField></Field>
+        <Button type="submit" className="h-12 w-full"><Search size={16} strokeWidth={1.5} />发现目的地</Button>
+      </div>
+    </form></div>
   </section>;
 }
