@@ -14,9 +14,9 @@ export function DestinationCard({ place, saved, onSave, onOpen, featured = false
   </article>;
   return <article className="catalogue-card group">
     <div className="mb-4 flex items-center justify-between gap-3"><p className="place-meta">{cityById[place.cityId].shortName}<span />{place.tag}</p>{saveButton}</div>
-    <button onClick={onOpen} className="text-left"><h3 className="font-editorial text-[23px] font-medium leading-snug transition group-hover:text-pine">{place.title}</h3></button>
-    <p className="mt-3 text-[13px] leading-7 text-muted">{place.description}</p>
+    <button onClick={onOpen} className="text-left"><h3 className="font-sans text-[23px] font-semibold leading-snug transition group-hover:text-pine">{place.title}</h3></button>
+    <p className="mt-3 text-sm leading-7 text-muted">{place.description}</p>
     <ul className="mt-4 space-y-1.5 text-xs leading-6 text-ink/75">{place.highlights.slice(0, 2).map(item => <li key={item} className="flex items-start gap-2"><span className="mt-2.5 h-1 w-1 shrink-0 bg-terracotta/70" />{item}</li>)}</ul>
-    <div className="mt-auto flex items-center justify-between gap-3 border-t border-line/60 pt-4"><span className="flex items-center gap-1.5 text-[11px] text-muted"><Clock3 size={13} strokeWidth={1.5} />{place.duration}</span><button onClick={onOpen} className="inline-flex min-h-10 items-center gap-1.5 text-xs font-medium text-pine hover:text-terracotta">展开攻略<ArrowUpRight size={15} strokeWidth={1.5} /></button></div>
+    <div className="mt-auto flex items-center justify-between gap-3 border-t border-line/60 pt-4"><span className="flex items-center gap-1.5 text-xs text-muted"><Clock3 size={13} strokeWidth={1.5} />{place.duration}</span><button onClick={onOpen} className="inline-flex min-h-10 items-center gap-1.5 text-xs font-medium text-pine hover:text-terracotta">展开攻略<ArrowUpRight size={15} strokeWidth={1.5} /></button></div>
   </article>;
 }

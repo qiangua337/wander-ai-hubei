@@ -1,8 +1,6 @@
 import React from 'react';
 import ReactDOM from 'react-dom/client';
-import '@fontsource-variable/manrope';
 import '@fontsource-variable/noto-sans-sc';
-import '@fontsource-variable/noto-serif-sc';
 import './styles.css';
 import App from './App';
 

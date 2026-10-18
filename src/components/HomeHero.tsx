@@ -11,15 +11,15 @@ export function HomeHero({ selection, date, travelers, onCity, onDate, onTravele
       <div className="page-width cover-grid">
         <div className="cover-copy hero-copy">
           <p className="cover-kicker"><span className="cover-seal">荆楚</span><span>湖北全域旅行指南</span></p>
-          <h1 id="hero-title" className="hero-title">江山入画，<br />荆楚入心。</h1>
+          <h1 id="hero-title" className="hero-title">江山入画，<br /><span className="font-semibold">荆楚入心。</span></h1>
           <p className="cover-description">从一江峡水，到一城烟火。<br />看得见山河，也读得懂来处。</p>
           <div className="cover-services"><span>逐日路线</span><span>住宿片区</span><span>地方风味</span></div>
           <div className="cover-actions"><Button variant="orange" onClick={onPlan} className="min-h-12 px-6">规划我的旅程<ArrowUpRight size={17} strokeWidth={1.5} /></Button><a href="#popular" className="cover-browse">先看湖北的风景<ArrowRight size={16} strokeWidth={1.5} /></a></div>
           <p className="cover-note">选一座城，连起风景、餐桌与每一晚的落脚处。</p>
         </div>
         <aside aria-label="从文化出发" className="cover-discovery"><p className="cover-discovery-label">山河之外，还有这些来处</p>
-          <button onClick={() => onOpenPlace('suizhou-museum')} className="cover-discovery-card"><img src="/images/suizhou-bells.jpg" alt="随州出土的擂鼓墩二号墓编钟" width="200" height="140" loading="lazy" /><span><span className="block text-[10px] text-white/65">随州 · 曾随文化</span><strong className="mt-2 block font-editorial text-lg font-normal">礼乐与青铜</strong></span><ArrowUpRight size={17} strokeWidth={1.3} /></button>
-          <button onClick={() => onOpenPlace('jingzhou-wall')} className="cover-discovery-card"><img src="/images/jingzhou.jpg" alt="荆州古城宾阳楼与城墙" width="200" height="140" loading="lazy" /><span><span className="block text-[10px] text-white/65">荆州 · 城市记忆</span><strong className="mt-2 block font-editorial text-lg font-normal">古城与楚韵</strong></span><ArrowUpRight size={17} strokeWidth={1.3} /></button>
+          <button onClick={() => onOpenPlace('suizhou-museum')} className="cover-discovery-card"><img src="/images/suizhou-bells.jpg" alt="随州出土的擂鼓墩二号墓编钟" width="200" height="140" loading="lazy" /><span><span className="block text-xs text-white/65">随州 · 曾随文化</span><strong className="mt-2 block font-sans text-lg font-medium">礼乐与青铜</strong></span><ArrowUpRight size={17} strokeWidth={1.3} /></button>
+          <button onClick={() => onOpenPlace('jingzhou-wall')} className="cover-discovery-card"><img src="/images/jingzhou.jpg" alt="荆州古城宾阳楼与城墙" width="200" height="140" loading="lazy" /><span><span className="block text-xs text-white/65">荆州 · 城市记忆</span><strong className="mt-2 block font-sans text-lg font-medium">古城与楚韵</strong></span><ArrowUpRight size={17} strokeWidth={1.3} /></button>
         </aside>
       </div>
     </div>

@@ -140,6 +140,8 @@ GitHub 页面结构与表单信息分组的灵感记录在 DESIGN-NOTES.md；未
 
 2026-10-17 增加本地打包的 Noto Serif SC（Fontsource Variable 5.3.1），按 SIL Open Font License 1.1 使用。原授权全文随站点发布于 /fonts/OFL-NotoSerifSC.txt；未修改字体。
 
+2026-10-18 页面统一使用本地 Noto Sans SC 可变字体，停止加载 Noto Serif SC 与 Manrope；保留旧版 Noto Serif SC 的授权记录。
+
 ## 荆楚文化导览
 
 - [湖北省博物馆 · 曾侯乙编钟](https://www.hbww.org.cn/zgzb/p/4695.html)：出土地点、全套数量及铭文中的音律信息。
