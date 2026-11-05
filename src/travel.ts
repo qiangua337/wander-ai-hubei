@@ -10,9 +10,11 @@ export function findDestinations(cityId: string, keyword: string, filter: Filter
   return destinations.filter(place => {
     const city = cityById[place.cityId];
     const text = [place.title, place.tag, place.description, place.overview, ...place.highlights, ...place.tips, city.name, city.shortName, city.area, ...city.food].join(' ').toLowerCase();
+    // Use the numeric day bound so pure half-days differ from ranges ending in a full day.
+    const dayCount = Number(place.duration.match(/(\d+(?:\.\d+)?)\s*天/)?.[1] ?? 0);
     return (cityId === 'all' || place.cityId === cityId)
       && (filter === 'all' || (filter === 'saved' ? saved.includes(place.id) : filter === 'family' ? familyPlaces.has(place.id) : place.category === filter))
-      && (duration === 'any' || (duration === 'half' ? !place.duration.includes('1 天') && !place.duration.includes('2 天') : place.duration.includes('天')))
+      && (duration === 'any' || (duration === 'half' ? dayCount < 1 : dayCount >= 1))
       && terms.every(term => text.includes(term));
   });
 }

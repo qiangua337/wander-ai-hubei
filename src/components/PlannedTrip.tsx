@@ -1,5 +1,5 @@
-import { useState } from 'react';
-import { ArrowUpRight, BedDouble, Bookmark, Check, Copy, Download, Pencil, Route, Share2, Utensils, Wallet } from 'lucide-react';
+import { useRef, useState } from 'react';
+import { ArrowRight, ArrowUpRight, BedDouble, Bookmark, Check, CircleCheck, Copy, Download, Pencil, Route, Share2, Utensils, Wallet } from 'lucide-react';
 import { cityById } from '../data';
 import { buildTrip, budgetLabels, estimateBudget, formatDetailedPlan, groupLabels, sharePlanUrl, tripTitle, type Profile } from '../planning';
 import { downloadPlan } from '../travel';
@@ -10,19 +10,67 @@ import { Button } from './ui';
 export function PlannedTrip({ profile, onCopy, onSave, onEdit }: { profile: Profile; onCopy: (text: string) => void; onSave: () => boolean; onEdit: () => void }) {
   const [tab, setTab] = useState('route');
   const [saveState, setSaveState] = useState('');
+  const [checked, setChecked] = useState<string[]>([]);
+  const panel = useRef<HTMLDivElement>(null);
   const days = buildTrip(profile), budget = estimateBudget(profile, days.length), cityIds = [...new Set(days.map(day => day.cityId))];
-  const tabs = [{ id: 'route', label: '每日行程', icon: Route }, { id: 'stay', label: '住在哪里', icon: BedDouble }, { id: 'food', label: '当地美食', icon: Utensils }, { id: 'budget', label: '预算预留', icon: Wallet }];
+  const tabs = [{ id: 'route', label: '每日行程', count: days.length + ' 天', icon: Route }, { id: 'stay', label: '住在哪里', count: budget.nights + ' 晚', icon: BedDouble }, { id: 'food', label: '当地美食', count: cityIds.length + ' 城', icon: Utensils }, { id: 'budget', label: '预算预留', count: profile.party + ' 人', icon: Wallet }];
   const text = formatDetailedPlan(profile);
+  const selectTab = (id: string) => {
+    setTab(id);
+    window.requestAnimationFrame(() => panel.current?.scrollIntoView({ behavior: 'smooth', block: 'start' }));
+  };
+  const checks = [
+    { id: 'book', title: '预约和开放安排', detail: '逐一核对景区、展馆的预约、入场及当期开放安排。' },
+    { id: 'move', title: profile.mode === 'drive' ? '停车与景区接驳' : '车站与返程接驳', detail: profile.mode === 'drive' ? '确认入口停车、景区内部交通；为山区转场与休息留余量。' : '核对车站、班次和末班接驳；山区先安排好返程交通。' },
+    { id: 'stay', title: budget.nights ? '逐晚入住与退房' : '当天返程或延住', detail: budget.nights ? '按照每晚落脚处订房，查看取消政策与次日出发位置。' : '确认返程时间；若延住，按次日出发片区挑选酒店。' },
+    { id: 'pace', title: profile.group === 'family' || profile.group === 'senior' ? '同行体力与午后休息' : '天气、行李与随身装备', detail: profile.group === 'family' || profile.group === 'senior' ? '台阶、步道和无障碍条件提前问清，必要时减少下午活动。' : '出发前查看官方天气与景区提示，再决定鞋服、雨具及行李寄存。' },
+  ];
   return <div aria-label="我的具体旅行方案" className="planned-trip min-w-0">
-    <div className="bg-pine-deep p-6 text-white sm:p-8"><p className="mb-4 flex items-center gap-2 text-xs tracking-wide text-seafoam"><Check size={14} /> 一份完整的湖北行程</p><div className="flex flex-wrap items-start justify-between gap-4"><h3 className="max-w-md font-sans text-2xl font-semibold leading-relaxed">{tripTitle(profile)}</h3><button onClick={() => setSaveState(onSave() ? '已保存到当前浏览器' : '保存失败，请下载清单')} className="inline-flex min-h-10 items-center gap-1.5 rounded-full border border-white/30 px-3 text-xs"><Bookmark size={14} />{saveState || '存到我的行程'}</button><button onClick={onEdit} className="inline-flex min-h-10 items-center gap-1.5 text-xs text-seafoam"><Pencil size={13} />调整条件</button></div><p className="mt-3 text-xs leading-7 text-white/70">{cityIds.map(id => cityById[id].shortName).join(' → ')}<br />{profile.date || '日期待定'} · {profile.party} 人 · {groupLabels[profile.group]} · {profile.mode === 'drive' ? '自驾出行' : '公共交通＋接驳'}</p><div className="mt-6 grid grid-cols-3 divide-x divide-white/15 border-t border-white/15 pt-5 text-center"><div><strong className="font-display text-2xl">{days.length}</strong><span className="ml-1 text-xs">天</span><p className="mt-1 text-xs text-white/60">按兴趣取舍</p></div><div><strong className="font-display text-2xl">{budget.nights}</strong><span className="ml-1 text-xs">晚</span><p className="mt-1 text-xs text-white/60">住宿衔接</p></div><div><strong className="font-display text-2xl">{cityIds.length}</strong><span className="ml-1 text-xs">城</span><p className="mt-1 text-xs text-white/60">顺着路线走</p></div></div></div>
-    <div role="tablist" aria-label="旅行方案内容" className="sticky top-[69px] z-20 grid grid-cols-4 border-b border-line bg-white sm:top-[77px]">{tabs.map(item => <button role="tab" id={`plan-tab-${item.id}`} aria-controls={`plan-panel-${item.id}`} aria-selected={tab === item.id} tabIndex={tab === item.id ? 0 : -1} onKeyDown={event => { const index = tabs.findIndex(t => t.id === tab); const next = event.key === 'ArrowRight' ? (index + 1) % tabs.length : event.key === 'ArrowLeft' ? (index + tabs.length - 1) % tabs.length : event.key === 'Home' ? 0 : event.key === 'End' ? tabs.length - 1 : -1; if (next >= 0) { event.preventDefault(); setTab(tabs[next].id); document.getElementById(`plan-tab-${tabs[next].id}`)?.focus(); } }} key={item.id} onClick={() => setTab(item.id)} className={`flex min-h-16 flex-col items-center justify-center gap-1 border-b-2 px-1 text-xs font-semibold sm:flex-row sm:gap-2 sm:text-xs ${tab === item.id ? 'border-pine bg-sage/60 text-pine' : 'border-transparent text-muted hover:bg-cream'}`}><item.icon size={16} />{item.label}</button>)}</div>
-    <div role="tabpanel" id={`plan-panel-${tab}`} aria-labelledby={`plan-tab-${tab}`} className="min-h-80 p-5 sm:p-7">
-      {tab === 'route' && <>{budget.arrivalNight && <p className="mb-4 rounded-xl bg-sand p-4 text-xs leading-7">所选章节从完整游玩日开始，建议提前一晚抵达，住宿预算已加这一晚。若当天才到，首日上午改作交通并减少景点。</p>}<p className="text-xs leading-7 text-muted">上午和下午保留完整片区。跨城日把上午留给交通；到得晚，就缩减当天下午的活动。</p><TripDays days={days.map((day, i) => ({ ...day, overnight: i < days.length - 1 ? day.overnight : '返程日；若延住可参考 ' + day.overnight }))} date={profile.date} /><div className="mt-6 rounded-xl bg-sand p-4 text-xs leading-7 text-muted">每日安排与接驳是编辑建议，车程和班次没有实时计算。自选不连续章节时，住宿与第二天的出发地要再次核对。</div>{profile.note && <p className="mt-4 rounded-xl border border-line p-4 text-sm leading-7"><strong>我的备注：</strong>{profile.note}</p>}</>}
-      {tab === 'stay' && <div className="space-y-9"><div className="rounded-xl bg-sage p-4 text-sm leading-7"><p className="font-semibold text-pine">{budget.nights} 晚 · 建议 {budget.rooms} 间双人房</p><p className="mt-1 text-xs text-muted">筛选目标 ¥{budget.roomRange.join('–')} / 间 / 晚，是你选择的「{budgetLabels[profile.budget]}」预算范围，不代表实时房价。优先按每日路线选片区，再比较酒店。</p></div><ol className="space-y-3">{budget.arrivalNight && <li className="rounded-xl bg-sand p-4 text-xs leading-7"><strong>抵达前夜</strong> · 提前住在首个游玩片区，预算已计入；以次日第一站的交通选择酒店。</li>}{days.slice(0, -1).map((day, i) => <li key={i} className="flex gap-3 border-b border-line pb-3 text-xs leading-7"><span className="shrink-0 font-display font-bold text-terracotta">N{i + 1}</span><span><strong>{day.overnight}</strong><br /><span className="text-muted">接在「{day.title}」之后，订房前核对次日交通。</span></span></li>)}</ol>{cityIds.map(id => <div key={id}><p className="mb-4 text-xs font-semibold uppercase tracking-wide text-terracotta">{cityById[id].shortName}</p><StaySuggestions city={cityById[id]} /></div>)}</div>}
-      {tab === 'food' && <div className="space-y-10">{cityIds.map(id => <div key={id}><p className="mb-4 text-xs font-semibold uppercase tracking-wide text-terracotta">{cityById[id].shortName}</p><FoodSuggestions city={cityById[id]} /></div>)}</div>}
-      {tab === 'budget' && <section><p className="text-xs font-semibold tracking-wide text-terracotta">把预算，先安排明白</p><h4 className="mt-3 font-display text-3xl font-semibold text-pine">¥{budget.total[0].toLocaleString()}–{budget.total[1].toLocaleString()}</h4><p className="mt-2 text-xs leading-7 text-muted">{profile.party} 人全团的规划预留，按 {days.length} 天、{budget.rooms} 间双人房和 {budget.nights} 晚计算。</p><div className="mt-6 divide-y divide-line">{[{ label: `住宿 · ${budget.nights} 晚`, range: budget.stay }, { label: '餐食 · 含三餐的预留', range: budget.meals }, { label: profile.mode === 'drive' ? '当地交通 · 油费与停车预留' : '当地交通 · 公交、打车与接驳预留', range: budget.transport }, { label: '景点门票与项目预留', range: budget.tickets }].map(item => <div className="flex flex-wrap justify-between gap-2 py-4 text-xs" key={item.label}><span className="text-muted">{item.label}</span><strong className="font-display">¥{item.range.join('–')}</strong></div>)}</div><p className="mt-5 rounded-xl bg-sand p-4 text-xs leading-7 text-muted">这是按预算档位计算的额度，未查询实时价格。不含出发地往返、跨城火车票、自驾租车费及超出预留的索道、船游等项目。节假日与房型变化会改变实际支出。</p></section>}
+    <header className="trip-summary">
+      <p className="trip-summary-kicker"><Check size={15} />一份完整的湖北行程</p>
+      <h3>{tripTitle(profile)}</h3>
+      <div className="trip-summary-route" aria-label="行程城市">{cityIds.map((id, index) => <span key={id}>{index > 0 && <ArrowRight size={12} />}<strong>{cityById[id].shortName}</strong><small>{days.filter(day => day.cityId === id).length} 天</small></span>)}</div>
+      <p className="trip-summary-conditions">{profile.date || '日期待定'} · {profile.party} 人 · {groupLabels[profile.group]} · {profile.mode === 'drive' ? '自驾出行' : '公共交通＋接驳'} · {profile.pace === 'relaxed' ? '轻松慢游' : '经典串游'}</p>
+      <div className="trip-summary-actions"><button onClick={() => setSaveState(onSave() ? '已保存到当前浏览器' : '保存失败，请下载清单')}><Bookmark size={14} />{saveState || '存到我的行程'}</button><button onClick={onEdit}><Pencil size={14} />调整条件</button></div>
+      <div className="trip-summary-metrics"><span><strong>{days.length}</strong> 天行程</span><span><strong>{budget.nights}</strong> 晚住宿</span><span><strong>{cityIds.length}</strong> 座城市</span></div>
+      <button className="trip-budget-preview" aria-label="查看预算明细" onClick={() => selectTab('budget')}><Wallet size={18} /><span>全团预算预留<strong>¥{budget.total[0].toLocaleString()}–{budget.total[1].toLocaleString()}</strong></span><span>看明细<ArrowUpRight size={14} /></span></button>
+    </header>
+    <div role="tablist" aria-label="旅行方案内容" className="trip-content-tabs">{tabs.map(item => <button role="tab" id={'plan-tab-' + item.id} aria-controls={'plan-panel-' + item.id} aria-selected={tab === item.id} tabIndex={tab === item.id ? 0 : -1} onKeyDown={event => {
+      const index = tabs.findIndex(t => t.id === tab);
+      const next = event.key === 'ArrowRight' ? (index + 1) % tabs.length : event.key === 'ArrowLeft' ? (index + tabs.length - 1) % tabs.length : event.key === 'Home' ? 0 : event.key === 'End' ? tabs.length - 1 : -1;
+      if (next >= 0) { event.preventDefault(); selectTab(tabs[next].id); document.getElementById('plan-tab-' + tabs[next].id)?.focus(); }
+    }} key={item.id} onClick={() => selectTab(item.id)}><item.icon size={16} /><span>{item.label}<small aria-hidden="true">{item.count}</small></span></button>)}</div>
+    <div ref={panel} role="tabpanel" id={'plan-panel-' + tab} aria-labelledby={'plan-tab-' + tab} className="trip-tab-panel">
+      {tab === 'route' && <>
+        {budget.arrivalNight && <p className="trip-reading-note">所选章节从完整游玩日开始，建议提前一晚抵达，住宿预算已加这一晚。若当天才到，首日上午改作交通并减少景点。</p>}
+        <p className="trip-panel-description">每天围绕一片区域走。跨城日把上午留给交通；到得晚，就缩减当天下午的活动。</p>
+        <TripDays days={days.map((day, i) => ({ ...day, overnight: i < days.length - 1 ? day.overnight : '返程日；若延住可参考 ' + day.overnight }))} date={profile.date} />
+        <div className="trip-reading-note">每日安排与接驳是编辑建议，车程和班次没有实时计算。自选不连续章节时，住宿与第二天的出发地要再次核对。</div>
+        {profile.note && <p className="trip-personal-note"><strong>我的备注：</strong>{profile.note}</p>}
+      </>}
+      {tab === 'stay' && <div className="space-y-8">
+        <div className="trip-reading-note"><strong>{budget.nights ? budget.nights + ' 晚 · 建议 ' + budget.rooms + ' 间双人房' : '本次为当日往返，住宿片区供延住参考'}</strong><p>{budget.nights ? '筛选目标 ¥' + budget.roomRange.join('–') + ' / 间 / 晚，是「' + budgetLabels[profile.budget] + '」档位的预算范围，不代表实时房价。优先按每日路线选片区，再比较酒店。' : '先核对当天返程的车船或驾驶安排；如需延住，再按次日出发位置选择片区。'}</p></div>
+        {budget.nights > 0 && <section aria-label="逐晚住宿安排"><h4 className="trip-content-title">每一晚，住在旅程顺路的地方</h4><ol className="trip-night-list">
+          {budget.arrivalNight && <li><span>抵达前夜</span><div><strong>提前住在首个游玩片区</strong><p>预算已计入；以次日第一站的交通选择酒店。</p></div></li>}
+          {days.slice(0, -1).map((day, i) => <li key={day.title}><span>第 {i + 1} 晚</span><div><strong>{day.overnight}</strong><p>{day.title}之后，订房前核对次日交通。</p></div></li>)}
+        </ol></section>}
+        {cityIds.map(id => <section key={id}><p className="trip-city-label">{cityById[id].shortName}</p><StaySuggestions city={cityById[id]} /></section>)}
+      </div>}
+      {tab === 'food' && <div className="space-y-8">
+        <p className="trip-panel-description">按城市找地方风味，也按每天的路线安排一餐。营业与供应请在出发前核对。</p>
+        <details className="trip-meal-index"><summary><Utensils size={16} />查看每日餐食安排<span>{days.length} 天</span></summary><ol>{days.map((day, index) => <li key={day.title}><span>第 {index + 1} 天 · {cityById[day.cityId].shortName}</span><p>{day.meal}</p></li>)}</ol></details>
+        {cityIds.map(id => <section key={id}><p className="trip-city-label">{cityById[id].shortName}</p><FoodSuggestions city={cityById[id]} /></section>)}
+      </div>}
+      {tab === 'budget' && <section>
+        <p className="trip-city-label">把预算，先安排明白</p><h4 className="trip-budget-total">¥{budget.total[0].toLocaleString()}–{budget.total[1].toLocaleString()}</h4>
+        <p className="trip-panel-description">{profile.party} 人全团的规划预留，按 {days.length} 天、{budget.rooms} 间双人房和 {budget.nights} 晚计算。</p>
+        <div className="trip-budget-person">约 ¥{Math.floor(budget.total[0] / profile.party).toLocaleString()}–{Math.ceil(budget.total[1] / profile.party).toLocaleString()} / 人<span>用于比较出行方案，非实时报价</span></div>
+        <div className="trip-budget-items">{[{ label: '住宿 · ' + budget.nights + ' 晚', range: budget.stay }, { label: '餐食 · 含三餐的预留', range: budget.meals }, { label: profile.mode === 'drive' ? '当地交通 · 油费与停车预留' : '当地交通 · 公交、打车与接驳预留', range: budget.transport }, { label: '景点门票与项目预留', range: budget.tickets }].map(item => <div key={item.label}><span>{item.label}</span><strong>¥{item.range.join('–')}</strong></div>)}</div>
+        <p className="trip-reading-note">这是按预算档位计算的额度，未查询实时价格。不含出发地往返、跨城火车票、自驾租车费及超出预留的索道、船游等项目。节假日与房型变化会改变实际支出。</p>
+      </section>}
     </div>
-    <details className="mx-5 mb-6 rounded-xl border border-line p-4 sm:mx-7"><summary className="cursor-pointer text-xs font-semibold text-pine">路线资料与预订前核对</summary><p className="mt-3 text-xs leading-7 text-muted">景点事实参考官方资料；片区选择、餐食组合、时间与预算为编辑规划建议，未查询实时库存或车程。</p><div className="mt-3 space-y-2">{cityIds.flatMap(id => cityById[id].sources).map(source => <a key={source.url} href={source.url} target="_blank" rel="noreferrer" className="flex items-start gap-1 text-xs leading-6 text-pine hover:underline">{source.title}<ArrowUpRight size={12} className="mt-1 shrink-0" /></a>)}</div></details>
-    <div className="sticky bottom-0 z-10 grid grid-cols-3 gap-2 border-t border-line bg-white/95 p-3 backdrop-blur sm:p-4"><Button aria-label="复制清单" onClick={() => onCopy(text)} variant="neutral" className="whitespace-nowrap px-2 text-xs"><Copy size={15} /><span>复制<span className="hidden sm:inline">清单</span></span></Button><Button aria-label="下载行程" onClick={() => downloadPlan(text, '湖北具体')} className="whitespace-nowrap px-2 text-xs"><Download size={15} /><span>下载<span className="hidden sm:inline">行程</span></span></Button><Button aria-label="分享链接" onClick={() => onCopy(sharePlanUrl(profile))} variant="neutral" className="whitespace-nowrap px-2 text-xs"><Share2 size={15} /><span>分享<span className="hidden sm:inline">链接</span></span></Button></div>
+    <section aria-label="出发前核对清单" className="trip-departure-checks"><div><CircleCheck size={19} /><h4>出发前，再确认这几件事</h4><span>{checked.length} / {checks.length}</span></div><p>把预订和接驳核对好，路上更从容。</p><ul>{checks.map(item => <li key={item.id}><label><input type="checkbox" checked={checked.includes(item.id)} onChange={() => setChecked(previous => previous.includes(item.id) ? previous.filter(id => id !== item.id) : [...previous, item.id])} /><span><strong>{item.title}</strong><small>{item.detail}</small></span></label></li>)}</ul><small>勾选仅作本次检查，不写入保存、分享或下载清单。</small></section>
+    <details className="trip-source-links"><summary>路线资料与预订前核对</summary><p>景点事实参考官方资料；片区选择、餐食组合、时间与预算为编辑规划建议，未查询实时库存或车程。</p><div>{cityIds.flatMap(id => cityById[id].sources).map(source => <a key={source.url} href={source.url} target="_blank" rel="noreferrer">{source.title}<ArrowUpRight size={12} /></a>)}</div></details>
+    <div className="trip-takeaway"><Button aria-label="复制清单" onClick={() => onCopy(text)} variant="neutral" className="whitespace-nowrap px-2 text-xs"><Copy size={15} /><span>复制<span className="hidden sm:inline">清单</span></span></Button><Button aria-label="下载行程" onClick={() => downloadPlan(text, '湖北具体')} className="whitespace-nowrap px-2 text-xs"><Download size={15} /><span>下载<span className="hidden sm:inline">行程</span></span></Button><Button aria-label="分享链接" onClick={() => onCopy(sharePlanUrl(profile))} variant="neutral" className="whitespace-nowrap px-2 text-xs"><Share2 size={15} /><span>分享<span className="hidden sm:inline">链接</span></span></Button></div>
   </div>;
 }

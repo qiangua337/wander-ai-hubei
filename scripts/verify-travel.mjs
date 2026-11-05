@@ -87,7 +87,13 @@ try {
   assert.equal(malicious.cityId, 'wuhan'); assert.equal(malicious.group, 'friends'); assert.equal(malicious.budget, 'comfort');
   assert.equal(malicious.date, ''); assert.equal(malicious.party, 2); assert.deepEqual(malicious.indices, [0, 1]);
   assert.equal(findDestinations('all', '', 'family', []).length, 17);
-  assert(findDestinations('all', '', 'all', [], 'half').every(place => !place.duration.includes('1 天') && !place.duration.includes('2 天')));
+  const halfDayIds = new Set(findDestinations('all', '', 'all', [], 'half').map(place => place.id));
+  const fullDayIds = new Set(findDestinations('all', '', 'all', [], 'day').map(place => place.id));
+  assert(halfDayIds.has('hubei-museum'), 'A pure half-day museum visit belongs in the short-visit filter.');
+  assert(!fullDayIds.has('hubei-museum'), 'A pure half-day museum visit must not appear as a full-day outing.');
+  assert(fullDayIds.has('east-lake') && !halfDayIds.has('east-lake'), 'A half-day to one-day lake outing needs the full-day allowance.');
+  assert(fullDayIds.has('wudang') && !halfDayIds.has('wudang'), 'A one-to-two-day mountain visit belongs only in the full-day filter.');
+  assert(halfDayIds.has('wudang-museum') && !fullDayIds.has('wudang-museum'), 'A one-to-two-hour visit remains a short visit, not a full-day outing.');
   assert.notDeepEqual(recommendDays('yichang', 2, 'nature'), recommendDays('yichang', 2, 'culture'));
   for (const [index, template] of templates.entries()) {
     const profile = { ...defaultProfile(template.cityId), template: template.id, date: '2026-10-30', party: 4, note: '私人备注不进入分享链接' };
