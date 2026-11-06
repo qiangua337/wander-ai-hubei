@@ -8,7 +8,7 @@
   --color-ink: #292329; --color-muted: #726971; --color-line: #eae4e7;
 }
 html { scroll-behavior:smooth; scroll-padding-top:92px; }
-body { margin:0; min-width:320px; background:white; color:var(--color-ink); font-family:var(--font-sans); font-size:14px; line-height:1.75; font-synthesis:none; }
+body { margin:0; min-width:0; background:white; color:var(--color-ink); font-family:var(--font-sans); font-size:14px; line-height:1.75; font-synthesis:none; }
 button,a,input,select { -webkit-tap-highlight-color:transparent; }
 button:not(:disabled) { cursor:pointer; } a,button { touch-action:manipulation; }
 ::selection { background:#f5ccd6; color:#70182c; }

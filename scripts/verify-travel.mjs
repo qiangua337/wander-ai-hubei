@@ -9,6 +9,7 @@ const server = await createServer({ root, configFile: false, server: { middlewar
 try {
   const { cities, cityById, destinations, featuredDestinations, imageCredits } = await server.ssrLoadModule('/src/data.ts');
   const { findDestinations, planDays, selectPlanDays, planDate, formatPlan } = await server.ssrLoadModule('/src/travel.ts');
+  const { sortDestinations } = await server.ssrLoadModule('/src/discovery.ts');
   const { practical } = await server.ssrLoadModule('/src/data/practical.ts');
   const { defaultProfile, normalizeProfile, validDate, recommendDays, buildTrip, estimateBudget, formatDetailedPlan, sharePlanUrl, parsePlanUrl, templates } = await server.ssrLoadModule('/src/planning.ts');
   const expectedCities = ['wuhan', 'yichang', 'enshi', 'shiyan', 'xiangyang', 'jingzhou', 'jingmen', 'huangshi', 'ezhou', 'huanggang', 'xianning', 'xiaogan', 'suizhou', 'xiantao', 'qianjiang', 'tianmen', 'shennongjia'];
@@ -43,6 +44,16 @@ try {
   assert(findDestinations('all', '', 'nature', []).every(place => place.category === 'nature'));
   assert.deepEqual(findDestinations('all', '', 'saved', ['enshi', 'shennongjia', 'unknown']).map(place => place.id), ['enshi', 'shennongjia']);
   assert.equal(findDestinations('all', '不存在的景点xyz', 'all', []).length, 0);
+  const sortIds = ['wudang', 'hubei-museum', 'enshi', 'wuhan'];
+  const sortInput = sortIds.map(id => destinations.find(place => place.id === id));
+  assert(sortInput.every(Boolean), 'Sorting fixtures must refer to real destinations.');
+  const sortInputBefore = JSON.stringify(sortInput);
+  assert.deepEqual(sortDestinations(sortInput, 'recommended').map(place => place.id), sortIds, 'Recommended order preserves the editorial input sequence.');
+  assert.deepEqual(sortDestinations(sortInput, 'duration').map(place => place.id), ['wuhan', 'hubei-museum', 'enshi', 'wudang'], 'A two-to-three-hour visit precedes half-day, full-day and one-to-two-day outings.');
+  assert.equal(JSON.stringify(sortInput), sortInputBefore, 'Duration sorting must not reorder or change the supplied destinations.');
+  const sortedCityIds = [...new Set(sortDestinations(sortInput, 'city').map(place => place.cityId))];
+  assert.deepEqual(sortedCityIds, cities.filter(city => sortInput.some(place => place.cityId === city.id)).map(city => city.id), 'City sorting follows the city directory order.');
+  assert.equal(JSON.stringify(sortInput), sortInputBefore, 'City sorting must not reorder or change the supplied destinations.');
   const before = JSON.stringify(cityById.wuhan);
   const relaxed = planDays(cityById.wuhan, 2, 'relaxed');
   assert.equal(relaxed.length, 2);
@@ -86,6 +97,11 @@ try {
   const malicious = normalizeProfile({ cityId: 'toString', template: '__proto__', group: 'constructor', budget: 'toString', interest: '__proto__', party: 999, indices: [0, 0, 1, 999, -1, '2'], date: '2026-02-31' });
   assert.equal(malicious.cityId, 'wuhan'); assert.equal(malicious.group, 'friends'); assert.equal(malicious.budget, 'comfort');
   assert.equal(malicious.date, ''); assert.equal(malicious.party, 2); assert.deepEqual(malicious.indices, [0, 1]);
+  const contradictoryParty = normalizeProfile({ ...defaultProfile('yichang'), party: 4, group: 'solo' });
+  assert.equal(contradictoryParty.party, 4, 'Restoring a saved or shared profile must preserve its valid party size.');
+  assert.equal(contradictoryParty.group, 'friends', 'A restored multi-person trip cannot be labelled as solo travel.');
+  assert.equal(normalizeProfile({ ...defaultProfile('yichang'), party: 1, group: 'solo' }).group, 'solo', 'A genuine solo trip keeps its group choice.');
+  assert.equal(normalizeProfile({ ...defaultProfile('yichang'), party: 1, group: 'family' }).group, 'family', 'Normalizing party size must not replace unrelated group preferences.');
   assert.equal(findDestinations('all', '', 'family', []).length, 17);
   const halfDayIds = new Set(findDestinations('all', '', 'all', [], 'half').map(place => place.id));
   const fullDayIds = new Set(findDestinations('all', '', 'all', [], 'day').map(place => place.id));

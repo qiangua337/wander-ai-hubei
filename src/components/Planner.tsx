@@ -22,17 +22,15 @@ export function Planner({ initialCity, initialDate, travelers, initialProfile, o
     const fallback = defaultProfile(initialCity, initialDate, Number(travelers));
     if (initialProfile) return normalizeProfile(initialProfile, fallback);
     try {
-      const draft = normalizeProfile(JSON.parse(localStorage.getItem('wander-draft-v2') || 'null'), fallback);
-      if (!Object.hasOwn(cityById, initialCity)) return draft;
-      // The page's current date and party take precedence; keep the other draft choices.
-      const currentContext: Pick<Profile, 'date' | 'party' | 'group'> = {
-        date: fallback.date,
-        party: fallback.party,
-        group: draft.group === 'solo' && fallback.party > 1 ? 'friends' : draft.group,
-      };
-      if (draft.cityId === initialCity) return { ...draft, ...currentContext };
-      // A different city starts a single-city route with the draft's interests and day count.
-      return { ...draft, ...currentContext, cityId: initialCity, template: 'custom', indices: recommendDays(initialCity, Math.min(draft.indices.length || 2, cityById[initialCity].days.length), draft.interest) };
+      const stored: unknown = JSON.parse(localStorage.getItem('wander-draft-v2') || 'null');
+      if (!stored || typeof stored !== 'object' || Array.isArray(stored)) return fallback;
+      const candidate = stored as Partial<Profile>;
+      if (typeof candidate.cityId !== 'string' || !Object.hasOwn(cityById, candidate.cityId) || !Array.isArray(candidate.indices)) return fallback;
+      const draft = normalizeProfile(stored, fallback);
+      // Reopening a draft keeps its dates, party and choices; an explicit profile above starts afresh.
+      if (!Object.hasOwn(cityById, initialCity) || draft.cityId === initialCity) return draft;
+      // A different city reuses the draft's travel preferences, dates and party, then rebuilds its chapters.
+      return { ...draft, cityId: initialCity, template: 'custom', indices: recommendDays(initialCity, Math.min(draft.indices.length || 2, cityById[initialCity].days.length), draft.interest) };
     } catch { return fallback; }
   });
   const [ready, setReady] = useState(() => Boolean(initialProfile) && buildTrip(profile).length > 0);

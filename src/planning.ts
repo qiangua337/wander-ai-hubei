@@ -27,11 +27,13 @@ export function normalizeProfile(value: unknown, fallback = defaultProfile()): P
   const v = value as Partial<Profile>;
   const cityId = typeof v.cityId === 'string' && Object.hasOwn(cityById, v.cityId) ? v.cityId : fallback.cityId;
   const indices = Array.isArray(v.indices) ? [...new Set(v.indices.filter(index => Number.isInteger(index) && index >= 0 && index < cityById[cityId].days.length))].sort((a, b) => a - b) : fallback.indices;
+  const party = Number.isInteger(v.party) && v.party! >= 1 && v.party! <= 6 ? v.party! : fallback.party;
+  const group = v.group && Object.hasOwn(groupLabels, v.group) ? v.group : fallback.group;
   return {
     cityId, template: templates.some(t => t.id === v.template) ? v.template! : 'custom', indices,
     date: typeof v.date === 'string' && validDate(v.date) ? v.date : '',
-    party: Number.isInteger(v.party) && v.party! >= 1 && v.party! <= 6 ? v.party! : fallback.party,
-    group: v.group && Object.hasOwn(groupLabels, v.group) ? v.group : fallback.group,
+    party,
+    group: group === 'solo' && party > 1 ? 'friends' : group,
     mode: v.mode === 'drive' ? 'drive' : 'public', budget: v.budget && Object.hasOwn(budgetLabels, v.budget) ? v.budget : fallback.budget,
     interest: v.interest && Object.hasOwn(interestLabels, v.interest) ? v.interest : fallback.interest,
     pace: v.pace === 'relaxed' ? 'relaxed' : 'classic', note: typeof v.note === 'string' ? v.note.slice(0, 500) : '',
