@@ -8,7 +8,8 @@
     "build": "tsc -b && vite build",
     "preview": "vite preview --host 127.0.0.1 --port 5173 --strictPort",
     "check": "tsc -b",
-    "test": "node scripts/verify-travel.mjs"
+    "test": "node scripts/verify-travel.mjs && node scripts/verify-support.mjs",
+    "test:support": "node scripts/verify-support.mjs"
   },
   "dependencies": {
     "@fontsource-variable/manrope": "latest",

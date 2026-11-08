@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useState, type FormEvent } from 'react';
 import { createPortal } from 'react-dom';
-import { ArrowUp, ArrowRight, ArrowUpRight, BookOpen, Check, ChevronDown, Heart, Leaf, MapPin, Menu, Route, Search, X } from 'lucide-react';
+import { ArrowUp, ArrowRight, ArrowUpRight, BookOpen, Check, ChevronDown, Heart, Leaf, MapPin, Menu, MessageCircle, Route, Search, X } from 'lucide-react';
 import { Brand, Button, InputField, SelectField } from './components/ui';
 import { Modal } from './components/Modal';
 import { DestinationCard } from './components/DestinationCard';
@@ -15,13 +15,15 @@ import { TravelFaq } from './components/TravelFaq';
 import { JourneyInvitation } from './components/TravelStories';
 import { Wishlist } from './components/Wishlist';
 import { ExploreSummary } from './components/ExploreSummary';
+import { SupportDesk } from './components/SupportDesk';
+import type { SupportAction } from './support';
 import { sortDestinations, type DestinationSort } from './discovery';
 import { defaultProfile, parsePlanUrl, templates, validDate, type Profile } from './planning';
 import { CreditsDialog } from './components/SiteDialogs';
 import { cities, cityById, cityPhotos, destinations, destinationById, featuredDestinations, type Destination } from './data';
 import { findDestinations, type DurationFilter, type Filter } from './travel';
 
-type ModalState = { type: 'guide'; cityId: string; placeId?: string } | { type: 'planner'; profile?: Profile } | { type: 'wishlist' } | { type: 'credits' } | { type: 'info'; title: string; body: string } | null;
+type ModalState = { type: 'guide'; cityId: string; placeId?: string } | { type: 'planner'; profile?: Profile } | { type: 'wishlist' } | { type: 'support' } | { type: 'credits' } | { type: 'info'; title: string; body: string } | null;
 const mainNav = [['popular', '山河名胜'], ['culture', '荆楚文化'], ['routes', '经典路线'], ['destinations', '按市探索'], ['travel-life', '吃住指南'], ['faq', '行前指南']] as const;
 const filters: { key: Filter; label: string }[] = [{ key: 'all', label: '全部探索' }, { key: 'nature', label: '山水自然' }, { key: 'city', label: '城市人文' }, { key: 'family', label: '亲子研学' }, { key: 'saved', label: '我的收藏' }];
 function loadBrowse() {
@@ -71,6 +73,7 @@ export default function App() {
   const scrollToCities = () => document.getElementById('destinations')?.scrollIntoView({ behavior: 'smooth' });
   const scrollToCityPicker = () => document.querySelector('.city-picker')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
   const showPlanner = () => { setMobileMenu(false); setModal({ type: 'planner' }); };
+  const showSupport = () => { setMobileMenu(false); setModal({ type: 'support' }); };
   const openPlace = (place: Destination) => setModal({ type: 'guide', cityId: place.cityId, placeId: place.id });
   const toggleSave = (place: Destination) => {
     const wasSaved = saved.includes(place.id);
@@ -85,6 +88,16 @@ export default function App() {
   const exploreMode = (mode: 'nature' | 'city' | 'family' | 'food') => { if (mode === 'food') { document.getElementById('travel-life')?.scrollIntoView({ behavior: 'smooth' }); return; } reset(); setFilter(mode); scrollToCities(); };
   const search = (event: FormEvent) => { event.preventDefault(); if (date && !validDate(date)) { setToast('请输入有效日期，例如 2026-11-01。'); return; } chooseCity(selection); setFilter('all'); setSearched(true); scrollToCities(); };
   const showInfo = (title: string, body: string) => setModal({ type: 'info', title, body });
+  const supportAction = (action: SupportAction) => {
+    if (action.kind === 'wishlist') { showSaved(); return; }
+    if (action.kind === 'explore') { closeModal(); reset(); scrollToCities(); return; }
+    if (action.kind === 'template' && action.templateId) { showTemplate(action.templateId); return; }
+    if (action.kind === 'place' && action.placeId && Object.hasOwn(destinationById, action.placeId)) { openPlace(destinationById[action.placeId]); return; }
+    if (action.cityId && Object.hasOwn(cityById, action.cityId)) {
+      if (action.kind === 'plan') planCity(action.cityId);
+      else if (action.kind === 'city') setModal({ type: 'guide', cityId: action.cityId });
+    }
+  };
   const copyPlan = async (text: string) => {
     try { await navigator.clipboard.writeText(text); setToast('已复制，可粘贴到聊天或备忘录中使用'); }
     catch { setToast('暂时无法复制，请使用下载按钮保存行程'); }
@@ -106,7 +119,7 @@ export default function App() {
       <nav aria-label="主导航" className="hidden items-center gap-7 text-xs font-medium lg:flex">{mainNav.map(([id,label]) => <a key={id} href={'#'+id} aria-current={activeSection === id ? 'location' : undefined} className="text-muted hover:text-pine">{label}</a>)}</nav>
       <div className="hidden items-center gap-3 lg:flex"><Button variant="subtle" onClick={showSaved}><Heart size={16} />我的收藏</Button><Button onClick={showPlanner}>开始规划<ArrowUpRight size={16} /></Button></div>
       <button aria-label={mobileMenu ? '关闭菜单' : '打开菜单'} aria-expanded={mobileMenu} onClick={() => setMobileMenu(!mobileMenu)} className="rounded-lg p-2 text-pine lg:hidden">{mobileMenu ? <X size={24} /> : <Menu size={24} />}</button>
-    </div>{mobileMenu && <nav aria-label="手机导航" className="absolute inset-x-0 top-16 border-b border-line bg-white px-6 py-6 shadow-lg lg:hidden"><div className="flex flex-col gap-5"><a href="#popular" onClick={() => setMobileMenu(false)}>热门精选</a><a href="#culture" onClick={() => setMobileMenu(false)}>荆楚文化</a><a href="#routes" onClick={() => setMobileMenu(false)}>经典路线</a><a href="#destinations" onClick={() => setMobileMenu(false)}>按市探索</a><button onClick={showPlanner} className="text-left">行程灵感</button><a href="#travel-life" onClick={() => setMobileMenu(false)}>吃住有着落</a><button onClick={showSaved} className="text-left">我的收藏</button><Button onClick={showPlanner}>我的行程<ArrowRight size={16} /></Button></div></nav>}</header>
+    </div>{mobileMenu && <nav aria-label="手机导航" className="max-h-[calc(100dvh-64px)] overflow-y-auto absolute inset-x-0 top-16 border-b border-line bg-white px-6 py-6 shadow-lg lg:hidden"><div className="flex flex-col gap-5"><a href="#popular" onClick={() => setMobileMenu(false)}>热门精选</a><a href="#culture" onClick={() => setMobileMenu(false)}>荆楚文化</a><a href="#routes" onClick={() => setMobileMenu(false)}>经典路线</a><a href="#destinations" onClick={() => setMobileMenu(false)}>按市探索</a><button onClick={showPlanner} className="text-left">行程灵感</button><a href="#travel-life" onClick={() => setMobileMenu(false)}>吃住有着落</a><button onClick={showSupport} className="text-left">旅行问答</button><button onClick={showSaved} className="text-left">我的收藏</button><Button onClick={showPlanner}>我的行程<ArrowRight size={16} /></Button></div></nav>}</header>
 
     <main>
       <HomeHero selection={selection} date={date} travelers={travelers} onCity={setSelection} onDate={setDate} onTravelers={setTravelers} onSearch={search} onPlan={() => planCity(selection)} onTemplate={showTemplate} onExplore={exploreMode} />
@@ -142,17 +155,18 @@ export default function App() {
       </div></section>
 
       <TravelLife onExplore={id => { chooseCity(id); setFilter("all"); setDuration("any"); scrollToCities(); }} onPlan={planCity} />
-      <TravelFaq />
+      <TravelFaq onAsk={showSupport} />
       <JourneyInvitation onPlan={showPlanner} />
     </main>
 
     <footer className="site-footer"><div className="page-width"><div className="grid gap-10 sm:grid-cols-2 lg:grid-cols-[1.8fr_1fr_1fr_1fr]"><div><Brand inverse /><p className="mt-4 max-w-xs text-xs leading-7 text-muted">从一座城市开始，慢慢认识湖北。<br />{cities.length} 个市州 · {destinations.length} 个去处 · {cities.length} 份路线</p><span className="mt-5 inline-flex items-center gap-1.5 rounded-full bg-sage px-3 py-1.5 text-xs text-pine"><Leaf size={12} />让每一次出发，都更有意义</span></div>
       <FooterColumn title="发现湖北" items={[[ '热门精选', () => document.getElementById('popular')?.scrollIntoView({ behavior: 'smooth' }) ], ['按市探索', scrollToCities], ['行程灵感', showPlanner]]} />
       <FooterColumn title="旅行资料" items={[[ '如何用这份攻略', () => showInfo('怎样规划一次湖北旅行', '先选择城市，再看景点攻略。点击「开始规划」选择单城或跨城模板，调整同行人群、交通、预算与具体章节。结果包含每日安排、住宿片区与美食建议，可保存到本浏览器、下载文本或复制分享链接。') ], ['图片与来源', () => setModal({ type: 'credits' })], ['关于 Wander', () => showInfo('关于 Wander AI', 'Wander AI 是围绕湖北旅行打造的高保真交互网站。本版覆盖全省 17 个市州、直管市与林区，景点事实参考官方文旅与景区资料，路线组织与时段为编辑建议。')]]} />
-      <FooterColumn title="旅行支持" items={[[ '我的收藏', () => { reset(); setFilter('saved'); scrollToCities(); } ], ['预订说明', () => showInfo('预订说明', '本站提供旅行参考与界面体验，暂不提供真实订单、支付与实时旅游库存。参观预约、开放、票种、车船班次和天气请在出发前通过景区官方渠道确认。')], ['联系与反馈', () => showInfo('联系与反馈', '欢迎把想去的湖北城市、希望深入了解的文化主题和路线建议告诉设计者，帮助下一版更贴近你的旅行方式。')]]} />
-      </div><div className="footer-signature" aria-hidden="true"><span>山河有来处，旅途有回响。</span><span>寻游湖北<br />循着山河，走进荆楚。</span></div><div className="mt-6 flex flex-wrap items-center justify-between gap-4 text-xs text-muted"><p className="font-display">© 2026 Wander AI · 湖北旅行指南</p><div className="flex flex-wrap items-center gap-5"><button onClick={() => showInfo('隐私说明', '目的地收藏、规划草稿和已保存行程保存在当前浏览器，可删除或清理网站数据。分享链接包含所选旅行设置与日期，不包含自由备注。原型注册表单不会提交姓名或邮箱。行程复制与下载在你的设备上完成，不创建真实账号。')}>隐私说明</button><button onClick={() => setModal({ type: 'credits' })}>图片鸣谢</button><span>中文 / 湖北</span><span className="rounded-full border border-line px-2.5 py-1">旅行参考 · 交互原型</span></div></div></div></footer>
+      <FooterColumn title="旅行支持" items={[['我的收藏', showSaved], ['预订说明', () => showInfo('预订说明', '本站提供旅行参考与界面体验，暂不提供真实订单、支付与实时旅游库存。参观预约、开放、票种、车船班次和天气请在出发前通过景区官方渠道确认。')], ['旅行问答', showSupport]]} />
+      </div><div className="footer-signature" aria-hidden="true"><span>山河有来处，旅途有回响。</span><span>寻游湖北<br />循着山河，走进荆楚。</span></div><div className="mt-6 flex flex-wrap items-center justify-between gap-4 text-xs text-muted"><p className="font-display">© 2026 Wander AI · 湖北旅行指南</p><div className="flex flex-wrap items-center gap-5"><button onClick={() => showInfo('隐私说明', '目的地收藏、规划草稿和已保存行程保存在当前浏览器，可删除或清理网站数据。分享链接包含所选旅行设置与日期，不包含自由备注。旅行问答基于本站资料在本页匹配，不上传问题、不连接大模型；对话仅在当前页面的内存中保留，刷新后清空。行程复制与下载在你的设备上完成，不创建真实账号。')}>隐私说明</button><button onClick={() => setModal({ type: 'credits' })}>图片鸣谢</button><span>中文 / 湖北</span><span className="rounded-full border border-line px-2.5 py-1">旅行参考 · 交互原型</span></div></div></div></footer>
 
-    {!modal && showQuickNav && <div className="fixed bottom-4 right-4 z-30 flex gap-2"><button onClick={scrollToCityPicker} className="flex min-h-11 items-center gap-1.5 rounded-full border border-line bg-white px-4 text-xs font-semibold text-pine shadow-lg"><MapPin size={15} />选城市</button><a href="#top" aria-label="返回顶部" className="flex h-11 w-11 items-center justify-center rounded-full bg-pine text-white shadow-lg"><ArrowUp size={18} /></a></div>}
+    {!modal && <div className="travel-tools"><button className="support-launcher" onClick={showSupport} aria-label="打开湖北旅行问答"><MessageCircle size={18} />旅行问答</button>{showQuickNav && <div className="travel-tools-row"><button onClick={scrollToCityPicker} className="flex min-h-11 items-center gap-1.5 rounded-full border border-line bg-white px-4 text-xs font-semibold text-pine shadow-lg"><MapPin size={15} />选城市</button><a href="#top" aria-label="返回顶部" className="flex h-11 w-11 items-center justify-center rounded-full border border-line bg-white text-pine shadow-lg"><ArrowUp size={18} /></a></div>}</div>}
+    <SupportDesk open={modal?.type === 'support'} initialCity={activeCity !== 'all' ? activeCity : selection} onClose={closeModal} onAction={supportAction} />
     {toast && createPortal(<div role="status" aria-live="polite" className="fixed bottom-6 left-1/2 z-[70] flex max-w-[92vw] -translate-x-1/2 items-center gap-2 rounded-2xl bg-ink px-5 py-3 text-xs leading-6 text-white shadow-xl"><Check size={16} className="shrink-0 text-seafoam" />{toast}</div>, document.body)}
     {modal?.type === 'guide' && <Modal title={modal.placeId ? `${destinationById[modal.placeId].title} · 攻略与路线` : `${cityById[modal.cityId].shortName} · 城市旅行攻略`} onClose={closeModal} wide><TravelGuide key={`${modal.cityId}-${modal.placeId || 'city'}`} city={cityById[modal.cityId]} place={modal.placeId ? destinationById[modal.placeId] : undefined} date={date} travelers={travelers} onCopy={copyPlan} onOpenPlace={openPlace} onPlan={() => setModal({ type: 'planner', profile: defaultProfile(modal.cityId, date, Number(travelers)) })} saved={modal.placeId ? saved.includes(modal.placeId) : undefined} onSave={modal.placeId ? () => toggleSave(destinationById[modal.placeId!]) : undefined} /></Modal>}
     {modal?.type === 'planner' && <Planner initialCity={activeCity} initialDate={date} travelers={travelers} initialProfile={modal.profile} onClose={closeModal} onCopy={copyPlan} />}
