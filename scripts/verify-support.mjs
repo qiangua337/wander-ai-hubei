@@ -354,7 +354,9 @@ try {
   assert(arrivalNight.plan);
   assert.deepEqual(arrivalNight.plan.indices, recommendDays('enshi', 2, 'nature'));
   const arrivalBudget = estimateBudget(arrivalNight.plan, buildTrip(arrivalNight.plan).length);
-  assert(arrivalBudget.arrivalNight && arrivalBudget.nights === 2 && arrivalBudget.rooms === 2, 'A nature-first itinerary starting after day zero needs the planner’s arrival-night allowance.');
+  assert(!arrivalBudget.arrivalNight && arrivalBudget.nights === 1 && arrivalBudget.rooms === 2, 'New support plans explicitly start from a full sightseeing day; they must not silently add an arrival night based only on chapter index.');
+  assert.equal(arrivalNight.plan.arrival, 'full-day');
+  assert(/首日.*完整游玩日/.test(arrivalNight.text));
 
   const relativeBase = ask('恩施3天3人，2026-12-08出发，喜欢山水，不自驾，轻松一点');
   const relativeBefore = JSON.stringify(relativeBase);
@@ -443,6 +445,107 @@ try {
     assert(!conflict.plan && /人数|合计|整数/.test(conflict.text), 'Inconsistent or invalid adult/child counts still require correction.');
     assert.equal(conflict.context.trip?.party, 3, 'A rejected child subtotal must not overwrite the previous party size.');
   }
+
+  // Core travel constraints must change the actual itinerary, not merely its labels.
+  for (const [question, origin] of [
+    ['从武汉出发，去恩施3天2人，喜欢山水', '武汉'],
+    ['从北京出发，去恩施3天2人', '北京'],
+    ['出发地是上海，想去恩施三天两个人', '上海'],
+  ]) {
+    const departing = ask(question);
+    assert(!departing.plan && departing.context.trip?.origin === origin && departing.context.cityId === 'enshi' && departing.context.trip?.awaiting === 'arrival', 'A known departure from another city must clarify arrival instead of assuming sightseeing starts at 09:00.');
+    assert.deepEqual(departing.suggestions, ['首日上午抵达', '首日下午抵达', '提前一晚抵达']);
+    assert(!/尚未整理.*跨城模板/.test(departing.text));
+    const confirmed = ask('首日下午抵达', departing.context);
+    assert(confirmed.plan && confirmed.plan.origin === origin && confirmed.plan.cityId === 'enshi', 'Departure cities do not become extra sightseeing destinations.');
+    assert(buildTrip(confirmed.plan).every(day => day.cityId === 'enshi'));
+    const first = buildTrip(confirmed.plan)[0];
+    assert(first.transport.includes(origin) && /交通|到达/.test(first.stops[0].time), 'Actual trip transport keeps the departure and removes pre-arrival sightseeing.');
+    assert(!/恩施土司城/.test(first.stops[0].title) && /途中|出发地/.test(first.breakfast));
+  }
+  const originArrival = ask('从武汉出发，恩施3天2人');
+  for (const [answer, arrival] of [['上午九点', 'morning'], ['下午两点', 'afternoon'], ['晚上八点', 'evening'], ['提前一晚抵达', 'previous-night']]) {
+    const confirmed = ask(answer, originArrival.context);
+    assert(confirmed.plan && confirmed.plan.arrival === arrival, 'Arrival clarification accepts normal short replies without asking the same question again.');
+    if (arrival !== 'previous-night') assert(/交通|到达/.test(buildTrip(confirmed.plan)[0].stops[0].time));
+  }
+  const localDeparture = ask('从武汉出发，武汉2天2人');
+  assert(localDeparture.plan && localDeparture.plan.arrival === 'full-day', 'A city-level local departure does not need a long-distance arrival clarification.');
+  const localAlias = ask('从汉口出发，武汉2天2人');
+  assert(localAlias.plan && localAlias.plan.origin === '汉口');
+  const explicitFullDay = ask('从武汉出发，恩施3天2人，首日完整游玩');
+  assert(explicitFullDay.plan && explicitFullDay.plan.arrival === 'full-day', 'An explicitly confirmed full sightseeing day is respected.');
+  const departureOnly = ask('从武汉出发，三天2人');
+  assert(!departureOnly.plan && departureOnly.context.trip?.origin === '武汉' && !departureOnly.context.cityId, 'A departure city alone is not a destination choice.');
+  const scopedOutside = ask('从武汉出发，去北京3天2人');
+  assert(!scopedOutside.plan && /湖北|范围/.test(scopedOutside.text), 'A non-Hubei sightseeing destination is still out of scope.');
+  const cityLevelOrigin = planDraft({ cityIds: ['wuhan'], days: 2, party: 2, origin: '北京市海淀区某路88号', arrival: 'afternoon' });
+  assert(cityLevelOrigin.plan && cityLevelOrigin.plan.origin === '北京市', 'The departure label must not retain an exact street address.');
+
+  const limited = ask('恩施3天2人，老人不能爬山，少台阶');
+  assert(limited.plan && limited.plan.mobility === 'gentle' && limited.plan.interest !== 'nature', 'A negative climbing requirement must not turn into a positive nature preference.');
+  const limitedDays = buildTrip(limited.plan);
+  assert(limitedDays.every(day => day.effort !== 'high'), 'A gentle plan actually excludes high-effort days.');
+  assert(!limitedDays.some(day => day.stops.some(stop => /七星寨|云龙地缝/.test(stop.title))), 'The rejected mountain mainline must not survive under a slow-pace label.');
+  const notEnoughGentle = ask('恩施4天2人，不能爬山');
+  assert(!notEnoughGentle.plan && /只有|不能|高强度/.test(notEnoughGentle.text), 'Limited content cannot be padded with high-effort chapters.');
+  const fixedGentle = ask('宜昌恩施5天2人，少台阶');
+  assert(!fixedGentle.plan && /固定|高强度/.test(fixedGentle.text), 'Fixed templates with a high-effort chapter are not claimed as adapted.');
+  const removeLimit = ask('取消少台阶限制', fixedGentle.context);
+  assert(removeLimit.plan && removeLimit.plan.mobility === 'standard');
+  const seniorMountain = ask('恩施3天2人，带老人，公共交通');
+  assert(!seniorMountain.plan && seniorMountain.context.trip?.awaiting === 'mobility' && /台阶|山地/.test(seniorMountain.text), 'Unknown senior stamina must be clarified before offering a mountain plan.');
+  assert.deepEqual(seniorMountain.suggestions, ['少台阶', '可以接受山地活动']);
+  const seniorGentle = ask('少台阶', seniorMountain.context);
+  assert(seniorGentle.plan && buildTrip(seniorGentle.plan).every(day => day.effort !== 'high'));
+  const seniorAccepts = ask('可以接受山地活动', seniorMountain.context);
+  assert(seniorAccepts.plan && seniorAccepts.plan.mobility === 'standard' && buildTrip(seniorAccepts.plan).some(day => day.effort === 'high'), 'Explicit acceptance completes the original mountain plan without a clarification loop.');
+  const seniorDeclines = ask('不能接受山地活动', seniorMountain.context);
+  assert(seniorDeclines.plan && seniorDeclines.plan.mobility === 'gentle' && buildTrip(seniorDeclines.plan).every(day => day.effort !== 'high'), 'A negative answer to the stamina question must not be parsed as consent.');
+
+  for (const [question, arrival] of [
+    ['武汉2天2人，上午九点到武汉', 'morning'],
+    ['武汉2天2人，下午两点到武汉', 'afternoon'],
+    ['武汉2天2人，14:00到武汉', 'afternoon'],
+    ['武汉2天2人，晚上八点到武汉', 'evening'],
+  ]) {
+    const arriving = ask(question);
+    assert(arriving.plan && arriving.plan.arrival === arrival);
+    assert.equal(arriving.plan.indices[0], 0, 'The first chapter is the arrival buffer.');
+    const first = buildTrip(arriving.plan)[0];
+    assert(/交通|到达/.test(first.stops[0].time) && !/黄鹤楼/.test(first.stops[0].title), 'A morning arrival cannot retain the original morning sightseeing.');
+    if (arrival !== 'morning') assert(!/户部巷|中华路/.test(first.stops[1].title), 'Afternoon or evening arrival also removes the original afternoon outing.');
+    if (arrival === 'evening') assert(/入住|住宿/.test(first.stops[2].title) && !/江岸|夜游/.test(first.stops[2].title));
+    assert(/出发地|途中/.test(first.breakfast), 'The breakfast recommendation must follow the arrival window.');
+  }
+  const arrivedNature = ask('恩施2天2人喜欢山水，下午到恩施');
+  assert(arrivedNature.plan && arrivedNature.plan.indices[0] === 0 && /交通/.test(buildTrip(arrivedNature.plan)[0].stops[0].time));
+  const previousNight = ask('恩施2天3人，喜欢山水，提前一晚到');
+  assert(previousNight.plan && previousNight.plan.arrival === 'previous-night');
+  assert(estimateBudget(previousNight.plan, 2).arrivalNight && estimateBudget(previousNight.plan, 2).nights === 2, 'Only the explicit previous-night choice adds that night to a new support plan.');
+
+  const unspecifiedBudget = ask('武汉3天2人，预算2000元');
+  assert(!unspecifiedBudget.plan && unspecifiedBudget.context.trip?.budgetLimit === 2000 && unspecifiedBudget.context.trip?.awaiting === 'budget-scope');
+  assert(/全团|每个|每人/.test(unspecifiedBudget.text), 'A numeric amount needs a total versus per-person clarification.');
+  const totalBudget = ask('全团总额', unspecifiedBudget.context);
+  assert(totalBudget.plan && totalBudget.plan.budgetLimit === 2000 && totalBudget.plan.budgetScope === 'total' && totalBudget.plan.budget === 'value');
+  const totalRange = estimateBudget(totalBudget.plan, buildTrip(totalBudget.plan).length).total;
+  assert(totalRange[0] <= 2000 && totalRange[1] > 2000 && /不能保证|仍可能超/.test(totalBudget.text), 'A partly affordable planning range must disclose the possible overrun.');
+  const clarifiedTotal = ask('不是每人，是全团总额', unspecifiedBudget.context);
+  assert(clarifiedTotal.plan && clarifiedTotal.plan.budgetScope === 'total', 'A scope clarification must not retain the negated per-person interpretation.');
+  const individualBudget = ask('预算按每人计算', unspecifiedBudget.context);
+  assert(individualBudget.plan && individualBudget.plan.budgetScope === 'per-person' && individualBudget.text.includes('4,000'));
+  const tooLowBudget = ask('武汉3天2人，总预算500元');
+  assert(!tooLowBudget.plan && /超过|超出/.test(tooLowBudget.text), 'A target below the planning floor cannot produce a supposedly compliant plan.');
+  const noLimit = ask('取消预算上限', totalBudget.context);
+  assert(noLimit.plan && noLimit.plan.budgetLimit === undefined && noLimit.context.trip?.budgetLimit === undefined);
+  for (const question of ['武汉3天2人预算2,000元', '武汉3天2人预算2k元']) {
+    const formatted = ask(question);
+    assert(!formatted.plan && formatted.context.trip?.budgetLimit === 2000 && formatted.context.trip?.awaiting === 'budget-scope');
+  }
+  const retainConstraints = ask('增加1人', ask('从武汉出发，恩施3天2人，少台阶，下午到，人均预算5000元').context);
+  assert(retainConstraints.plan && retainConstraints.plan.party === 3);
+  for (const [key, expected] of Object.entries({ origin: '武汉', mobility: 'gentle', arrival: 'afternoon', budgetScope: 'per-person', budgetLimit: 5000 })) assert.equal(retainConstraints.plan[key], expected, `A normal edit retains the travel constraint ${key}.`);
 
   assert.equal(JSON.stringify({ cities, destinations, practical, templates }), before, 'Question answering must not mutate source travel content.');
   console.log(JSON.stringify({ result: 'passed', questions: checked, cities: cities.length, checks: '17-city stay/food/follow-up and structured plans, conversational collection and edits, Chinese party/day parsing, preferences, cross-city transfers, arrival-night budgeting, limits, references, live data boundaries, immutability' }, null, 2));

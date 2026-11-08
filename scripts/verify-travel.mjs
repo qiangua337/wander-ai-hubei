@@ -130,6 +130,9 @@ try {
   const skipped = { ...defaultProfile('enshi'), indices: [1, 2] };
   assert(estimateBudget(skipped, 2).arrivalNight);
   assert.equal(estimateBudget(skipped, 2).nights, 2);
+  assert.equal(estimateBudget({ ...skipped, arrival: 'full-day' }, 2).nights, 1, 'Explicit full-day plans do not invent a prior hotel night.');
+  assert.equal(estimateBudget({ ...skipped, arrival: 'afternoon' }, 2).nights, 1, 'An afternoon arrival is inside the trip, not an extra prior night.');
+  assert.equal(estimateBudget({ ...skipped, arrival: 'previous-night' }, 2).nights, 2, 'A requested prior-night arrival reserves the extra night.');
   assert(formatDetailedPlan(skipped).includes('提前一晚抵达'));
   console.log(JSON.stringify({ result: 'passed', cities: cities.length, destinations: destinations.length, featured: featuredDestinations.length, routeDays: dayCount, photos: imageCredits.length, checks: 'coverage, references, route depth, search, saved filters, custom days, family/duration filters, 17-city practical coverage, cross-city transfers, budget arithmetic, safe sharing roundtrip, invalid dates/inputs, immutability, photos' }, null, 2));
 } finally {

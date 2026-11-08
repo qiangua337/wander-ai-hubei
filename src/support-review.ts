@@ -1,5 +1,5 @@
 import { cityById } from './data';
-import { buildTrip, estimateBudget, groupLabels, interestLabels, budgetLabels, templates, type PlannedDay, type Profile } from './planning';
+import { arrivalLabels, mobilityLabels, buildTrip, estimateBudget, groupLabels, interestLabels, budgetLabels, templates, type PlannedDay, type Profile } from './planning';
 import type { SupportTripDraft } from './support';
 
 export type SupportPlanComparison = {
@@ -37,6 +37,10 @@ export function compareSupportPlans(previous: Profile, current: Profile): Suppor
     ['旅行节奏', previous.pace === 'relaxed' ? '轻松慢游' : '经典串游', current.pace === 'relaxed' ? '轻松慢游' : '经典串游'],
     ['预算档位', budgetLabels[previous.budget], budgetLabels[current.budget]],
     ['出发日期', previous.date || '日期待定', current.date || '日期待定'],
+    ['出发城市', previous.origin || '未填写', current.origin || '未填写'],
+    ['首日抵达', previous.arrival ? arrivalLabels[previous.arrival] : '沿用原方案假设', current.arrival ? arrivalLabels[current.arrival] : '沿用原方案假设'],
+    ['体力限制', mobilityLabels[previous.mobility || 'standard'], mobilityLabels[current.mobility || 'standard']],
+    ['目标预算', previous.budgetLimit ? (previous.budgetScope === 'per-person' ? '每人' : '全团') + ' ¥' + previous.budgetLimit : '未设置', current.budgetLimit ? (current.budgetScope === 'per-person' ? '每人' : '全团') + ' ¥' + current.budgetLimit : '未设置'],
     ['补充想法', previous.note.trim() || '未填写', current.note.trim() || '未填写'],
   ];
   return {
@@ -55,5 +59,9 @@ export function supportTripDraftFromProfile(profile: Profile): SupportTripDraft 
     cityIds: [...new Set(days.map(day => day.cityId))], days: days.length, party: profile.party,
     group: profile.group, mode: profile.mode, budget: profile.budget, interest: profile.interest,
     pace: profile.pace, date: profile.date, note: profile.note,
+    ...(profile.origin !== undefined ? { origin: profile.origin } : {}),
+    ...(profile.arrival ? { arrival: profile.arrival } : {}),
+    ...(profile.mobility ? { mobility: profile.mobility } : {}),
+    ...(profile.budgetLimit !== undefined ? { budgetLimit: profile.budgetLimit, budgetScope: profile.budgetScope } : {}),
   };
 }

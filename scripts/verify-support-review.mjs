@@ -90,6 +90,11 @@ try {
   assert.deepEqual(acrossDraft.cityIds, ['yichang', 'enshi']);
   assert.equal(acrossDraft.days, 5);
   assert.equal(acrossDraft.party, 4);
+  const constrained = { ...adjusted, origin: '武汉', arrival: 'afternoon', mobility: 'gentle', budgetLimit: 2000, budgetScope: 'total' };
+  const constraintsChange = compare(adjusted, constrained);
+  for (const label of ['出发城市', '首日抵达', '体力限制', '目标预算']) assert(constraintsChange.changes.some(change => change.label === label));
+  const constraintsDraft = supportTripDraftFromProfile(constrained);
+  for (const key of ['origin', 'arrival', 'mobility', 'budgetLimit', 'budgetScope']) assert.equal(constraintsDraft[key], constrained[key], 'Editing must retain travel constraints.');
   draft.cityIds.push('enshi');
   assert.deepEqual(supportTripDraftFromProfile(frozen).cityIds, ['wuhan'], 'Draft arrays are independent copies.');
   assert.equal(JSON.stringify(base), snapshot);

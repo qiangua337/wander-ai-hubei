@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { ArrowRight, Bookmark, Check, MapPin, Route, Sparkles, Trash2 } from 'lucide-react';
 import { cities, cityById, cityPhotos } from '../data';
-import { budgetLabels, buildTrip, defaultProfile, estimateBudget, groupLabels, interestLabels, normalizeProfile, recommendDays, templates, tripTitle, validDate, type Profile } from '../planning';
+import { arrivalLabels, mobilityLabels, budgetLabels, buildTrip, defaultProfile, estimateBudget, groupLabels, interestLabels, normalizeProfile, recommendDays, recommendConstrainedDays, templates, tripTitle, validDate, type Profile } from '../planning';
 import { Modal } from './Modal';
 import { PlannedTrip } from './PlannedTrip';
 import { Button, SelectField, InputField } from './ui';
@@ -63,6 +63,12 @@ export function Planner({ initialCity, initialDate, travelers, initialProfile, o
   }, [initialProfile]);
   useEffect(() => { try { localStorage.setItem('wander-draft-v2', JSON.stringify(profile)); } catch { /* Planning remains usable when storage is unavailable. */ } }, [profile]);
   const update = (patch: Partial<Profile>) => { setProfile(previous => ({ ...previous, ...patch })); setReady(false); setFeedback(''); };
+  const updateChapters = (patch: Partial<Profile>, count = profile.indices.length || 2) => {
+    const next = { ...profile, ...patch };
+    const indices = recommendConstrainedDays(next.cityId, count, next.interest, next.mobility);
+    update({ ...patch, indices });
+    if (indices.length < count) setFeedback(`现有符合体力条件的章节只有 ${indices.length} 天，原 ${count} 天条件未满足。请确认天数或换一座城市。`);
+  };
   const storePlans = (next: SavedPlan[]) => { setSavedPlans(next); try { localStorage.setItem('wander-plans-v2', JSON.stringify(next)); return true; } catch { return false; } };
   const savePlan = () => {
     const success = storePlans([{ id: String(Date.now()), profile }, ...savedPlans.filter(plan => JSON.stringify(plan.profile) !== JSON.stringify(profile))].slice(0, 5));
@@ -81,6 +87,9 @@ export function Planner({ initialCity, initialDate, travelers, initialProfile, o
           event.preventDefault();
           if (!days.length) return;
           if (profile.date && !validDate(profile.date)) { setFeedback('请输入有效日期，例如 2026-11-01。'); return; }
+          if (profile.budgetLimit !== undefined && (!Number.isInteger(profile.budgetLimit) || profile.budgetLimit < 1 || profile.budgetLimit > 1000000)) { setFeedback('目标预算请填 1–1000000 元的整数，也可以先留空。'); return; }
+          if (profile.mobility === 'gentle' && days.some(day => day.effort === 'high')) { setFeedback('这份方案仍含高体力山地章节，未满足少台阶条件。请减少天数、换城市或取消冲突章节。'); return; }
+          if (profile.budgetLimit && profile.budgetScope && budget.total[0] > profile.budgetLimit * (profile.budgetScope === 'per-person' ? profile.party : 1)) { setFeedback('这份方案的最低规划预留已超过目标预算。请调整天数、档位或预算后再整理。'); return; }
           setReady(true); setFeedback(''); focusResult();
         }}>
           <fieldset className="planner-form-section">
@@ -90,10 +99,12 @@ export function Planner({ initialCity, initialDate, travelers, initialProfile, o
             </div>
             <label className="planner-field">路线方式<SelectField aria-label="路线模板" value={profile.template} onChange={event => update({ template: event.target.value })}><option value="custom">自选一座城市</option>{templates.map(template => <option value={template.id} key={template.id}>{template.label} · {template.title}</option>)}</SelectField></label>
             {!selectedTemplate && <div className="planner-field-pair">
-              <label className="planner-field">目的地<SelectField aria-label="行程城市" value={profile.cityId} onChange={event => { const id = event.target.value; update({ cityId: id, indices: recommendDays(id, Math.min(profile.indices.length || 2, cityById[id].days.length), profile.interest) }); }}>{cities.map(item => <option value={item.id} key={item.id}>{item.shortName}</option>)}</SelectField></label>
-              <label className="planner-field">计划天数<SelectField aria-label="计划天数" value={profile.indices.length} onChange={event => update({ indices: recommendDays(profile.cityId, Number(event.target.value), profile.interest) })}>{!profile.indices.length && <option value={0}>先选一天</option>}{city.days.map((_, i) => <option key={i} value={i + 1}>{i + 1} 天</option>)}</SelectField></label>
+              <label className="planner-field">目的地<SelectField aria-label="行程城市" value={profile.cityId} onChange={event => { const id = event.target.value; updateChapters({ cityId: id }, Math.min(profile.indices.length || 2, cityById[id].days.length)); }}>{cities.map(item => <option value={item.id} key={item.id}>{item.shortName}</option>)}</SelectField></label>
+              <label className="planner-field">计划天数<SelectField aria-label="计划天数" value={profile.indices.length} onChange={event => updateChapters({}, Number(event.target.value))}>{!profile.indices.length && <option value={0}>先选一天</option>}{city.days.map((_, i) => <option key={i} value={i + 1}>{i + 1} 天</option>)}</SelectField></label>
             </div>}
             <label className="planner-field">出发日期<span className="planner-field-hint">还没确定，可以先留空</span><InputField aria-label="行程出发日期" value={profile.date} placeholder="年-月-日" pattern="[0-9]{4}-[0-9]{2}-[0-9]{2}" maxLength={10} onChange={event => update({ date: event.target.value })} /></label>
+            <label className="planner-field">出发城市<InputField aria-label="规划出发城市" value={profile.origin || ''} maxLength={24} onChange={event => update({ origin: event.target.value })} placeholder="出发地与游玩城市分别填写" /></label>
+            <div className="planner-field-pair"><label className="planner-field">首日抵达<SelectField aria-label="规划首日抵达" value={profile.arrival || ''} onChange={event => update({ arrival: event.target.value ? event.target.value as Profile['arrival'] : undefined })}><option value="">未填写 · 沿用原方案假设</option>{Object.entries(arrivalLabels).map(([value, label]) => <option key={value} value={value}>{label}</option>)}</SelectField></label><label className="planner-field">体力限制<SelectField aria-label="规划体力限制" value={profile.mobility || 'standard'} onChange={event => { const mobility = event.target.value as Profile['mobility']; const indices = selectedTemplate ? profile.indices : recommendConstrainedDays(profile.cityId, profile.indices.length || 2, profile.interest, mobility); const shortfall = !selectedTemplate && indices.length < profile.indices.length; update({ mobility, indices }); if (shortfall) setFeedback('已有较轻松章节不足原天数，已显示可用章节，请确认天数；也可以换一座城市。'); }}><option value="standard">{mobilityLabels.standard}</option><option value="gentle">{mobilityLabels.gentle}</option></SelectField></label></div>
           </fieldset>
           <fieldset className="planner-form-section">
             <legend className="sr-only">同行人与交通方式</legend><StepHeading number="02" title="和谁一起，怎么走" />
@@ -106,11 +117,12 @@ export function Planner({ initialCity, initialDate, travelers, initialProfile, o
           <fieldset className="planner-form-section">
             <legend className="sr-only">旅行偏好</legend><StepHeading number="03" title="把节奏，调成你喜欢的" />
             <div className="planner-field-pair">
-              <label className="planner-field">单城玩法<SelectField disabled={Boolean(selectedTemplate)} aria-label="玩法偏好" value={profile.interest} onChange={event => { const interest = event.target.value as Profile['interest']; update({ interest, indices: recommendDays(profile.cityId, profile.indices.length || 2, interest) }); }}>{Object.entries(interestLabels).map(([value, label]) => <option value={value} key={value}>{label}</option>)}</SelectField></label>
+              <label className="planner-field">单城玩法<SelectField disabled={Boolean(selectedTemplate)} aria-label="玩法偏好" value={profile.interest} onChange={event => updateChapters({ interest: event.target.value as Profile['interest'] })}>{Object.entries(interestLabels).map(([value, label]) => <option value={value} key={value}>{label}</option>)}</SelectField></label>
               <label className="planner-field">预算档位<SelectField aria-label="预算档位" value={profile.budget} onChange={event => update({ budget: event.target.value as Profile['budget'] })}>{Object.entries(budgetLabels).map(([value, label]) => <option value={value} key={value}>{label}</option>)}</SelectField></label>
             </div>
             {selectedTemplate && <p className="planner-small-note">经典路线保留既定主线，可继续调整交通、预算与节奏。</p>}
             <label className="planner-field">旅行节奏<SelectField aria-label="旅行节奏" value={profile.pace} onChange={event => update({ pace: event.target.value as Profile['pace'] })}><option value="classic">经典串游 · 保留上午和下午</option><option value="relaxed">轻松慢游 · 下午活动可选</option></SelectField></label>
+            <div className="planner-field-pair"><label className="planner-field">目标预算（元，可留空）<InputField aria-label="规划目标预算" inputMode="numeric" value={profile.budgetLimit || ''} onChange={event => { const value = event.target.value; if (!value || /^\d{1,7}$/.test(value)) update({ budgetLimit: value ? Number(value) : undefined, budgetScope: value ? profile.budgetScope || 'total' : undefined }); }} placeholder="用于与规划预留比较" /></label><label className="planner-field">预算口径<SelectField aria-label="规划预算口径" value={profile.budgetScope || 'total'} onChange={event => update({ budgetScope: event.target.value as Profile['budgetScope'] })}><option value="total">全团合计</option><option value="per-person">每人</option></SelectField></label></div>
             <details className="planner-fine-tune"><summary>自选章节与补充想法</summary><div>
               {!selectedTemplate && <fieldset><legend>自选想走的章节</legend>{city.days.map((day, index) => <label key={day.title} className="planner-chapter"><input type="checkbox" checked={profile.indices.includes(index)} onChange={() => update({ indices: profile.indices.includes(index) ? profile.indices.filter(i => i !== index) : [...profile.indices, index].sort((a, b) => a - b) })} /><span>{day.title}</span></label>)}</fieldset>}
               <label className="planner-field">我的补充想法<textarea aria-label="行程备注" maxLength={500} value={profile.note} onChange={event => update({ note: event.target.value })} placeholder="例如：午后休息、不吃辣、希望听讲解…" /><span className="planner-small-note">备注随清单保留，当前不自动识别或预约。</span></label>

@@ -1,7 +1,7 @@
 import { useRef, useState } from 'react';
 import { ArrowRight, ArrowUpRight, BedDouble, Bookmark, Check, CircleCheck, Copy, Download, Pencil, Route, Share2, Utensils, Wallet } from 'lucide-react';
 import { cityById } from '../data';
-import { buildTrip, budgetLabels, estimateBudget, formatDetailedPlan, groupLabels, sharePlanUrl, tripTitle, type Profile } from '../planning';
+import { arrivalLabels, mobilityLabels, getTripIssues, buildTrip, budgetLabels, estimateBudget, formatDetailedPlan, groupLabels, sharePlanUrl, tripTitle, type Profile } from '../planning';
 import { downloadPlan } from '../travel';
 import { TripDays } from './TravelGuide';
 import { FoodSuggestions, StaySuggestions } from './PracticalDetails';
@@ -31,6 +31,8 @@ export function PlannedTrip({ profile, onCopy, onSave, onEdit }: { profile: Prof
       <h3>{tripTitle(profile)}</h3>
       <div className="trip-summary-route" aria-label="行程城市">{cityIds.map((id, index) => <span key={id}>{index > 0 && <ArrowRight size={12} />}<strong>{cityById[id].shortName}</strong><small>{days.filter(day => day.cityId === id).length} 天</small></span>)}</div>
       <p className="trip-summary-conditions">{profile.date || '日期待定'} · {profile.party} 人 · {groupLabels[profile.group]} · {profile.mode === 'drive' ? '自驾出行' : '公共交通＋接驳'} · {profile.pace === 'relaxed' ? '轻松慢游' : '经典串游'}</p>
+      {(profile.origin || profile.arrival || profile.mobility === 'gentle') && <p className="trip-summary-conditions">{profile.origin ? '从' + profile.origin + '出发 · ' : ''}{profile.arrival ? arrivalLabels[profile.arrival] + ' · ' : ''}{mobilityLabels[profile.mobility || 'standard']}</p>}
+      {profile.budgetLimit && <p className="trip-summary-conditions">目标预算：{profile.budgetScope === 'per-person' ? '每人' : '全团'} ¥{profile.budgetLimit.toLocaleString()}，与本地规划预留比较。</p>}
       <div className="trip-summary-actions"><button onClick={() => setSaveState(onSave() ? '已保存到当前浏览器' : '保存失败，请下载清单')}><Bookmark size={14} />{saveState || '存到我的行程'}</button><button onClick={onEdit}><Pencil size={14} />调整条件</button></div>
       <div className="trip-summary-metrics"><span><strong>{days.length}</strong> 天行程</span><span><strong>{budget.nights}</strong> 晚住宿</span><span><strong>{cityIds.length}</strong> 座城市</span></div>
       <button className="trip-budget-preview" aria-label="查看预算明细" onClick={() => selectTab('budget')}><Wallet size={18} /><span>全团预算预留<strong>¥{budget.total[0].toLocaleString()}–{budget.total[1].toLocaleString()}</strong></span><span>看明细<ArrowUpRight size={14} /></span></button>
@@ -42,6 +44,7 @@ export function PlannedTrip({ profile, onCopy, onSave, onEdit }: { profile: Prof
     }} key={item.id} onClick={() => selectTab(item.id)}><item.icon size={16} /><span>{item.label}<small aria-hidden="true">{item.count}</small></span></button>)}</div>
     <div ref={panel} role="tabpanel" id={'plan-panel-' + tab} aria-labelledby={'plan-tab-' + tab} className="trip-tab-panel">
       {tab === 'route' && <>
+        {getTripIssues(profile).length > 0 && <div className="trip-reading-note"><strong>先核对这份安排的条件</strong><ul className="mt-2 list-disc space-y-1 pl-4">{getTripIssues(profile).map(issue => <li key={issue}>{issue}</li>)}</ul></div>}
         {budget.arrivalNight && <p className="trip-reading-note">所选章节从完整游玩日开始，建议提前一晚抵达，住宿预算已加这一晚。若当天才到，首日上午改作交通并减少景点。</p>}
         <p className="trip-panel-description">每天围绕一片区域走。跨城日把上午留给交通；到得晚，就缩减当天下午的活动。</p>
         <TripDays days={days.map((day, i) => ({ ...day, overnight: i < days.length - 1 ? day.overnight : '返程日；若延住可参考 ' + day.overnight }))} date={profile.date} />
