@@ -7,19 +7,16 @@ const server = await createServer({ root, configFile: false, server: { middlewar
 try {
   const { cities, cityById, destinations, destinationById } = await server.ssrLoadModule('/src/data.ts');
   const { practical } = await server.ssrLoadModule('/src/data/practical.ts');
-  const { templates } = await server.ssrLoadModule('/src/planning.ts');
+  const { templates, buildTrip, estimateBudget, normalizeProfile, recommendDays } = await server.ssrLoadModule('/src/planning.ts');
   const { travelFaq } = await server.ssrLoadModule('/src/data/help.ts');
-  const { answerSupport } = await server.ssrLoadModule('/src/support.ts');
+  const { answerSupport, planSupportTrip } = await server.ssrLoadModule('/src/support.ts');
   const before = JSON.stringify({ cities, destinations, practical, templates });
   const sourceUrls = new Set(cities.flatMap(city => city.sources.map(source => source.url)));
   const templateIds = new Set(templates.map(template => template.id));
   const allowedActions = new Set(['city', 'place', 'plan', 'template', 'wishlist', 'explore']);
   let checked = 0;
 
-  function ask(question, context = {}) {
-    const originalContext = JSON.stringify(context);
-    const reply = answerSupport(question, context);
-    assert.equal(JSON.stringify(context), originalContext, 'Question answering must not rewrite caller context.');
+  function checkReply(reply) {
     assert(reply && typeof reply === 'object');
     assert.equal(typeof reply.text, 'string');
     assert(reply.text.length > 0 && reply.text.length < 5000, 'Answers must be nonempty and bounded.');
@@ -42,10 +39,33 @@ try {
       if (action.kind === 'city' || action.kind === 'plan') assert(action.cityId);
       if (action.kind === 'place') assert(action.placeId);
       if (action.kind === 'template') assert(action.templateId);
+      if (action.profile) {
+        assert.equal(action.kind, 'plan', 'A complete profile opens the existing planner.');
+        assert.deepEqual(normalizeProfile(action.profile), action.profile, 'The planner action must carry a valid complete profile.');
+      }
+    }
+    if (reply.plan) {
+      assert.deepEqual(normalizeProfile(reply.plan), reply.plan, 'Plan previews use the same normalized profile as the planner.');
+      assert(buildTrip(reply.plan).length > 0, 'A generated plan must contain actual editorial days.');
+      const action = reply.actions.find(item => item.kind === 'plan' && item.profile);
+      assert(action && /带入规划.*调整/.test(action.label), 'A generated plan needs a clear path to continue editing.');
+      assert.deepEqual(action.profile, reply.plan, 'Opening the planner must preserve every generated setting.');
     }
     assert(reply.suggestions.every(value => typeof value === 'string' && value.length > 0 && value.length <= 240));
     checked++;
     return reply;
+  }
+  function ask(question, context = {}) {
+    const originalContext = JSON.stringify(context);
+    const reply = answerSupport(question, context);
+    assert.equal(JSON.stringify(context), originalContext, 'Question answering must not rewrite caller context.');
+    return checkReply(reply);
+  }
+  function planDraft(draft) {
+    const original = JSON.stringify(draft);
+    const reply = planSupportTrip(draft);
+    assert.equal(JSON.stringify(draft), original, 'Structured planning must not mutate its input.');
+    return checkReply(reply);
   }
 
   // Data-backed answers must work beyond the three cities featured on the home page.
@@ -72,14 +92,15 @@ try {
   assert(genericFamily.actions.some(action => action.kind === 'explore') && !genericFamily.context.cityId);
 
   const seven = ask('武汉宜昌恩施七天怎么安排？');
-  assert(seven.actions.some(action => action.kind === 'template' && action.templateId === 'hubei-seven'));
-  assert(['武汉', '宜昌', '恩施'].every(name => seven.text.includes(name)), 'A cross-city answer must cover the whole route.');
+  assert(!seven.plan && /人数|几位|几人|多少人/.test(seven.text), 'Ask for the missing party rather than generating a default party.');
+  assert.equal(seven.context.trip?.days, 7);
+  assert.deepEqual(new Set(seven.context.trip?.cityIds), new Set(['wuhan', 'yichang', 'enshi']));
   const five = ask('宜昌和恩施五天路线');
-  assert(five.actions.some(action => action.kind === 'template' && action.templateId === 'west-five'));
+  assert(!five.plan && five.context.trip?.days === 5 && /人数|几位|几人|多少人/.test(five.text));
   for (const question of ['武汉十二天行程', '武汉12天行程']) {
     const longerTrip = ask(question);
     assert(longerTrip.text.includes('12 天'), 'Long durations must not be truncated to the last digit.');
-    assert(/不能.*填满/.test(longerTrip.text), 'Do not invent more itinerary chapters than the site contains.');
+    assert(!longerTrip.plan && /不能|最多|超出|章节|现有/.test(longerTrip.text), 'Do not invent more itinerary chapters than the site contains.');
   }
   const season = ask('恩施适合什么季节去？');
   assert.equal(season.context.cityId, 'enshi');
@@ -87,7 +108,7 @@ try {
   const family = ask('带孩子去武汉，行程怎么放慢？');
   assert.equal(family.context.cityId, 'wuhan');
   assert(/休息|慢游|体力|亲子|孩子/.test(family.text));
-  assert(family.actions.some(action => action.kind === 'plan' && action.cityId === 'wuhan'));
+  assert(family.actions.some(action => action.kind === 'plan' && action.cityId === 'wuhan') || family.context.trip?.group === 'family');
   const budget = ask('武汉预算怎么安排？');
   assert.equal(budget.context.cityId, 'wuhan');
   assert(/预算|预留|人数|档位/.test(budget.text));
@@ -113,7 +134,7 @@ try {
   assert.equal(qianjiang.context.cityId, 'qianjiang', 'A city name takes priority over an overlapping nickname substring.');
   assert(qianjiang.text.includes(practical.qianjiang.food[0].order));
   const mixedCityName = ask('汉口和宜昌怎么安排？');
-  assert(!mixedCityName.context.cityId && /武汉/.test(mixedCityName.text) && /宜昌/.test(mixedCityName.text), 'A non-overlapping nickname still identifies a second city.');
+  assert(!mixedCityName.context.cityId && ((/武汉/.test(mixedCityName.text) && /宜昌/.test(mixedCityName.text)) || ['wuhan', 'yichang'].every(id => mixedCityName.context.trip?.cityIds?.includes(id))), 'A non-overlapping nickname still identifies a second city.');
 
   const ambiguousChibi = ask('赤壁怎么玩？');
   assert(/东坡/.test(ambiguousChibi.text) && /三国/.test(ambiguousChibi.text), 'An ambiguous Chibi question must distinguish the two travel places.');
@@ -177,8 +198,166 @@ try {
   ask('<script>alert(1)</script>');
   ask('住哪里？', { cityId: '__proto__' });
 
+  // A complete trip uses the existing planner's day, stay, food, and transport data.
+  for (const city of cities) {
+    const result = planDraft({ cityIds: [city.id], days: 1, party: 2, interest: 'balanced' });
+    assert(result.plan, `${city.shortName} needs a usable one-day plan.`);
+    assert.equal(result.plan.cityId, city.id);
+    assert.equal(result.plan.party, 2);
+    const days = buildTrip(result.plan);
+    assert.equal(days.length, 1);
+    assert(days.every(day => day.stops.length && day.meal && day.transport && day.overnight));
+    assert(result.sources.length > 0, 'Generated itineraries keep official reference links.');
+  }
+
+  const pendingCity = ask('帮我规划3天行程，2人，喜欢山水');
+  assert(!pendingCity.plan && /城市|目的地|哪座/.test(pendingCity.text));
+  assert.equal(pendingCity.context.trip?.days, 3);
+  assert.equal(pendingCity.context.trip?.party, 2);
+  assert.equal(pendingCity.context.trip?.interest, 'nature');
+  const pendingDays = ask('帮我规划恩施行程，2人，喜欢山水');
+  assert(!pendingDays.plan && /天|多久/.test(pendingDays.text));
+  const missingPeople = ask('恩施3天喜欢山水，帮我安排具体行程');
+  assert(!missingPeople.plan && /人数|几位|几人|多少人/.test(missingPeople.text));
+  const familyTrip = ask('2大1小，不自驾，轻松一点', missingPeople.context);
+  assert(familyTrip.plan, 'Party and preferences complete the existing planning conversation.');
+  assert.equal(familyTrip.plan.party, 3);
+  assert.equal(familyTrip.plan.group, 'family');
+  assert.equal(familyTrip.plan.mode, 'public', 'Negated self-drive must not match the positive self-drive intent.');
+  assert.equal(familyTrip.plan.pace, 'relaxed');
+  assert.equal(familyTrip.plan.interest, 'nature');
+  assert.equal(buildTrip(familyTrip.plan).length, 3);
+  assert(buildTrip(familyTrip.plan).every(day => /可选|弹性/.test(day.stops[1].detail + day.stops[1].time)));
+
+  const chineseTrip = ask('恩施三天，两大一小，带娃轻松玩，喜欢山水，不自驾');
+  assert(chineseTrip.plan, 'Chinese day and party numbers should generate the same usable plan.');
+  assert.equal(chineseTrip.plan.party, 3);
+  assert.equal(buildTrip(chineseTrip.plan).length, 3);
+  assert.equal(chineseTrip.plan.group, 'family');
+  assert.equal(chineseTrip.plan.mode, 'public');
+  const seniorTrip = ask('武汉两天，3人带长辈，喜欢人文，安排一下行程');
+  assert(seniorTrip.plan && seniorTrip.plan.group === 'senior' && seniorTrip.plan.pace === 'relaxed');
+  assert.equal(seniorTrip.plan.interest, 'culture');
+  const defaults = ask('武汉2天2人，帮我规划具体行程');
+  assert(defaults.plan && defaults.plan.mode === 'public' && defaults.plan.interest === 'balanced' && defaults.plan.budget === 'comfort');
+  assert(/公共交通|接驳/.test(defaults.text) && /综合|经典/.test(defaults.text), 'Defaults should be disclosed rather than silently attributed to the visitor.');
+
+  const collectedCity = ask('恩施', ask('帮我规划具体行程').context);
+  assert(!collectedCity.plan && collectedCity.context.trip?.cityIds?.includes('enshi'));
+  const collectedDays = ask('三天', collectedCity.context);
+  assert(!collectedDays.plan && collectedDays.context.trip?.days === 3);
+  const collectedParty = ask('两大一小，喜欢山水，不自驾', collectedDays.context);
+  assert(collectedParty.plan && collectedParty.plan.party === 3 && buildTrip(collectedParty.plan).length === 3, 'Short replies must fill the requested missing slots.');
+
+  const originalFamilyPlan = JSON.stringify(familyTrip.plan);
+  const adjustedDays = ask('改成2天', familyTrip.context);
+  assert(adjustedDays.plan && buildTrip(adjustedDays.plan).length === 2 && adjustedDays.plan.party === 3);
+  const adjustedPeople = ask('改成4人，朋友同行', adjustedDays.context);
+  assert(adjustedPeople.plan && adjustedPeople.plan.party === 4);
+  const adjustedMode = ask('换成自驾', adjustedPeople.context);
+  assert(adjustedMode.plan && adjustedMode.plan.mode === 'drive' && adjustedMode.plan.party === 4);
+  const adjustedInterest = ask('我喜欢美食', adjustedMode.context);
+  assert(adjustedInterest.plan && adjustedInterest.plan.interest === 'food' && adjustedInterest.plan.mode === 'drive');
+  const adjustedPace = ask('还是经典节奏，下午也玩', familyTrip.context);
+  assert(adjustedPace.plan && adjustedPace.plan.pace === 'classic', 'An explicit pace must override the family default.');
+  for (const question of ['2026年12月8日出发', '2026-12-08']) {
+    const dateOnly = ask(question, familyTrip.context);
+    assert(dateOnly.plan && dateOnly.plan.date === '2026-12-08' && buildTrip(dateOnly.plan).length === 3, 'A direct departure date must update the existing plan without requiring a modification keyword or turning day-of-month into trip duration.');
+    assert.equal(dateOnly.plan.party, familyTrip.plan.party);
+  }
+  for (const question of ['不想自驾', '不要自驾']) {
+    const noDrive = ask(question, adjustedMode.context);
+    assert(noDrive.plan && noDrive.plan.mode === 'public', 'Negated driving preferences must override an existing drive plan.');
+  }
+  const cheaperTrip = ask('想省钱一点', familyTrip.context);
+  assert(cheaperTrip.plan && cheaperTrip.plan.budget === 'value' && cheaperTrip.plan.party === 3, 'Direct valid preferences should continue the existing trip even without saying change.');
+  for (const question of ['不要太赶', '不太累']) {
+    const easierTrip = ask(question, defaults.context);
+    assert(easierTrip.plan && easierTrip.plan.pace === 'relaxed', 'Common unhurried-pace phrases should map to the existing relaxed option.');
+  }
+  assert.equal(JSON.stringify(familyTrip.plan), originalFamilyPlan, 'Follow-up edits must not mutate an earlier answer or its planner action.');
+  const stayWhilePlanning = ask('恩施住哪里方便？', familyTrip.context);
+  assert(!stayWhilePlanning.plan && stayWhilePlanning.text.includes(practical.enshi.stays[0].area));
+  assert.deepEqual(stayWhilePlanning.context.trip, familyTrip.context.trip, 'A practical city question should not discard the accumulated trip preferences.');
+  const foodWhilePlanning = ask('恩施有什么好吃的？', stayWhilePlanning.context);
+  assert(!foodWhilePlanning.plan && foodWhilePlanning.text.includes(practical.enshi.food[0].order), 'Food discovery is not automatically a request to edit the trip.');
+  assert.deepEqual(foodWhilePlanning.context.trip, familyTrip.context.trip);
+  const ordinaryFood = ask('恩施有什么美食推荐？', familyTrip.context);
+  assert(!ordinaryFood.plan && ordinaryFood.text.includes(practical.enshi.food[0].order), 'An ordinary food query must not change the trip interest merely because it contains food.');
+  const ordinaryTransport = ask('公共交通怎么安排？', familyTrip.context);
+  assert(!ordinaryTransport.plan && ordinaryTransport.text.includes(cityById.enshi.arrival), 'An ordinary public-transport query should answer transport rather than regenerate the plan.');
+  const placeWhilePlanning = ask('黄鹤楼怎么玩？', defaults.context);
+  assert(!placeWhilePlanning.plan && placeWhilePlanning.actions.some(action => action.kind === 'place' && action.placeId === 'wuhan'));
+  const sharingWhilePlanning = ask('这份行程怎么保存分享？', familyTrip.context);
+  assert(!sharingWhilePlanning.plan && /分享/.test(sharingWhilePlanning.text));
+  assert.deepEqual(sharingWhilePlanning.context.trip, familyTrip.context.trip);
+  const outsideWhilePlanning = ask('北京住哪里？', familyTrip.context);
+  assert(!outsideWhilePlanning.plan && !outsideWhilePlanning.context.trip, 'A named outside destination must not leave a stale Hubei itinerary active.');
+
+  for (const party of [0, -1, 7, 2.5]) {
+    const rejected = planDraft({ cityIds: ['enshi'], days: 2, party });
+    assert(!rejected.plan && /人数|人|1.*6|一.*六/.test(rejected.text), 'Unsupported party values must not silently become two people.');
+  }
+  for (const days of [0, -1, 2.5, 12]) {
+    const rejected = planDraft({ cityIds: ['wuhan'], days, party: 2 });
+    assert(!rejected.plan && /天|章节/.test(rejected.text), 'Unsupported durations must not silently become a shorter plan.');
+  }
+  const tooManyPeople = ask('恩施2天，7人，帮我规划行程');
+  assert(!tooManyPeople.plan && /人数|1.*6|一.*六/.test(tooManyPeople.text));
+  const badCity = planDraft({ cityIds: ['__proto__'], days: 2, party: 2 });
+  assert(!badCity.plan, 'An invalid city cannot fall back to Wuhan.');
+  const badDate = planDraft({ cityIds: ['wuhan'], days: 2, party: 2, date: '2026-02-30' });
+  assert(!badDate.plan && /日期|有效/.test(badDate.text), 'Invalid dates need a correction rather than being silently erased.');
+  const calendar = ask('2026年12月8日去恩施玩三天，两位大人一位小孩，不自驾');
+  assert(calendar.plan && calendar.plan.indices.length === 3 && calendar.plan.party === 3, 'Calendar dates are not itinerary durations, and classifiers do not turn adult counts into total counts.');
+  assert.equal(calendar.plan.date, '2026-12-08');
+  assert.equal(calendar.plan.group, 'family');
+  const pendingWithStay = ask('3个人，住哪里方便？', missingPeople.context);
+  assert(pendingWithStay.plan && pendingWithStay.plan.party === 3, 'Supplying the missing party can still complete a trip when the reply also asks about stays.');
+  for (const question of ['武汉2.5天2人行程', '武汉2天2.5人行程']) {
+    const fractional = ask(question);
+    assert(!fractional.plan && /整数|人数|1–6/.test(fractional.text), 'Fractional natural-language counts must not be truncated to their last digit.');
+  }
+  const dated = planDraft({ cityIds: ['wuhan'], days: 2, party: 2, date: '2026-11-10', mode: 'drive', budget: 'value', pace: 'classic', interest: 'culture' });
+  assert(dated.plan && dated.plan.date === '2026-11-10' && dated.plan.budget === 'value' && dated.plan.mode === 'drive');
+  const stayResume = ask('住哪里方便？', dated.context);
+  assert(!stayResume.plan, 'A stay follow-up should not repeat the itinerary preview.');
+  const stayResumeAction = stayResume.actions.find(action => action.kind === 'plan');
+  assert.equal(stayResumeAction?.label, '继续调整这份行程');
+  assert.deepEqual(stayResumeAction?.profile, dated.plan, 'Returning to the planner from a stay answer must retain the complete party, date, interests and transport profile.');
+  const dietary = ask('恩施3天2人，喜欢山水，不吃辣，花生过敏，帮我规划行程');
+  assert(dietary.plan && /不吃辣/.test(dietary.plan.note) && /花生过敏/.test(dietary.plan.note), 'Dietary notes should travel into the editable plan.');
+  assert(!/已确保|保证无|已满足|完全满足/.test(dietary.text), 'Dietary requirements must not be presented as verified restaurant accommodations.');
+
+  const sevenComplete = ask('3人，不自驾，亲子轻松一点', seven.context);
+  assert(sevenComplete.plan && sevenComplete.plan.template === 'hubei-seven');
+  assert.equal(buildTrip(sevenComplete.plan).length, 7);
+  const sevenDays = buildTrip(sevenComplete.plan);
+  assert(sevenDays.filter(day => day.transfer).length === 2, 'The existing cross-city transfer mornings must survive support planning.');
+  assert(sevenDays.filter(day => day.transfer).every(day => /转场|交通/.test(day.stops[0].time) && /跨城/.test(day.transport)));
+  const crossBudget = estimateBudget(sevenComplete.plan, sevenDays.length);
+  assert.equal(crossBudget.rooms, 2);
+  assert.equal(crossBudget.nights, 6);
+  const fiveComplete = planDraft({ cityIds: ['yichang', 'enshi'], days: 5, party: 2, interest: 'food' });
+  assert(fiveComplete.plan && fiveComplete.plan.template === 'west-five' && buildTrip(fiveComplete.plan).length === 5);
+  assert(/固定|既定|主线|不改变|保留/.test(fiveComplete.text), 'Cross-city preference labels must not pretend to change a fixed template.');
+  const fiveDated = ask('2026-12-08', fiveComplete.context);
+  const sharingResume = ask('怎么保存分享行程？', fiveDated.context);
+  assert(!sharingResume.plan, 'The save/share answer should remain a focused help answer.');
+  assert.equal(sharingResume.actions[0]?.label, '继续调整这份行程');
+  assert.deepEqual(sharingResume.actions[0]?.profile, fiveDated.plan, 'A cross-city FAQ without an existing city-plan action must add a resume action carrying its original date, people and interests.');
+  const mismatchedCross = planDraft({ cityIds: ['yichang', 'enshi'], days: 7, party: 2 });
+  assert(!mismatchedCross.plan && /5|五/.test(mismatchedCross.text), 'Do not silently compress or stretch the fixed cross-city route.');
+  const unsupportedCross = planDraft({ cityIds: ['wuhan', 'enshi'], days: 4, party: 2 });
+  assert(!unsupportedCross.plan, 'An unsupported city combination needs clarification, not an invented transfer route.');
+  const arrivalNight = planDraft({ cityIds: ['enshi'], days: 2, party: 3, interest: 'nature' });
+  assert(arrivalNight.plan);
+  assert.deepEqual(arrivalNight.plan.indices, recommendDays('enshi', 2, 'nature'));
+  const arrivalBudget = estimateBudget(arrivalNight.plan, buildTrip(arrivalNight.plan).length);
+  assert(arrivalBudget.arrivalNight && arrivalBudget.nights === 2 && arrivalBudget.rooms === 2, 'A nature-first itinerary starting after day zero needs the planner’s arrival-night allowance.');
+
   assert.equal(JSON.stringify({ cities, destinations, practical, templates }), before, 'Question answering must not mutate source travel content.');
-  console.log(JSON.stringify({ result: 'passed', questions: checked, cities: cities.length, checks: '17-city stay/food/follow-up, aliases, cross-city templates, live data and booking boundaries, references, actions, unknown/long input, immutability' }, null, 2));
+  console.log(JSON.stringify({ result: 'passed', questions: checked, cities: cities.length, checks: '17-city stay/food/follow-up and structured plans, conversational collection and edits, Chinese party/day parsing, preferences, cross-city transfers, arrival-night budgeting, limits, references, live data boundaries, immutability' }, null, 2));
 } finally {
   await server.close();
 }

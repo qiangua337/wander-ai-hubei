@@ -9,10 +9,14 @@
 .support-city>span { width:170px; flex-shrink:0; }
 .support-city select { height:38px; border-radius:7px; font-size:12px; }
 .support-city svg { top:11px; }
+.support-trip-entry { display:flex; align-items:center; gap:6px; min-height:36px; padding:6px 9px; border:1px solid var(--color-line); border-radius:7px; font-size:12px; color:var(--color-pine); background:var(--color-sage); flex-shrink:0; }
+.support-city>.support-condition-label { width:auto; color:var(--color-muted); font-size:11px; }
 .support-log { flex:1; min-height:90px; overflow-y:auto; overscroll-behavior:contain; padding:18px 20px; background:var(--color-sand); scrollbar-width:thin; scrollbar-color:#dbc4cd transparent; }
 .support-welcome,.support-reply { display:flex; align-items:start; gap:9px; }
 .support-avatar { display:flex; align-items:center; justify-content:center; flex-shrink:0; width:30px; height:30px; border-radius:9px; color:var(--color-pine); background:var(--color-sage); }
 .support-welcome>div,.support-reply>div { min-width:0; flex:1; border:1px solid var(--color-line); padding:13px 14px; border-radius:0 12px 12px; background:white; }
+.support-reply.is-plan>.support-avatar { display:none; }
+.support-reply.is-plan>div { border-radius:10px; padding:12px; }
 .support-welcome strong { font-weight:500; font-size:14px; }
 .support-welcome p,.support-reply>div>p { margin:0; font-size:13px; line-height:1.9; white-space:pre-wrap; overflow-wrap:anywhere; }
 .support-welcome p { margin-top:6px; color:var(--color-muted); }
@@ -55,4 +59,4 @@
  .support-privacy { padding-inline:15px; }
  .support-welcome p,.support-reply>div>p { font-size:13px; }
 }
-@media(max-height:640px) { .support-city>label { display:none; } .support-city { padding-block:6px; } .support-city>span { width:100%; } .support-meta { padding-top:4px; } .support-privacy { font-size:10px; padding-bottom:8px; } }
+@media(max-height:640px) { .support-city>label { display:none; } .support-city { padding-block:6px; } .support-city>span { width:150px; } .support-city>.support-condition-label { width:auto; } .support-meta { padding-top:4px; } .support-privacy { font-size:10px; padding-bottom:8px; } }

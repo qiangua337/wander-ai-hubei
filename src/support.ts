@@ -1,12 +1,14 @@
 import { cities, cityById, destinations, destinationById, type CityGuide, type Destination } from './data';
 import { practical } from './data/practical';
 import { travelFaq } from './data/help';
-import { templates } from './planning';
+import { templates, type Profile } from './planning';
 import { findDestinations } from './travel';
+import { answerTripQuestion, copyTripDraft, planSupportTrip, type SupportTripDraft } from './support-planning';
+export { planSupportTrip, type SupportTripDraft } from './support-planning';
 
-export type SupportContext = { cityId?: string };
-export type SupportAction = { kind: 'city' | 'place' | 'plan' | 'template' | 'wishlist' | 'explore'; label: string; cityId?: string; placeId?: string; templateId?: string };
-export type SupportReply = { text: string; sources: { title: string; url: string }[]; actions: SupportAction[]; suggestions: string[]; context: SupportContext };
+export type SupportContext = { cityId?: string; trip?: SupportTripDraft };
+export type SupportAction = { kind: 'city' | 'place' | 'plan' | 'template' | 'wishlist' | 'explore'; label: string; cityId?: string; placeId?: string; templateId?: string; profile?: Profile };
+export type SupportReply = { text: string; sources: { title: string; url: string }[]; actions: SupportAction[]; suggestions: string[]; context: SupportContext; plan?: Profile };
 
 const placeAliases: Record<string, string[]> = {
   'hubei-museum': ['省博', '湖北博物馆', '湖北省博物馆', '曾侯乙编钟'],
@@ -83,7 +85,7 @@ function templateReply(template: typeof templates[number], requestedDays?: numbe
 }
 
 /** A synchronous query helper over this site's editorial data, with no model or network request. */
-export function answerSupport(question: string, context: SupportContext = {}): SupportReply {
+function answerGuide(question: string, context: SupportContext = {}): SupportReply {
   const previousCity = validCity(context?.cityId);
   if (typeof question !== 'string' || !question.trim()) return reply('你好，我是小游。可以帮你查湖北的住宿片区、地方餐食、到达交通和编辑路线。想先了解哪座城市？', previousCity, [{ kind: 'explore', label: '去选一座城市' }]);
   if (question.length > 240) return reply('一次最多问 240 个字。可以先告诉我城市，再分别问住宿、美食或路线，我会逐项帮你查站内攻略。', previousCity);
@@ -134,8 +136,8 @@ export function answerSupport(question: string, context: SupportContext = {}): S
     const priceNote = /票价|门票|房价|价格|多少钱/.test(q) ? '\n\n规划中的费用是预留额度，不能作为当前报价。' : '';
     return reply(`我无法查询${topics.length ? topics.join('、') : '当前价格或供应信息'}。${booking ? '这里也不能代为预约或预订。' : ''}请通过${channel}的官方渠道核对。${advice}${priceNote}`, cityId, placeActions);
   }
-  if (/你是谁|你是.*AI|你是.*人工|真人|人工客服|大模型|机器人|客服|需要.*key|你能|能帮我做什么|有什么功能/i.test(q)) {
-    return reply('我是小游，一个基于站内攻略做问题匹配的本地旅行问答助手，不连接大模型，也不是真人客服。无需 key、登录或下载模型。可以查湖北城市的吃住行、阅读景点资料，并帮你打开对应的编辑路线；实时天气、价格和预订需要另向官方确认。', cityId, actions, []);
+  if (/你是谁|你是.*AI|你是.*人工|真人|人工客服|大模型|机器人|客服|需要.*key|你能做什么|你能干什么|能帮我做什么|有什么功能/i.test(q)) {
+    return reply('我是小游，一个基于站内攻略做问题匹配的本地旅行问答助手，不连接大模型，也不是真人客服。无需 key、登录或下载模型。告诉我湖北目的地、天数、总人数与偏好，我能用编辑路线整理逐日游览、住宿片区、美食和交通，并带入规划器继续调整；实时天气、价格和预订需要另向官方确认。', cityId, actions, []);
   }
   if (/保存|分享|下载|导出|离线|复制/.test(q)) {
     return reply(travelFaq.find(item => item.q.includes('保存'))?.a || '规划结果可以保存在当前浏览器，也可以复制、下载或分享。', cityId, [...(city ? [planAction(city.id)] : []), { kind: 'wishlist', label: '打开旅行心愿单' }], [], ['如何查看我的收藏？', '武汉两天怎么玩？']);
@@ -151,6 +153,9 @@ export function answerSupport(question: string, context: SupportContext = {}): S
   if (outsideScope) {
     return reply('本站目前只整理湖北旅行资料，这个目的地不在攻略范围内，所以不能沿用上一座湖北城市的吃住建议。你可以另选湖北的一座城市，或通过目的地的官方旅游渠道了解当地信息。', undefined, [{ kind: 'explore', label: '探索湖北目的地' }], [], fallbackSuggestions);
   }
+
+  const planned = answerTripQuestion(q, context, mentionedCities, places.length > 0);
+  if (planned) return planned;
 
   if (mentionedCities.length > 1) {
     const template = routeIntent ? templates.find(item => item.segments.length === mentionedCities.length && item.segments.every(segment => mentionedCities.includes(segment.cityId))) : undefined;
@@ -210,4 +215,22 @@ export function answerSupport(question: string, context: SupportContext = {}): S
   if (places.length > 1) return reply(`你提到了${places.map(item => item.title).join('、')}。可以分别打开攻略，先比较停留时长和所在片区，再决定是否放在同一天。`, cityId, places.slice(0, 4).map(placeAction));
   if (city && mentionedCities.length === 1 && [city.name, city.shortName].some(name => compact(name) === normalized)) return reply(`${city.shortName}：${city.tagline}\n\n${city.intro}\n\n你想先了解住宿、美食、交通，还是逐日路线？`, city.id, actions);
   return reply('我目前只会查本站的湖北旅行和使用资料，这个问题还没有匹配到合适的答案。可以带上城市，换成“住哪里”“吃什么”“怎么去”或“怎么玩”试试。', cityId, actions, [], citySuggestions(city));
+}
+
+export function answerSupport(question: string, context: SupportContext = {}): SupportReply {
+  const result = answerGuide(question, context);
+  if (!context.trip || result.context.trip) return result;
+  const previous = copyTripDraft(context.trip), cityIds = previous.cityIds || [];
+  const otherDestination = typeof question === 'string' && /北京|上海|天津|重庆|广州|深圳|成都|杭州|南京|长沙|西安|洛阳|苏州|桂林|厦门|青岛|三亚|大理|丽江|张家界|郑州|济南|昆明|贵阳|海口|拉萨|乌鲁木齐|哈尔滨|长春|沈阳|太原|石家庄|福州|南昌|合肥|南宁|兰州|银川|西宁|呼和浩特|香港|澳门|台湾|云南|四川|贵州|湖南|广东|广西|河南|河北|浙江|江苏|山东|山西|陕西|海南|福建|江西|安徽|甘肃|青海|宁夏|新疆|西藏|内蒙古|辽宁|吉林|黑龙江/.test(question);
+  if (!result.context.cityId && otherDestination) return result;
+  if (result.context.cityId && cityIds.length && !cityIds.includes(result.context.cityId)) return result;
+  const profile = planSupportTrip(previous).plan;
+  let actions = result.actions;
+  if (profile) {
+    const resume: SupportAction = { kind: 'plan', cityId: profile.cityId, label: '继续调整这份行程', profile: { ...profile, indices: [...profile.indices] } };
+    actions = actions.some(action => action.kind === 'plan')
+      ? actions.map(action => action.kind === 'plan' && !action.profile ? resume : action)
+      : [resume, ...actions];
+  }
+  return { ...result, actions, context: { ...result.context, trip: previous } };
 }

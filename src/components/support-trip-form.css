@@ -1,0 +1,24 @@
+.support-trip-form { border:1px solid var(--color-line); border-radius:12px; padding:16px; background:white; font-size:12px; }
+.support-trip-intro { padding-bottom:14px; }
+.support-trip-intro>span { display:flex; align-items:center; gap:7px; font-size:15px; font-weight:500; color:var(--color-pine); }
+.support-trip-intro>p { margin-top:7px; font-size:12px; line-height:1.8; color:var(--color-muted); }
+.support-trip-form label { display:flex; flex-direction:column; gap:6px; min-width:0; margin-bottom:12px; line-height:1.6; }
+.support-trip-form label>span { min-width:0; width:100%; }
+.support-trip-form select,.support-trip-form input { min-width:0; height:40px; border-radius:7px; font-size:12px; }
+.support-trip-form select { padding-inline:9px 25px; }
+.support-trip-pair { display:grid; grid-template-columns:minmax(0,1fr) minmax(0,1fr); column-gap:10px; }
+.support-interest-picks { margin-bottom:14px; }
+.support-interest-picks legend { margin-bottom:7px; }
+.support-interest-picks>div { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:7px; }
+.support-interest-picks button { min-height:36px; padding:5px; border:1px solid var(--color-line); border-radius:7px; color:var(--color-muted); }
+.support-interest-picks button[aria-pressed=true] { color:var(--color-pine); border-color:var(--color-pine); background:var(--color-sage); }
+.support-trip-hint { color:var(--color-muted); font-size:11px; line-height:1.8; }
+.support-trip-more { border-top:1px solid var(--color-line); margin-top:4px; }
+.support-trip-more summary { min-height:40px; padding-block:11px; cursor:pointer; color:var(--color-pine); }
+.support-trip-more>label { margin-bottom:0; }
+.support-trip-submit { display:grid; grid-template-columns:auto minmax(0,1fr); gap:10px; margin:15px 0 9px; }
+.support-trip-submit>button { min-height:42px; border-radius:7px; padding:8px 10px; font-size:12px; }
+.support-trip-submit>button:first-child { border:1px solid var(--color-line); color:var(--color-muted); }
+.support-trip-submit>button:last-child { display:flex; align-items:center; justify-content:center; gap:7px; color:white; background:var(--color-pine); }
+.support-trip-error { color:var(--color-pine); margin-top:8px; font-size:12px; line-height:1.8; }
+@media(max-width:359px) { .support-trip-form { padding:12px; } .support-trip-pair { grid-template-columns:minmax(0,1fr); } .support-trip-counts { grid-template-columns:minmax(0,1fr) minmax(0,1fr); } .support-trip-submit { grid-template-columns:minmax(0,1fr); gap:6px; } }
