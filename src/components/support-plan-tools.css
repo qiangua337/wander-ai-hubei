@@ -1,0 +1,23 @@
+.support-plan-tools { margin-top:12px; font-size:12px; }
+.support-plan-tool-buttons { display:flex; flex-wrap:wrap; gap:7px; }
+.support-plan-tool-buttons>button { display:inline-flex; align-items:center; justify-content:center; gap:6px; min-height:36px; border:1px solid var(--color-line); border-radius:7px; padding:6px 9px; background:white; color:var(--color-pine); }
+.support-plan-tool-buttons>button:hover,.support-plan-tool-buttons>button[aria-expanded=true] { background:var(--color-sage); border-color:#d4a7b4; }
+.support-plan-tool-buttons>button>svg { flex-shrink:0; }
+.support-plan-tool-feedback { margin-top:8px; color:var(--color-pine); font-size:12px; line-height:1.8; }
+.support-plan-comparison { min-width:0; margin-top:12px; padding:13px; background:#fffafb; border:1px solid #ead4db; border-radius:8px; overflow-wrap:anywhere; }
+.support-plan-comparison h4 { margin:0 0 4px; font-size:14px; font-weight:500; color:var(--color-pine); }
+.support-plan-comparison>p { font-size:12px; line-height:1.8; color:var(--color-muted); }
+.support-plan-comparison dl { margin-top:10px; }
+.support-plan-comparison dl>div { display:grid; grid-template-columns:62px minmax(0,1fr); gap:7px; padding:8px 0; border-top:1px solid var(--color-line); }
+.support-plan-comparison dt { color:var(--color-muted); }
+.support-plan-comparison dd { display:flex; flex-wrap:wrap; align-items:center; gap:5px 7px; min-width:0; margin:0; }
+.support-plan-comparison dd>span { color:var(--color-muted); }
+.support-plan-comparison dd>svg { color:var(--color-pine); flex-shrink:0; }
+.support-plan-comparison dd>strong { color:var(--color-ink); font-weight:500; }
+.support-plan-chapter-changes { border-top:1px solid var(--color-line); padding-top:8px; line-height:1.9; color:var(--color-muted); }
+.support-plan-chapter-changes p+p { margin-top:8px; }
+.support-plan-chapter-changes strong { display:block; color:var(--color-pine); font-weight:500; }
+.support-plan-comparison>.support-plan-comparison-budget { display:flex; flex-direction:column; gap:3px; border-top:1px solid var(--color-line); padding-top:8px; margin-top:10px; color:var(--color-pine); }
+.support-plan-comparison-budget>strong { font-weight:500; }
+.support-plan-comparison>small { display:block; margin-top:8px; color:var(--color-muted); font-size:11px; line-height:1.8; }
+@media(max-width:359px) { .support-plan-tool-buttons { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:6px; } .support-plan-tool-buttons>button { padding-inline:5px; font-size:11px; gap:4px; } .support-plan-comparison { padding:10px; } .support-plan-comparison dl>div { grid-template-columns:minmax(0,1fr); gap:4px; } }

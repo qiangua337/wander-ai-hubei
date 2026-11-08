@@ -2,7 +2,7 @@ import { useEffect, useId, useRef, type ReactNode } from 'react';
 import { createPortal } from 'react-dom';
 import { X } from 'lucide-react';
 
-export function Modal({ title, onClose, children, wide = false }: { title: string; onClose: () => void; children: ReactNode; wide?: boolean }) {
+export function Modal({ title, onClose, children, wide = false, dialogClassName = '' }: { title: string; onClose: () => void; children: ReactNode; wide?: boolean; dialogClassName?: string }) {
   const id = useId();
   const ref = useRef<HTMLDivElement>(null);
   useEffect(() => { ref.current?.scrollTo({ top: 0 }); ref.current?.querySelector<HTMLButtonElement>('button')?.focus(); }, [title]);
@@ -26,7 +26,7 @@ export function Modal({ title, onClose, children, wide = false }: { title: strin
     return () => { document.body.style.overflow = overflow; if (root) root.inert = wasInert; document.removeEventListener('keydown', keydown); previous?.focus(); };
   }, [onClose]);
   return createPortal(<div className="fixed inset-0 z-50 flex items-center justify-center bg-ink/55 p-4 backdrop-blur-sm" onMouseDown={event => { if (event.target === event.currentTarget) onClose(); }}>
-    <div ref={ref} role="dialog" aria-modal="true" aria-labelledby={id} className={`modal-enter relative max-h-[92dvh] w-full overflow-y-auto rounded-lg bg-white shadow-2xl ${wide ? 'max-w-6xl' : 'max-w-lg'}`}>
+    <div ref={ref} role="dialog" aria-modal="true" aria-labelledby={id} className={`modal-enter relative max-h-[92dvh] w-full overflow-y-auto rounded-lg bg-white shadow-2xl ${wide ? 'max-w-6xl' : 'max-w-lg'} ${dialogClassName}`}>
       <div className="sticky top-0 z-20 flex items-center justify-between gap-4 border-b border-line bg-cream/95 px-5 py-4 backdrop-blur sm:px-6 sm:py-5"><h2 id={id} className="font-sans text-lg font-semibold text-ink">{title}</h2><button type="button" onClick={onClose} aria-label="关闭弹窗" className="shrink-0 rounded-full p-2 text-muted transition hover:bg-sage hover:text-pine"><X size={20} /></button></div>
       {children}
     </div>

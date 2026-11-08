@@ -1,10 +1,13 @@
 import { useEffect, useRef, useState } from 'react';
 import { ArrowUpRight, Compass, MessageCircle, RotateCcw, Route, Send } from 'lucide-react';
 import { cities, cityById } from '../data';
-import { answerSupport, planSupportTrip, type SupportAction, type SupportContext, type SupportReply } from '../support';
+import { answerSupport, planSupportTrip, type SupportAction, type SupportContext, type SupportReply, type SupportTripDraft } from '../support';
+import type { Profile } from '../planning';
+import { supportTripDraftFromProfile } from '../support-review';
 import { Modal } from './Modal';
 import { SupportTripForm } from './SupportTripForm';
 import { SupportPlanPreview } from './SupportPlanPreview';
+import { SupportPlanTools } from './SupportPlanTools';
 import { SelectField } from './ui';
 import './support-desk.css';
 
@@ -23,6 +26,7 @@ export function SupportDesk({ open, initialCity, initialParty, initialDate, onCl
   const [suggestions, setSuggestions] = useState<string[]>(promptsFor(initial));
   const [draft, setDraft] = useState('');
   const [showTripForm, setShowTripForm] = useState(false);
+  const [editingTrip, setEditingTrip] = useState<SupportTripDraft>();
   const serial = useRef(0);
   const log = useRef<HTMLDivElement>(null);
   useEffect(() => {
@@ -43,20 +47,26 @@ export function SupportDesk({ open, initialCity, initialParty, initialDate, onCl
     setSuggestions(reply.suggestions.length ? reply.suggestions.slice(0, 4) : promptsFor(reply.context.cityId));
     setDraft('');
     setShowTripForm(false);
+    setEditingTrip(undefined);
   };
   const ask = (value: string) => {
     const question = value.trim().slice(0, 240);
     if (question) addReply(question, answerSupport(question, context));
   };
-  const clear = () => { setMessages([]); setDraft(''); setContext({ cityId: initial }); setSuggestions(promptsFor(initial)); setShowTripForm(false); };
+  const editPlan = (profile: Profile) => { setEditingTrip(supportTripDraftFromProfile(profile)); setShowTripForm(true); };
+  const clear = () => { setMessages([]); setDraft(''); setContext({ cityId: initial }); setSuggestions(promptsFor(initial)); setShowTripForm(false); setEditingTrip(undefined); };
   if (!open) return null;
-  return <Modal title="小游 · 湖北旅行问答" onClose={onClose}>
+  return <Modal title="小游 · 湖北旅行问答" onClose={onClose} dialogClassName="support-dialog">
     <div className="support-shell">
       <div className="support-meta"><span><Compass size={14} />本站攻略 · 无需登录</span><button onClick={clear} disabled={!messages.length} aria-label="清空对话"><RotateCcw size={14} />清空对话</button></div>
-      <div className="support-city"><button className="support-trip-entry" onClick={() => setShowTripForm(previous => !previous)} aria-expanded={showTripForm}>{showTripForm ? <MessageCircle size={15} /> : <Route size={15} />}{showTripForm ? '返回问答' : '排具体行程'}</button>{!showTripForm && <SelectField id="support-city" aria-label="问答城市" value={context.cityId || ''} onChange={event => { const cityId = event.target.value || undefined; setContext({ cityId }); setSuggestions(promptsFor(cityId)); }}><option value="">还没想好 · 全部湖北</option>{cities.map(city => <option key={city.id} value={city.id}>{city.shortName}</option>)}</SelectField>}{showTripForm && <span className="support-condition-label">天数 · 人数 · 偏好</span>}</div>
+      <div className="support-city"><button className="support-trip-entry" onClick={() => { setEditingTrip(undefined); setShowTripForm(previous => !previous); }} aria-expanded={showTripForm}>{showTripForm ? <MessageCircle size={15} /> : <Route size={15} />}{showTripForm ? '返回问答' : '排具体行程'}</button>{!showTripForm && <SelectField id="support-city" aria-label="问答城市" value={context.cityId || ''} onChange={event => { const cityId = event.target.value || undefined; setContext({ cityId }); setSuggestions(promptsFor(cityId)); }}><option value="">还没想好 · 全部湖北</option>{cities.map(city => <option key={city.id} value={city.id}>{city.shortName}</option>)}</SelectField>}{showTripForm && <span className="support-condition-label">天数 · 人数 · 偏好</span>}</div>
       <div ref={log} className="support-log" role={showTripForm ? 'region' : 'log'} aria-label={showTripForm ? '行程条件' : '旅行问答记录'} aria-live={showTripForm ? 'off' : 'polite'} aria-relevant="additions">
-        {showTripForm ? <SupportTripForm draft={context.trip} initialCity={context.cityId} initialParty={initialParty} initialDate={initialDate} onSubmit={(request, question) => addReply(question, planSupportTrip(request))} onCancel={() => setShowTripForm(false)} /> : <><div className="support-welcome"><span className="support-avatar" aria-hidden="true"><Compass size={19} /></span><div><strong>你好，我是小游。</strong><p>告诉我去哪、玩几天、几个人，以及喜欢的玩法。我会把每天的游览、住宿片区、美食和交通一起排好，也可以直接问攻略。</p><small>依据本站编辑路线组合，未连接大模型或人工客服。</small></div></div>
-        {messages.map(message => <div key={message.id} className="support-turn"><div className="support-question"><span>你</span><p>{message.question}</p></div><div className={"support-reply" + (message.reply.plan ? " is-plan" : "")}><span className="support-avatar" aria-hidden="true"><Compass size={17} /></span><div><p>{message.reply.text}</p>{message.reply.actions.length > 0 && <div className="support-actions">{message.reply.actions.map((action, index) => <button key={index} onClick={() => onAction(action)}>{action.label}<ArrowUpRight size={13} /></button>)}</div>}{message.reply.plan && <SupportPlanPreview profile={message.reply.plan} />}{message.reply.sources.length > 0 && <details className="support-sources"><summary>参考资料 · {message.reply.sources.length} 条</summary>{message.reply.sources.map(source => <a key={source.url} href={source.url} target="_blank" rel="noreferrer">{source.title}<ArrowUpRight size={12} /></a>)}</details>}</div></div></div>)}</>}
+        {showTripForm ? <SupportTripForm draft={editingTrip || context.trip} initialCity={context.cityId} initialParty={initialParty} initialDate={initialDate} onSubmit={(request, question) => addReply(question, planSupportTrip(request))} onCancel={() => setShowTripForm(false)} /> : <><div className="support-welcome"><span className="support-avatar" aria-hidden="true"><Compass size={19} /></span><div><strong>你好，我是小游。</strong><p>告诉我去哪、玩几天、几个人，以及喜欢的玩法。我会把每天的游览、住宿片区、美食和交通一起排好，也可以直接问攻略。</p><small>依据本站编辑路线组合，未连接大模型或人工客服。</small></div></div>
+        {messages.map((message, messageIndex) => {
+          const profile = message.reply.plan;
+          const previous = profile ? messages.slice(0, messageIndex).reverse().find(item => item.reply.plan && JSON.stringify(item.reply.plan) !== JSON.stringify(profile))?.reply.plan : undefined;
+          return <div key={message.id} className="support-turn"><div className="support-question"><span>你</span><p>{message.question}</p></div><div className={'support-reply' + (profile ? ' is-plan' : '')}><span className="support-avatar" aria-hidden="true"><Compass size={17} /></span><div><p>{message.reply.text}</p>{message.reply.actions.length > 0 && <div className="support-actions">{message.reply.actions.map((action, index) => <button key={index} onClick={() => onAction(action)}>{action.label}<ArrowUpRight size={13} /></button>)}</div>}{profile && <><SupportPlanTools profile={profile} previous={previous} onEdit={editPlan} /><SupportPlanPreview profile={profile} /></>}{message.reply.sources.length > 0 && <details className="support-sources"><summary>参考资料 · {message.reply.sources.length} 条</summary>{message.reply.sources.map(source => <a key={source.url} href={source.url} target="_blank" rel="noreferrer">{source.title}<ArrowUpRight size={12} /></a>)}</details>}</div></div></div>;
+        })}</>}
       </div>
       {!showTripForm && <><div className="support-suggestions" aria-label="可以继续问">{suggestions.map(question => <button key={question} onClick={() => ask(question)}>{question}</button>)}</div>
       <form className="support-form" onSubmit={event => { event.preventDefault(); ask(draft); }}><label className="sr-only" htmlFor="support-question">输入旅行问题</label><textarea id="support-question" aria-label="输入旅行问题" rows={2} maxLength={240} value={draft} onChange={event => setDraft(event.target.value)} onKeyDown={event => { if (event.key === 'Enter' && !event.shiftKey && !event.nativeEvent.isComposing) { event.preventDefault(); ask(draft); } }} placeholder="例如：恩施3天，3人，喜欢山水" /><button type="submit" disabled={!draft.trim()}><Send size={16} />发送</button></form></>}

@@ -1,0 +1,59 @@
+import { cityById } from './data';
+import { buildTrip, estimateBudget, groupLabels, interestLabels, budgetLabels, templates, type PlannedDay, type Profile } from './planning';
+import type { SupportTripDraft } from './support';
+
+export type SupportPlanComparison = {
+  changes: { label: string; before: string; after: string }[];
+  addedDays: string[];
+  removedDays: string[];
+  beforeTotal: number[];
+  afterTotal: number[];
+};
+
+function routeLabel(profile: Profile, days: PlannedDay[]): string {
+  const route = days.filter((day, index) => index === 0 || day.cityId !== days[index - 1].cityId)
+    .map(day => cityById[day.cityId].shortName).join(' → ');
+  const template = templates.find(item => item.id === profile.template);
+  return `${route || '尚未选择章节'} · ${template ? `经典主线：${template.title}` : '自选章节'}`;
+}
+
+function interestLabel(profile: Profile): string {
+  const fixed = templates.some(item => item.id === profile.template);
+  return `${interestLabels[profile.interest]}${fixed ? '（固定主线，景点不变）' : ''}`;
+}
+
+/** Compare actual route days and settings without changing either plan or editorial data. */
+export function compareSupportPlans(previous: Profile, current: Profile): SupportPlanComparison {
+  const beforeDays = buildTrip(previous), afterDays = buildTrip(current);
+  const keyFor = (day: PlannedDay) => `${day.cityId}:${day.originalIndex}`;
+  const beforeKeys = new Set(beforeDays.map(keyFor)), afterKeys = new Set(afterDays.map(keyFor));
+  const fields = [
+    ['路线', routeLabel(previous, beforeDays), routeLabel(current, afterDays)],
+    ['游玩天数', `${beforeDays.length} 天`, `${afterDays.length} 天`],
+    ['同行人数', `${previous.party} 人`, `${current.party} 人`],
+    ['同行人群', groupLabels[previous.group], groupLabels[current.group]],
+    ['交通方式', previous.mode === 'drive' ? '自驾出行' : '公共交通＋接驳', current.mode === 'drive' ? '自驾出行' : '公共交通＋接驳'],
+    ['玩法偏好', interestLabel(previous), interestLabel(current)],
+    ['旅行节奏', previous.pace === 'relaxed' ? '轻松慢游' : '经典串游', current.pace === 'relaxed' ? '轻松慢游' : '经典串游'],
+    ['预算档位', budgetLabels[previous.budget], budgetLabels[current.budget]],
+    ['出发日期', previous.date || '日期待定', current.date || '日期待定'],
+    ['补充想法', previous.note.trim() || '未填写', current.note.trim() || '未填写'],
+  ];
+  return {
+    changes: fields.filter(([, before, after]) => before !== after).map(([label, before, after]) => ({ label, before, after })),
+    addedDays: afterDays.filter(day => !beforeKeys.has(keyFor(day))).map(day => day.title),
+    removedDays: beforeDays.filter(day => !afterKeys.has(keyFor(day))).map(day => day.title),
+    beforeTotal: [...estimateBudget(previous, beforeDays.length).total],
+    afterTotal: [...estimateBudget(current, afterDays.length).total],
+  };
+}
+
+/** Refill the local trip form from the same settings and actual cities used by this plan. */
+export function supportTripDraftFromProfile(profile: Profile): SupportTripDraft {
+  const days = buildTrip(profile);
+  return {
+    cityIds: [...new Set(days.map(day => day.cityId))], days: days.length, party: profile.party,
+    group: profile.group, mode: profile.mode, budget: profile.budget, interest: profile.interest,
+    pace: profile.pace, date: profile.date, note: profile.note,
+  };
+}

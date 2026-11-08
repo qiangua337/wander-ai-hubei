@@ -1,4 +1,5 @@
-.support-shell { display:flex; flex-direction:column; height:min(670px,calc(92dvh - 78px)); min-height:0; }
+.modal-enter.support-dialog { max-width:680px; }
+.support-shell { display:flex; flex-direction:column; height:min(760px,calc(92dvh - 78px)); min-height:0; }
 .support-meta { display:flex; justify-content:space-between; align-items:center; gap:8px; padding:12px 20px 0; font-size:11px; color:var(--color-muted); flex-shrink:0; }
 .support-meta>span,.support-meta>button { display:flex; align-items:center; gap:6px; }
 .support-meta>span { color:var(--color-pine); }

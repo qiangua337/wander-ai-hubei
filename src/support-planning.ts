@@ -33,11 +33,37 @@ export function copyTripDraft(value?: SupportTripDraft): SupportTripDraft {
   return draft;
 }
 
-const suggestionsFor = (draft: SupportTripDraft) => draft.awaiting === 'city'
-  ? ['想去武汉', '想去恩施', '想去宜昌和恩施']
-  : draft.awaiting === 'days' ? ['改成2天', '改成3天', '改成5天']
-  : draft.awaiting === 'party' ? ['2人一起', '2大1小，亲子轻松', '我一个人']
-  : ['改成3天', '换成自驾', '想轻松一点', '怎么保存分享行程？'];
+function suggestionsFor(draft: SupportTripDraft): string[] {
+  if (draft.awaiting === 'city') {
+    const choices = [
+      { text: '想去武汉', cityIds: ['wuhan'], days: cityById.wuhan.days.length, fixed: false },
+      { text: '想去恩施', cityIds: ['enshi'], days: cityById.enshi.days.length, fixed: false },
+      { text: '想去宜昌和恩施', cityIds: ['yichang', 'enshi'], days: 5, fixed: true },
+      { text: '想去宜昌', cityIds: ['yichang'], days: cityById.yichang.days.length, fixed: false },
+      { text: '想去武汉宜昌和恩施', cityIds: ['wuhan', 'yichang', 'enshi'], days: 7, fixed: true },
+    ].filter(choice => !(choice.cityIds.length === draft.cityIds?.length && choice.cityIds.every(id => draft.cityIds?.includes(id))) && (draft.days === undefined || (Number.isInteger(draft.days) && draft.days > 0 && (choice.fixed ? draft.days === choice.days : draft.days <= choice.days))));
+    return choices.length ? choices.slice(0, 3).map(choice => choice.text) : ['改成3天，想去武汉', '改成4天，想去恩施', '改成7天，想去武汉宜昌和恩施'];
+  }
+  const cityIds = (draft.cityIds || []).filter(id => Object.hasOwn(cityById, id));
+  const template = cityIds.length > 1 ? templates.find(item => item.segments.length === cityIds.length && item.segments.every(segment => cityIds.includes(segment.cityId))) : undefined;
+  const maximum = template ? template.segments.reduce((total, segment) => total + segment.indices.length, 0) : cityIds.length === 1 ? cityById[cityIds[0]].days.length : 3;
+  if (draft.awaiting === 'days') return (template ? [maximum] : Array.from({ length: maximum }, (_, index) => index + 1)).filter(days => days !== draft.days).slice(0, 3).map(days => `改成${days}天`);
+  const effectiveGroup = draft.group || (draft.party === 1 ? 'solo' : 'friends');
+  if (draft.awaiting === 'party') return [
+    { text: draft.group === 'solo' ? '2人，朋友同行' : '2人一起', party: 2, group: draft.group === 'solo' ? 'friends' : effectiveGroup },
+    { text: '2大1小，亲子轻松', party: 3, group: 'family' },
+    { text: '我一个人', party: 1, group: 'solo' },
+  ].filter(item => item.party !== draft.party || item.group !== effectiveGroup).map(item => item.text);
+  const days = !template && cityIds.length === 1 && maximum > 1 && draft.days !== undefined ? (draft.days < maximum ? draft.days + 1 : draft.days - 1) : undefined;
+  const party = draft.party === 6 ? 5 : (draft.party || 1) + 1;
+  const relaxed = draft.pace ? draft.pace === 'relaxed' : effectiveGroup === 'family' || effectiveGroup === 'senior';
+  return [
+    days ? `改成${days}天` : `改成${party}人${effectiveGroup === 'solo' ? '，朋友同行' : ''}`,
+    draft.mode === 'drive' ? '改为公共交通' : '换成自驾',
+    relaxed ? '改为经典节奏' : '想轻松一点',
+    '怎么保存分享行程？',
+  ];
+}
 
 function tripReply(text: string, draft: SupportTripDraft, actions: SupportAction[] = [], plan?: Profile): SupportReply {
   const cityIds = (draft.cityIds || []).filter(id => Object.hasOwn(cityById, id));
@@ -77,7 +103,7 @@ export function planSupportTrip(input: SupportTripDraft): SupportReply {
   if (buildTrip(profile).length !== draft.days) return tripReply('现有路线未能覆盖你选择的天数，请调整天数或目的地后再整理。', draft);
   const defaults = [!draft.interest && interestLabels[profile.interest], !draft.mode && '公共交通＋接驳', !draft.budget && budgetLabels[profile.budget], !draft.pace && (pace === 'relaxed' ? '亲子／长辈默认慢游' : '经典节奏')].filter(Boolean);
   const notes = [
-    '已按这些条件整理好具体行程。可以继续说“改成3天”“4人”“换自驾”或“喜欢美食”。',
+    `已按这些条件整理好具体行程。可以继续调整${template ? '人数、交通与节奏' : '天数、人数、交通与玩法'}，或带入规划器保存与下载。`,
     defaults.length ? `未指定的项目先按：${defaults.join('、')}。` : '',
     template ? `跨城采用固定主线：${template.segments.map(segment => `${cityById[segment.cityId].shortName}${segment.indices.length}天`).join(' → ')}；玩法偏好不会改动经典模板的景点。跨城日上午留给交通，原上午景点移除。` : '',
     draft.note ? '补充想法已附入方案；饮食禁忌和特殊需求未自动核实或替换，请向餐馆、酒店和运营方确认。' : '',
@@ -85,26 +111,41 @@ export function planSupportTrip(input: SupportTripDraft): SupportReply {
   return tripReply(notes.join('\n\n'), { ...draft, awaiting: undefined }, [{ kind: 'plan', cityId: profile.cityId, label: '带入规划并继续调整', profile: { ...profile, indices: [...profile.indices] } }], profile);
 }
 
-type ParsedRequest = { patch: SupportTripDraft; fields: boolean; error?: string; hasDays: boolean; hasParty: boolean };
-function parseRequest(question: string): ParsedRequest {
+type ParsedRequest = { patch: SupportTripDraft; fields: boolean; error?: string; errorField?: 'days' | 'party'; hasDays: boolean; hasParty: boolean };
+function parseRequest(question: string, previous?: SupportTripDraft): ParsedRequest {
   const patch: SupportTripDraft = {};
   const date = question.match(/(\d{4})[年/-](\d{1,2})[月/-](\d{1,2})日?/);
   const durationText = question.replace(/\d{4}[年/-]\d{1,2}[月/-]\d{1,2}日?/g, '').replace(/\d{1,2}月\d{1,2}日/g, '');
-  const day = durationText.match(new RegExp(`(${countPattern})\\s*(?:天|日)`));
+  const relativeDays = durationText.match(new RegExp(`(?<!参)(?:天数\\s*)?(增加|加上|再加|加|延长|多(?:玩|待|留)?|再(?:玩|待|留)|减少|减去|缩短|少(?:玩|待|留)?|减)\\s*(${countPattern})\\s*(?:天|日)`));
+  const relativeParty = durationText.match(new RegExp(`(?<!参)(?:人数\\s*)?(增加|加上|再加|加|多(?:带)?|减少|减去|减|少(?:带)?)\\s*(${countPattern})\\s*(?:个|名)?(?:人|位|大人|成人|孩子|小孩|儿童)`))
+    || durationText.match(new RegExp(`人数\\s*(增加|加上|再加|加|多|减少|减去|减|少)\\s*(${countPattern})\\s*(?:个|名)?`));
+  // Relative changes use the known trip total; their numeric amount is not an absolute replacement.
+  const countsText = durationText.replace(relativeDays?.[0] || /$^/, '').replace(relativeParty?.[0] || /$^/, '');
+  const day = countsText.match(new RegExp(`(${countPattern})\\s*(?:天|日)`));
   if (day) patch.days = numberValue(day[1]);
   else if (/周末/.test(question)) patch.days = 2;
-  const adults = question.match(new RegExp(`(${countPattern})\\s*(?:个|位|名)?(?:大人|成人|老人|长辈|大)(?!峡)`));
-  const children = question.match(new RegExp(`(${countPattern})\\s*(?:个|位|名)?(?:小孩|孩子|儿童|小朋友|娃|小)(?!吃)`));
-  const people = question.match(new RegExp(`(${countPattern})\\s*(?:个)?(?:人|位(?!\\s*(?:大人|成人|老人|长辈|小孩|孩子|儿童|小朋友|宝宝)))`));
-  const household = question.match(new RegExp(`一家\\s*(${countPattern})\\s*口`));
-  if (adults || children) patch.party = (adults ? numberValue(adults[1]) : 0) + (children ? numberValue(children[1]) : 0);
-  else if (people) patch.party = numberValue(people[1]);
+  const adults = countsText.match(new RegExp(`(${countPattern})\\s*(?:个|位|名)?(?:大人|成人|老人|长辈|大)(?!峡)`));
+  const children = countsText.match(new RegExp(`(${countPattern})\\s*(?:个|位|名)?(?:小孩|孩子|儿童|小朋友|娃|小)(?!吃)`));
+  const people = countsText.match(new RegExp(`(${countPattern})\\s*(?:个)?(?:人|位(?!\\s*(?:大人|成人|老人|长辈|小孩|孩子|儿童|小朋友|宝宝)))`));
+  const household = countsText.match(new RegExp(`一家\\s*(${countPattern})\\s*口`));
+  const subtotals = (adults ? numberValue(adults[1]) : 0) + (children ? numberValue(children[1]) : 0);
+  if ([adults, children].some(match => match && (!Number.isInteger(numberValue(match[1])) || numberValue(match[1]) < 0))) return { patch, fields: true, hasDays: Boolean(day), hasParty: true, error: '成人与儿童人数请填写非负整数，再确认总共几个人。', errorField: 'party' };
+  if (people && ((adults && children && subtotals !== numberValue(people[1])) || (!(adults && children) && subtotals > numberValue(people[1])))) return { patch, fields: true, hasDays: Boolean(day), hasParty: true, error: '成人、儿童合计与总人数不一致，请确认总共几个人。例如“2大1小，共3人”。', errorField: 'party' };
+  if (people) patch.party = numberValue(people[1]);
+  else if (adults || children) patch.party = subtotals;
   else if (household) patch.party = numberValue(household[1]);
-  if (people && patch.party !== undefined && numberValue(people[1]) !== patch.party) return { patch, fields: true, hasDays: Boolean(day), hasParty: true, error: '成人、儿童合计与总人数不一致，请确认总共几个人。例如“2大1小，共3人”。' };
+  for (const [field, match] of [['days', relativeDays], ['party', relativeParty]] as const) {
+    if (!match) continue;
+    const amount = numberValue(match[2]), base = patch[field] ?? previous?.[field];
+    if (!Number.isInteger(amount) || amount < 1) return { patch, fields: true, hasDays: field === 'days' || Boolean(day), hasParty: field === 'party' || patch.party !== undefined, errorField: field, error: '增减数量请填正整数，也可以直接告诉我希望安排到几天、几人。' };
+    if (base === undefined) return { patch, fields: true, hasDays: field === 'days' || Boolean(day), hasParty: field === 'party' || patch.party !== undefined, errorField: field, error: field === 'days' ? '还不知道原来计划玩几天，暂时不能计算增减。请直接告诉我这趟希望安排几天。' : '还不知道原来共有几个人，暂时不能计算增减。请直接告诉我调整后总共几个人。' };
+    patch[field] = base + (/减少|减去|缩短|少|减/.test(match[1]) ? -amount : amount);
+  }
   if (/独自|我一个人|独行|单人|一人出发/.test(question)) { patch.group = 'solo'; if (patch.party === undefined) patch.party = 1; }
   else if (/长辈|老人|爸妈|父母|老年/.test(question)) patch.group = 'senior';
-  else if (children || household || /亲子|带娃|带孩子|带小孩|宝宝|儿童/.test(question)) patch.group = 'family';
+  else if (children || household || /亲子|带娃|带孩子|带小孩|宝宝|儿童/.test(question) || (relativeParty && /孩子|小孩|儿童/.test(relativeParty[0]))) patch.group = 'family';
   else if (/朋友|情侣|夫妻|同学|闺蜜|结伴/.test(question)) patch.group = 'friends';
+  else if (relativeParty && previous?.group === 'solo' && patch.party! > 1) patch.group = 'friends';
   if (/不(?:想|要)?自驾|非自驾|没有车|不(?:想|要)?开车|公共交通|高铁|火车|公交|地铁/.test(question)) patch.mode = 'public';
   else if (/自驾|开车|租车/.test(question)) patch.mode = 'drive';
   const positive = question.replace(/(?:不喜欢|不想|不要|不爱)(?:爬山|徒步|美食|吃辣|人文|历史|自然)/g, '');
@@ -115,8 +156,9 @@ function parseRequest(question: string): ParsedRequest {
   if (/经济|省钱|穷游|实惠|低预算/.test(question)) patch.budget = 'value';
   else if (/品质|精品|高端|豪华|度假/.test(question)) patch.budget = 'boutique';
   else if (/舒适/.test(question)) patch.budget = 'comfort';
-  if (/经典节奏|快一点|紧凑|快节奏|多玩|不要慢游|不想慢游/.test(question)) patch.pace = 'classic';
-  else if (/轻松|慢游|慢一点|慢点|不累|不太累|不想太累|不赶|不要太赶|别太赶|休闲|少走|休息/.test(question)) patch.pace = 'relaxed';
+  const paceText = question.replace(relativeDays?.[0] || /$^/, '');
+  if (/经典节奏|快一点|紧凑|快节奏|多玩|不要慢游|不想慢游/.test(paceText)) patch.pace = 'classic';
+  else if (/轻松|慢游|慢一点|慢点|不累|不太累|不想太累|不赶|不要太赶|别太赶|休闲|少走|休息/.test(paceText)) patch.pace = 'relaxed';
   if (date) patch.date = `${date[1]}-${date[2].padStart(2, '0')}-${date[3].padStart(2, '0')}`;
   if (/日期待定|先不填日期|取消日期|日期不确定/.test(question)) patch.date = '';
   const requirements = question.split(/[，,。；;\n]/).filter(part => /不吃|忌口|过敏|清真|素食|不能吃|不喜欢爬山|不想爬山|不要爬山/.test(part)).map(part => part.trim()).filter(Boolean);
@@ -126,19 +168,19 @@ function parseRequest(question: string): ParsedRequest {
 
 /** Return undefined for ordinary guide questions, so the existing food/place help keeps working. */
 export function answerTripQuestion(question: string, context: SupportContext, mentionedCities: string[], hasPlace: boolean): SupportReply | undefined {
-  const parsed = parseRequest(question), previous = context.trip ? copyTripDraft(context.trip) : undefined;
+  const previous = context.trip ? copyTripDraft(context.trip) : undefined, parsed = parseRequest(question, previous);
   const explicit = /规划|具体行程|行程推荐|推荐行程|推荐路线|生成.*行程|安排.*行程|帮.*(?:计划|安排|行程|路线)|定制|做.*攻略|制定|制订/.test(question);
-  const modify = /改|换|调整|重新|喜欢|偏好|想看|想吃|希望|轻松一点|慢一点|慢点|不要太赶|不赶|快一点|经典节奏|不自驾|先不填日期|取消日期/.test(question);
+  const modify = /改|换|调整|重新|增加|减少|人数.*(?:加|减|多|少)|多带|少带|喜欢|偏好|想看|想吃|希望|轻松一点|慢一点|慢点|不要太赶|不赶|快一点|经典节奏|不自驾|先不填日期|取消日期/.test(question);
   const ordinary = /住哪|住宿.*推荐|吃什么|有什么.*美食|美食.*(?:什么|推荐)|怎么(?:去|坐车|到)|交通.*(?:方式|安排)|季节|什么时候|怎么放慢|适合.*(?:亲子|孩子)|预算|花费|费用/.test(question);
   if (hasPlace && !explicit && !/整体|全程|行程/.test(question)) return undefined;
   if (ordinary && !explicit && !parsed.hasDays && !(previous && ((modify && parsed.fields) || (previous.awaiting && parsed.hasParty)))) return undefined;
   const route = /行程|路线|怎么玩|怎么游|游玩|周末|几天|几日|安排|好玩/.test(question);
-  const start = explicit || parsed.hasDays || (parsed.hasParty && (route || mentionedCities.length > 0)) || (mentionedCities.length > 0 && route && !ordinary);
-  const continuation = previous && (parsed.fields || (mentionedCities.length > 0 && (Boolean(previous.awaiting) || /只去|改去|换成|想去/.test(question))));
+  const start = explicit || parsed.hasDays || Boolean(parsed.error && parsed.errorField) || (parsed.hasParty && (route || mentionedCities.length > 0)) || (mentionedCities.length > 0 && route && !ordinary);
+  const continuation = previous && (parsed.fields || (mentionedCities.length > 0 && (Boolean(previous.awaiting) || /只去|改去|改到|改成|换|想去/.test(question))));
   if (!start && !continuation) return undefined;
   const cityIds = mentionedCities.length ? [...mentionedCities] : previous?.cityIds?.length ? [...previous.cityIds] : context.cityId && Object.hasOwn(cityById, context.cityId) ? [context.cityId] : undefined;
   const draft = { ...previous, ...parsed.patch, ...(cityIds ? { cityIds } : {}) };
   if (parsed.patch.note) draft.note = [previous?.note, parsed.patch.note].filter(Boolean).join('；').slice(0, 500);
-  if (parsed.error) return tripReply(parsed.error, { ...draft, awaiting: 'party' });
+  if (parsed.error) return tripReply(parsed.error, { ...draft, awaiting: parsed.errorField || 'party' });
   return planSupportTrip(draft);
 }

@@ -356,6 +356,94 @@ try {
   const arrivalBudget = estimateBudget(arrivalNight.plan, buildTrip(arrivalNight.plan).length);
   assert(arrivalBudget.arrivalNight && arrivalBudget.nights === 2 && arrivalBudget.rooms === 2, 'A nature-first itinerary starting after day zero needs the planner’s arrival-night allowance.');
 
+  const relativeBase = ask('恩施3天3人，2026-12-08出发，喜欢山水，不自驾，轻松一点');
+  const relativeBefore = JSON.stringify(relativeBase);
+  for (const [question, expectedDays] of [['减少一天', 2], ['多玩一天', 4], ['天数加一天', 4]]) {
+    const changed = ask(question, relativeBase.context);
+    assert(changed.plan && buildTrip(changed.plan).length === expectedDays, 'A relative duration changes the existing duration rather than replacing it with the amount.');
+    assert.equal(changed.plan.party, 3);
+    assert.equal(changed.plan.pace, 'relaxed', 'More days must not silently switch a relaxed itinerary to a faster pace.');
+    assert.equal(changed.plan.date, '2026-12-08');
+  }
+  for (const [question, expectedParty] of [['增加1人', 4], ['人数加一个', 4], ['减少一人', 2]]) {
+    const changed = ask(question, relativeBase.context);
+    assert(changed.plan && changed.plan.party === expectedParty, 'Relative party changes use the existing total.');
+    assert.equal(buildTrip(changed.plan).length, 3);
+    assert.equal(changed.plan.interest, 'nature');
+  }
+  const soloRelative = ask('增加1人', ask('恩施2天，我一个人').context);
+  assert(soloRelative.plan && soloRelative.plan.party === 2 && soloRelative.plan.group === 'friends', 'Adding a companion should end the previous solo setting.');
+  const noDayBase = ask('减少一天');
+  assert(!noDayBase.plan && noDayBase.context.trip?.days === undefined && noDayBase.context.trip?.awaiting === 'days');
+  assert(/原来|几天/.test(noDayBase.text), 'A relative change without a base must ask for the desired total.');
+  const noPartyBase = ask('增加1人', missingPeople.context);
+  assert(!noPartyBase.plan && noPartyBase.context.trip?.party === undefined && noPartyBase.context.trip?.awaiting === 'party');
+  assert(/总共|原来/.test(noPartyBase.text));
+  const relativeOverflow = ask('再玩两天', relativeBase.context);
+  assert(!relativeOverflow.plan && relativeOverflow.context.trip?.days === 5, 'Relative durations still respect the city chapter limit.');
+  const relativeZero = ask('减少3人', relativeBase.context);
+  assert(!relativeZero.plan && relativeZero.context.trip?.party === 0, 'A relative total outside the party limit must be rejected rather than clamped.');
+  const relativeWithStay = ask('增加1人，住哪里方便？', relativeBase.context);
+  assert(relativeWithStay.plan && relativeWithStay.plan.party === 4, 'An explicit party increase should still apply when the request also asks where to stay.');
+  assert.equal(JSON.stringify(relativeBase), relativeBefore, 'Relative edits do not rewrite the original itinerary.');
+
+  for (const question of ['换到武汉', '换武汉吧', '改到武汉', '改成武汉']) {
+    const switched = ask(question, relativeBase.context);
+    assert(switched.plan && switched.plan.cityId === 'wuhan', 'Explicit city changes should continue the current itinerary.');
+    assert.equal(switched.plan.party, 3);
+    assert.equal(buildTrip(switched.plan).length, 3);
+    for (const key of ['date', 'interest', 'pace', 'mode', 'budget']) assert.equal(switched.plan[key], relativeBase.plan[key], `Switching cities preserves ${key}.`);
+  }
+  const longerEnshi = ask('恩施4天3人，喜欢山水，不自驾');
+  const shorterCity = ask('换到武汉', longerEnshi.context);
+  assert(!shorterCity.plan && shorterCity.context.trip?.days === 4 && shorterCity.context.trip?.party === 3, 'Changing cities must not silently shorten a trip that exceeds the new city capacity.');
+  assert.deepEqual(shorterCity.context.trip?.cityIds, ['wuhan']);
+  const ordinaryOtherCity = ask('武汉住哪里？', relativeBase.context);
+  assert(!ordinaryOtherCity.plan && !ordinaryOtherCity.context.trip, 'A normal guide query for another city does not silently rewrite the active itinerary.');
+
+  for (const city of cities) {
+    const complete = planDraft({ cityIds: [city.id], days: Math.min(2, city.days.length), party: 3, mode: 'public', pace: 'classic' });
+    assert(complete.plan);
+    for (const suggestion of complete.suggestions.filter(text => !/保存|分享/.test(text))) {
+      const followed = ask(suggestion, complete.context);
+      assert(followed.plan, `A suggested edit for ${city.shortName} must produce a supported itinerary.`);
+      assert.notDeepEqual(followed.plan, complete.plan, 'Suggested edits should make a real change.');
+    }
+  }
+  for (const template of templates.filter(item => item.segments.length > 1)) {
+    const count = template.segments.reduce((total, segment) => total + segment.indices.length, 0);
+    const complete = planDraft({ cityIds: template.segments.map(segment => segment.cityId), days: count, party: 4, mode: 'public', pace: 'classic' });
+    assert(complete.plan && !complete.suggestions.some(text => /改成\d+天/.test(text)), 'Fixed cross-city plans must not suggest unsupported durations.');
+    for (const suggestion of complete.suggestions.filter(text => !/保存|分享/.test(text))) {
+      const followed = ask(suggestion, complete.context);
+      assert(followed.plan && buildTrip(followed.plan).length === count, 'Cross-city suggested edits preserve the supported fixed duration.');
+      assert.notDeepEqual(followed.plan, complete.plan, 'Cross-city suggested edits should make a real change.');
+    }
+    const wrongDuration = ask('改成3天', complete.context);
+    assert(!wrongDuration.plan && wrongDuration.suggestions.length > 0);
+    for (const suggestion of wrongDuration.suggestions) {
+      const recovered = ask(suggestion, wrongDuration.context);
+      assert(recovered.plan && buildTrip(recovered.plan).length === count, 'Duration correction chips should recover the route instead of repeating an error.');
+    }
+  }
+  for (const question of ['帮我安排湖北7天4人旅行', '帮我安排湖北5天3人旅行', '武汉和恩施4天3人行程', '帮我安排湖北12天3人行程']) {
+    const chooseCity = ask(question);
+    assert(!chooseCity.plan && chooseCity.context.trip?.awaiting === 'city' && chooseCity.suggestions.length > 0);
+    for (const suggestion of chooseCity.suggestions) {
+      const selectedCity = ask(suggestion, chooseCity.context);
+      assert(selectedCity.plan, 'Destination suggestions must fit the requested duration or explicitly propose a supported duration in the chip.');
+    }
+  }
+  for (const question of ['恩施3天3个人，其中1个小孩', '恩施三天，共三人，其中一位儿童', '恩施3天3个人，带1个孩子', '恩施3天，共3人，2大1小']) {
+    const subset = ask(question);
+    assert(subset.plan && subset.plan.party === 3 && subset.plan.group === 'family', 'A child subset must retain the stated total party and identify family travel.');
+  }
+  for (const question of ['恩施3天共3人，2大2小', '恩施3天3个人，其中4个小孩', '恩施3天3人，其中-1个小孩']) {
+    const conflict = ask(question, relativeBase.context);
+    assert(!conflict.plan && /人数|合计|整数/.test(conflict.text), 'Inconsistent or invalid adult/child counts still require correction.');
+    assert.equal(conflict.context.trip?.party, 3, 'A rejected child subtotal must not overwrite the previous party size.');
+  }
+
   assert.equal(JSON.stringify({ cities, destinations, practical, templates }), before, 'Question answering must not mutate source travel content.');
   console.log(JSON.stringify({ result: 'passed', questions: checked, cities: cities.length, checks: '17-city stay/food/follow-up and structured plans, conversational collection and edits, Chinese party/day parsing, preferences, cross-city transfers, arrival-night budgeting, limits, references, live data boundaries, immutability' }, null, 2));
 } finally {
