@@ -81,6 +81,7 @@
 .support-overview-main>strong { display:block; font-size:13px; font-weight:600; color:var(--color-ink); }
 .support-overview-main>span { display:block; margin-top:3px; color:var(--color-muted); font-size:12px; }
 .support-overview-main>.support-overview-stay { display:flex; align-items:baseline; gap:5px; color:var(--color-pine); }
+.support-overview-main>.support-overview-schedule { color:var(--color-ink); font-variant-numeric:tabular-nums; }
 .support-overview-stay>svg { flex-shrink:0; align-self:start; margin-top:5px; }
 .support-route-overview button>svg { color:var(--color-pine); }
 .support-plan-day { scroll-margin-top:8px; }

@@ -120,6 +120,27 @@ try {
   assert.deepEqual(buildTrip({ ...returnBase, departure: 'flexible' }), unchangedDays, 'Clearing the departure window restores original daily contents.');
   assert(!normalizeProfile({ ...returnBase, departure: '__proto__' }).departure);
 
+  const wuchangReturn = normalizeProfile({ ...defaultProfile(), arrival: 'full-day', departure: 'afternoon', departureTime: '15:30', departureStation: '武昌火车站' });
+  const wuchangLast = buildTrip(wuchangReturn).at(-1);
+  assert.equal(wuchangReturn.departureStation, '武昌站');
+  assert(wuchangLast.returnMorning?.sight.includes('昙华林') && /粮道街.*热干面/.test(wuchangLast.breakfast));
+  assert(!wuchangLast.returnMorning.conditional && !wuchangLast.stops.some(stop => /东湖|省博/.test(stop.title)));
+  assert.deepEqual(wuchangLast.stationSchedule, { finishBy: '13:25', leaveForStationBy: '13:45', arriveBy: '14:30' });
+  assert.equal(estimateBudget(wuchangReturn, 2).ticketDays, 1, 'The short outdoor walk has no attraction ticket allowance.');
+  assert.deepEqual(parsePlanUrl(new URL(sharePlanUrl(wuchangReturn)).search), wuchangReturn);
+  assert(formatDetailedPlan(wuchangReturn).includes('13:45 前出发'));
+  const untimed = buildTrip({ ...wuchangReturn, departureTime: undefined, departureStation: undefined }).at(-1);
+  assert(untimed.returnMorning?.conditional && !untimed.stationSchedule);
+  assert(/进站候车/.test(untimed.stops[1].detail));
+  const rushed = buildTrip({ ...wuchangReturn, departureTime: '12:10', departureStation: '武汉站' }).at(-1);
+  assert(!rushed.returnMorning && rushed.stationSchedule?.arriveBy === '11:10');
+  const acrossRiver = buildTrip({ ...wuchangReturn, departureStation: '汉口站' }).at(-1);
+  assert(!acrossRiver.returnMorning && !acrossRiver.stationSchedule && acrossRiver.breakfast.includes('粮道街'));
+  const remoteStay = buildTrip({ ...defaultProfile('enshi'), indices: [0, 2, 3], departure: 'afternoon', departureTime: '16:30', departureStation: '恩施站' }).at(-1);
+  assert(!remoteStay.returnMorning && !remoteStay.stationSchedule, 'A last night in Lichuan does not inherit a morning walk in Enshi City.');
+  const byAir = buildTrip({ ...wuchangReturn, departureStation: '机场' }).at(-1);
+  assert(!byAir.stationSchedule && !byAir.returnMorning && byAir.transport.includes('值机'));
+
   const complete = normalizeProfile({ ...base, origin: '武汉', arrival: 'afternoon', mobility: 'gentle', budgetLimit: 2000, budgetScope: 'per-person', note: '不吃辣，需向餐馆确认' });
   const shared = sharePlanUrl(complete), restored = parsePlanUrl(new URL(shared).search);
   assert.deepEqual(restored, { ...complete, note: '' });

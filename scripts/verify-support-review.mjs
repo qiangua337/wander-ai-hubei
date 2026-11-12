@@ -90,14 +90,15 @@ try {
   assert.deepEqual(acrossDraft.cityIds, ['yichang', 'enshi']);
   assert.equal(acrossDraft.days, 5);
   assert.equal(acrossDraft.party, 4);
-  const constrained = { ...adjusted, origin: '武汉', arrival: 'afternoon', departure: 'afternoon', mobility: 'gentle', budgetLimit: 2000, budgetScope: 'total' };
+  const constrained = { ...adjusted, origin: '武汉', arrival: 'afternoon', departure: 'afternoon', departureTime: '15:30', departureStation: '武昌站', mobility: 'gentle', budgetLimit: 2000, budgetScope: 'total' };
   const constraintsChange = compare(adjusted, constrained);
   for (const label of ['出发城市', '首日抵达', '返程时段', '体力限制', '目标预算']) assert(constraintsChange.changes.some(change => change.label === label));
   assert.deepEqual(constraintsChange.revisedDays.map(day => day.day), [1, 2]);
-  assert(constraintsChange.revisedDays[1].after.includes('返程'));
+  assert(constraintsChange.revisedDays[1].after.includes('昙华林') && constraintsChange.revisedDays[1].after.includes('武昌站'));
+  assert.match(constraintsChange.changes.find(change => change.label === '返程时段').after, /15:30.*武昌站/);
   assert(constraintsChange.afterTotal[1] < constraintsChange.beforeTotal[1]);
   const constraintsDraft = supportTripDraftFromProfile(constrained);
-  for (const key of ['origin', 'arrival', 'departure', 'mobility', 'budgetLimit', 'budgetScope']) assert.equal(constraintsDraft[key], constrained[key], 'Editing must retain travel constraints.');
+  for (const key of ['origin', 'arrival', 'departure', 'departureTime', 'departureStation', 'mobility', 'budgetLimit', 'budgetScope']) assert.equal(constraintsDraft[key], constrained[key], 'Editing must retain travel constraints.');
   draft.cityIds.push('enshi');
   assert.deepEqual(supportTripDraftFromProfile(frozen).cityIds, ['wuhan'], 'Draft arrays are independent copies.');
   assert.equal(JSON.stringify(base), snapshot);

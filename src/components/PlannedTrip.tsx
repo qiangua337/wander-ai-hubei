@@ -1,7 +1,7 @@
 import { useRef, useState } from 'react';
 import { ArrowRight, ArrowUpRight, BedDouble, Bookmark, Check, CircleCheck, Copy, Download, Pencil, Route, Share2, Utensils, Wallet } from 'lucide-react';
 import { cityById } from '../data';
-import { arrivalLabels, departureLabels, mobilityLabels, getTripIssues, buildTrip, budgetLabels, estimateBudget, formatDetailedPlan, groupLabels, sharePlanUrl, tripTitle, type Profile } from '../planning';
+import { arrivalLabels, getDepartureLabel, mobilityLabels, getTripIssues, buildTrip, budgetLabels, estimateBudget, formatDetailedPlan, groupLabels, sharePlanUrl, tripTitle, type Profile } from '../planning';
 import { downloadPlan } from '../travel';
 import { TripDays } from './TravelGuide';
 import { FoodSuggestions, StaySuggestions } from './PracticalDetails';
@@ -13,7 +13,7 @@ export function PlannedTrip({ profile, onCopy, onSave, onEdit }: { profile: Prof
   const [checked, setChecked] = useState<string[]>([]);
   const panel = useRef<HTMLDivElement>(null);
   const days = buildTrip(profile), budget = estimateBudget(profile, days.length), cityIds = [...new Set(days.map(day => day.cityId))];
-  const returnLabel = departureLabels[profile.departure || 'flexible'];
+  const returnLabel = getDepartureLabel(profile);
   const returnScheduled = profile.departure && profile.departure !== 'flexible';
   const tabs = [{ id: 'route', label: '每日行程', count: days.length + ' 天', icon: Route }, { id: 'stay', label: '住在哪里', count: budget.nights + ' 晚', icon: BedDouble }, { id: 'food', label: '当地美食', count: cityIds.length + ' 城', icon: Utensils }, { id: 'budget', label: '预算预留', count: profile.party + ' 人', icon: Wallet }];
   const text = formatDetailedPlan(profile);

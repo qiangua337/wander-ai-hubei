@@ -577,6 +577,33 @@ try {
   assert(clearedReturn.plan && clearedReturn.plan.departure === 'flexible');
   assert(buildTrip(clearedReturn.plan).at(-1).stops.some(stop => /省博|东湖|湖北省博物馆/.test(stop.title)));
 
+  const shortMorning = ask('武汉2天2人，最后一天下午才返程，上午想吃点东西再逛逛');
+  assert(shortMorning.plan && buildTrip(shortMorning.plan).at(-1).returnMorning?.conditional);
+  const confirmedReturn = ask('最后一天下午三点半从武昌火车站坐高铁回上海', shortMorning.context);
+  assert(confirmedReturn.plan && confirmedReturn.plan.cityId === 'wuhan');
+  assert.equal(confirmedReturn.plan.departureTime, '15:30');
+  assert.equal(confirmedReturn.plan.departureStation, '武昌站');
+  assert.match(confirmedReturn.text, /昙华林.*13:45.*14:30/);
+  const changedTime = ask('返程时间改到16:10', confirmedReturn.context);
+  assert.equal(changedTime.plan?.departureTime, '16:10');
+  assert.equal(changedTime.plan?.departureStation, '武昌站');
+  const arrivalAtRail = ask('首日下午三点到武汉站', confirmedReturn.context);
+  assert.equal(arrivalAtRail.plan?.arrival, 'afternoon');
+  assert.equal(arrivalAtRail.plan?.departureStation, '武昌站');
+  const changedStation = ask('返程站改成汉口站', changedTime.context);
+  assert.equal(changedStation.plan?.departureStation, '汉口站');
+  assert.equal(changedStation.plan?.departureTime, '16:10');
+  assert(!buildTrip(changedStation.plan).at(-1).returnMorning);
+  const removeExact = ask('返程时段待定', confirmedReturn.context);
+  assert.equal(removeExact.plan?.departure, 'flexible');
+  assert.equal(removeExact.plan?.departureTime, undefined);
+  const splitTime = ask('武汉2天2人，下午3点，武昌站返程');
+  assert.equal(splitTime.plan?.departureTime, '15:00');
+  assert.equal(splitTime.plan?.departureStation, '武昌站');
+  const flight = ask('武汉2天2人，最后一天下午三点的飞机');
+  assert.equal(flight.plan?.departureStation, '机场');
+  assert(!buildTrip(flight.plan).at(-1).stationSchedule);
+
   assert.equal(JSON.stringify({ cities, destinations, practical, templates }), before, 'Question answering must not mutate source travel content.');
   console.log(JSON.stringify({ result: 'passed', questions: checked, cities: cities.length, checks: '17-city stay/food/follow-up and structured plans, conversational edits, Chinese party/day parsing, arrival and return scheduling, preferences, cross-city transfers, budgeting, references, live data boundaries, immutability' }, null, 2));
 } finally {

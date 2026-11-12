@@ -12,7 +12,7 @@ import { SelectField } from './ui';
 import './support-desk.css';
 
 type Message = { id: number; question: string; reply: SupportReply; baseProfile?: Profile };
-const examples = ['武汉2天，2人，最后一天下午返程', '恩施3天，2人，带长辈，少台阶', '从武汉出发，去宜昌2天2人', '怎么保存分享行程？'];
+const examples = ['武汉2天2人，最后一天15:30从武昌站返程', '恩施3天，2人，带长辈，少台阶', '从武汉出发，去宜昌2天2人', '怎么保存分享行程？'];
 const promptsFor = (cityId?: string) => cityId && cityById[cityId]
   ? [cityById[cityId].shortName + Math.min(2, cityById[cityId].days.length) + '天，2人，轻松游', cityById[cityId].shortName + '住哪里？', cityById[cityId].shortName + '吃什么？', '怎么保存行程？']
   : examples;

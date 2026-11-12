@@ -1,6 +1,8 @@
 import { cityById, type TripDay } from './data';
 import { practical } from './data/practical';
+import { railwayEntrySource, returnWalks, type ReturnSource } from './data/return-mornings';
 import { routeDetails, type RouteEffort } from './data/route-details';
+import { clockWindow, formatClock, normalizeClockInput, normalizeStation, parseClock, type DepartureWindow, type StationSchedule } from './return-timing';
 import { planDate, selectPlanDays, validDate, type Pace } from './travel';
 export { validDate } from './travel';
 
@@ -10,10 +12,16 @@ export type Profile = {
   budget: 'value' | 'comfort' | 'boutique'; interest: 'balanced' | 'culture' | 'nature' | 'food';
   pace: Pace; note: string;
   origin?: string; arrival?: 'full-day' | 'morning' | 'afternoon' | 'evening' | 'previous-night';
-  departure?: 'flexible' | 'morning' | 'afternoon' | 'evening';
+  departure?: DepartureWindow; departureTime?: string; departureStation?: string;
   mobility?: 'standard' | 'gentle'; budgetLimit?: number; budgetScope?: 'total' | 'per-person';
 };
-export type PlannedDay = TripDay & { cityId: string; originalIndex: number; overnight: string; transfer?: string; region: string; effort: RouteEffort; breakfast?: string; lunch?: string; dinner?: string; sightseeingRemoved?: boolean };
+export type PlannedDay = TripDay & {
+  cityId: string; originalIndex: number; overnight: string; transfer?: string; region: string; effort: RouteEffort;
+  breakfast?: string; lunch?: string; dinner?: string; sightseeingRemoved?: boolean;
+  returnMorning?: { sight: string; conditional: boolean };
+  stationSchedule?: StationSchedule;
+  returnSources?: ReturnSource[];
+};
 export const templates = [
   { id: 'wuhan-weekend', title: '江城两日，刚刚好。', subtitle: '黄鹤楼、楚文化、东湖与一碗过早', label: '周末 · 2 天', cityId: 'wuhan', image: '/images/yellow-crane.jpg', segments: [{ cityId: 'wuhan', indices: [0, 1] }] },
   { id: 'west-five', title: '沿着峡江，走进恩施。', subtitle: '宜昌—恩施—利川，山水与土家生活', label: '山水 · 5 天', cityId: 'enshi', image: '/images/enshi.jpg', segments: [{ cityId: 'yichang', indices: [0, 1] }, { cityId: 'enshi', indices: [0, 1, 2] }] },
@@ -24,6 +32,11 @@ export const budgetLabels = { value: '轻装经济', comfort: '舒适优先', bo
 export const interestLabels = { balanced: '经典综合', culture: '历史人文', nature: '山水自然', food: '城市美食' };
 export const arrivalLabels = { 'full-day': '从完整游玩日开始', morning: '首日上午抵达', afternoon: '首日下午抵达', evening: '首日晚间抵达', 'previous-night': '提前一晚抵达' };
 export const departureLabels = { flexible: '返程时段待定', morning: '最后一天上午返程', afternoon: '最后一天下午返程', evening: '最后一天晚间返程' };
+export function getDepartureLabel(profile: Pick<Profile, 'departure' | 'departureTime' | 'departureStation'>): string {
+  const time = normalizeClockInput(profile.departureTime);
+  const label = time ? `最后一天 ${time} 返程` : departureLabels[profile.departure || 'flexible'];
+  return profile.departureStation ? `${label} · ${profile.departureStation}` : label;
+}
 export const mobilityLabels = { standard: '常规步行', gentle: '减少高强度山地' };
 export function defaultProfile(cityId = 'wuhan', date = '', party = 2): Profile {
   const city = Object.hasOwn(cityById, cityId) ? cityById[cityId] : cityById.wuhan;
@@ -45,6 +58,14 @@ export function normalizeProfile(value: unknown, fallback = defaultProfile()): P
   if (typeof arrival === 'string' && Object.hasOwn(arrivalLabels, arrival)) optional.arrival = arrival;
   const departure = v.departure === undefined ? fallback.departure : v.departure;
   if (typeof departure === 'string' && Object.hasOwn(departureLabels, departure)) optional.departure = departure;
+  const departureTime = normalizeClockInput(v.departureTime === undefined ? fallback.departureTime : v.departureTime);
+  const departureMinutes = parseClock(departureTime);
+  if (departureMinutes !== undefined) {
+    optional.departureTime = departureTime;
+    optional.departure = clockWindow(departureMinutes);
+  }
+  const station = normalizeStation(v.departureStation === undefined ? fallback.departureStation : v.departureStation);
+  if (station) optional.departureStation = station;
   const mobility = v.mobility === undefined ? fallback.mobility : v.mobility;
   if (mobility === 'standard' || mobility === 'gentle') optional.mobility = mobility;
   const budgetLimit = v.budgetLimit === undefined ? fallback.budgetLimit : v.budgetLimit;
@@ -132,11 +153,90 @@ export function getTripTimingConflict(profile: Profile): string | undefined {
   if (phases[profile.departure as keyof typeof phases] <= phases[profile.arrival as keyof typeof phases]) return '同一天的返程时段不晚于抵达时段，无法按这两个时段排出行程。请选更晚的返程时段、提前抵达或增加天数。';
 }
 
-function applyDeparture(day: PlannedDay, profile: Profile, singleDay: boolean) {
+function applyAfternoonReturn(day: PlannedDay, profile: Profile, previous: PlannedDay | undefined, hasPriorStay: boolean) {
+  const city = cityById[day.cityId];
+  const station = normalizeStation(profile.departureStation);
+  const byAir = station?.endsWith('机场');
+  const departureTime = normalizeClockInput(profile.departureTime);
+  const minutes = parseClock(departureTime);
+  const lodging = previous?.cityId === day.cityId ? previous.overnight : practical[day.cityId].stays[0].area;
+  const options = returnWalks[day.cityId] || [];
+  const nearby = (!hasPriorStay && station ? options.find(option => Object.hasOwn(option.stationBuffers, station)) : undefined)
+    || options.find(option => option.base.test(lodging));
+  const toStation = station && nearby && Object.hasOwn(nearby.stationBuffers, station) ? nearby.stationBuffers[station] : undefined;
+  const luggageMinutes = hasPriorStay ? 20 : 15;
+  const inStationMinutes = profile.group === 'senior' || profile.group === 'family' || profile.party >= 5 ? 75 : 60;
+  const arrive = minutes !== undefined && toStation !== undefined ? minutes - inStationMinutes : undefined;
+  const leave = arrive !== undefined && toStation !== undefined ? arrive - toStation : undefined;
+  const finish = leave !== undefined ? leave - luggageMinutes : undefined;
+  const hasTimeToWalk = finish !== undefined
+    ? finish >= 9 * 60 + (nearby?.minutes || 0) + 15
+    : minutes === undefined || minutes >= 13 * 60 + 30;
+  const walk = nearby && (!station || toStation !== undefined) && hasTimeToWalk ? nearby : undefined;
+  const cutoff = finish !== undefined && leave !== undefined && arrive !== undefined
+    ? { finishBy: formatClock(finish), leaveForStationBy: formatClock(leave), arriveBy: formatClock(arrive) }
+    : undefined;
+  const destination = station || '实际返程点';
+  const bags = hasPriorStay ? '早上先退房并问清行李寄存。' : '带好随身行李，寄存时先确认取回地点。';
+
+  day.title = `${city.shortName} · ${walk ? walk.sight + '后返程' : '早餐与返程接驳'}`;
+  day.region = walk?.area || `${city.shortName} · 返程接驳`;
+  day.effort = 'low';
+  // The original full sightseeing chapter and ticket allowance are replaced even when there is an exterior walk.
+  day.sightseeingRemoved = true;
+  if (walk) day.returnMorning = { sight: walk.sight, conditional: !cutoff };
+  day.stationSchedule = cutoff;
+  day.returnSources = [...(nearby?.sources || []), ...(byAir ? [] : [railwayEntrySource])];
+
+  day.stops[0] = walk ? {
+    time: `上午 · ${cutoff ? '约' : '可选约'} ${walk.minutes} 分钟`,
+    title: walk.sight,
+    detail: `${bags}${walk.breakfast}${walk.detail}${cutoff ? `把 ${cutoff.finishBy} 当作结束活动、开始取行李的时间。` : '先确认车站和车程，余量足够再出发。'}`,
+  } : {
+    time: '上午 · 就近用餐',
+    title: `吃过早餐，准备${byAir ? '去机场' : '返程'}`,
+    detail: `${bags}${nearby?.breakfast || '在实际落脚处附近选一份早餐。'}${nearby && station && toStation === undefined ? `住宿片区与${station}的接驳需先核对，上午先不跨区逛。` : '车程不确定或时间紧时，吃完就去乘车点。'}`,
+  };
+  day.stops[1] = cutoff ? {
+    time: `${cutoff.finishBy} 开始取行李 · ${cutoff.leaveForStationBy} 前出发`,
+    title: `取行李，前往${destination}`,
+    detail: `取行李留 ${luggageMinutes} 分钟，去站交通暂按 ${toStation} 分钟预留。出发前查地图上的实际路线、路况和进站口。需要更久就提前结束活动。`,
+  } : {
+    time: '离开街区前 · 核对接驳',
+    title: `取行李，前往${destination}`,
+    detail: byAir ? '先按航司要求确认值机、托运和安检时间，再往前留取行李与去机场的车程。'
+      : `用发车时间倒推交通与取行李时间。乘火车可先留 ${inStationMinutes} 分钟进站候车，再看车站提示。自驾按实际停车和路况留余量。时间紧就缩短步行。`,
+  };
+  day.stops[2] = cutoff ? {
+    time: `${cutoff.arriveBy} 前到站 · ${departureTime} 发车`,
+    title: `${destination}安检与候车`,
+    detail: `留约 ${inStationMinutes} 分钟进站、找检票口和候车。高峰期按车站提示再提前。`,
+  } : {
+    time: departureTime ? `下午 · ${departureTime} 返程` : '下午 · 按票面时刻返程',
+    title: byAir ? '到机场后按要求办理乘机手续' : station ? '到站后安检与候车' : '按确认的方式返程',
+    detail: byAir ? '以票面航站楼和航司通知为准。' : '乘车时核对出发站和进站口，按票面及车站公告预留时间。',
+  };
+  day.breakfast = nearby?.breakfast || '在住宿或接驳片区就近吃早餐，选出餐快的店。';
+  day.lunch = walk && (finish === undefined || finish >= 12 * 60 + 30)
+    ? walk.lunch
+    : '如果从取行李到发车时间紧，午餐带走或到站后补给。不要为坐下来吃饭推迟去站。';
+  day.dinner = '返程途中或抵达后用餐，按实际到达和供餐时间决定。';
+  day.meal = `早餐：${day.breakfast}\n午餐：${day.lunch}\n晚餐：${day.dinner}`;
+  day.transport = `${day.stops[1].detail} ${day.stops[2].detail}`;
+  day.tip = walk
+    ? '这一段只走街区或步道，遇排队、下雨或接驳变长就先删短逛。车站时间为规划预留，最终按票面、车站公告和当天交通核对。'
+    : '优先落实行李、站点和接驳。上午有余量时，也可以只在落脚处附近走一小段。';
+}
+
+function applyDeparture(day: PlannedDay, profile: Profile, singleDay: boolean, previous?: PlannedDay) {
   if (!profile.departure || profile.departure === 'flexible') return;
   const departure = profile.departure;
   const arrivalDay = singleDay && ['morning', 'afternoon', 'evening'].includes(profile.arrival || '');
   const hasPriorStay = !singleDay || includesArrivalNight(profile);
+  if (departure === 'afternoon' && !arrivalDay && !day.transfer) {
+    applyAfternoonReturn(day, profile, previous, hasPriorStay);
+    return;
+  }
   const preserveMorning = departure === 'evening' && !arrivalDay && !day.transfer && returnMorningChapters[day.cityId]?.includes(day.originalIndex);
   const originalMorning = day.stops[0];
   const fromArrival = arrivalDay ? originalMorning.detail.replace(/住宿接驳/g, '行李寄存与市内接驳') : '';
@@ -214,7 +314,7 @@ export function buildTrip(profile: Profile): PlannedDay[] {
       if (profile.origin) day.transport = `出发地：${profile.origin}。请先确认往返目的地的车站、车次或自驾路线；本站未实时计算路程。 ${day.transport}`;
     }
   });
-  if (result.length) applyDeparture(result[result.length - 1], profile, result.length === 1);
+  if (result.length) applyDeparture(result[result.length - 1], profile, result.length === 1, result.at(-2));
   return result;
 }
 
@@ -227,8 +327,10 @@ export function getTripIssues(profile: Profile): string[] {
   if (profile.mobility === 'gentle') issues.push('低强度与常规步行是编辑分类，仍可能有台阶、坡道和长距离步行；不代表已核实无障碍或全程可用推车。');
   if (profile.interest === 'nature' && days.length && !days.some(day => !day.sightseeingRemoved && ['nature', 'water'].includes(practical[day.cityId].kinds[day.originalIndex]))) issues.push('现有已选章节没有对应的山水自然主线，玩法偏好尚未充分满足；可换城市或调整章节，不把文化或温泉章节当成已安排的山地游。');
   if (!timingConflict && profile.departure && profile.departure !== 'flexible') {
-    const budgetNote = days.at(-1)?.sightseeingRemoved ? '返程日预算保留餐食与当地交通。' : '';
-    issues.push(`${departureLabels[profile.departure]}，已留出取行李和接驳时间。被移除的景点未移到其他日期。${budgetNote}`);
+    const last = days.at(-1);
+    const activity = last?.returnMorning ? '上午是同片区短逛，可视接驳时间缩短。' : '';
+    const budgetNote = last?.sightseeingRemoved ? '返程日预算保留餐食与当地交通。' : '';
+    issues.push(`${getDepartureLabel(profile)}，已留出取行李和接驳时间。${activity}${budgetNote}`);
   }
   if (profile.arrival === 'morning' || profile.arrival === 'afternoon' || profile.arrival === 'evening') issues.push(`${arrivalLabels[profile.arrival]}，首日已给交通与安顿留时间，被移除的原景点没有自动补到其他时段。`);
   if (profile.origin && (!profile.arrival || profile.arrival === 'full-day')) issues.push(`出发地为${profile.origin}，当前按首日已有完整游玩时间安排；若当天仍需长途移动，请选择实际抵达时段。`);
@@ -263,16 +365,16 @@ export function formatDetailedPlan(profile: Profile): string {
   const lines = ['Wander AI · 寻游湖北', tripTitle(profile), `${profile.date || '日期待定'} · ${profile.party} 人 · ${groupLabels[profile.group]} · ${profile.mode === 'drive' ? '自驾' : '公共交通＋接驳'} · ${budgetLabels[profile.budget]}`, '路线由编辑资料与所选偏好组合；非实时 AI、导航或酒店库存。', ''];
   if (profile.origin) lines.push(`出发地：${profile.origin}`);
   if (profile.arrival) lines.push(`抵达设置：${arrivalLabels[profile.arrival]}`);
-  if (profile.departure) lines.push(`返程设置：${departureLabels[profile.departure]}`);
+  if (profile.departure || profile.departureStation) lines.push(`返程设置：${getDepartureLabel(profile)}`);
   if (profile.mobility) lines.push(`步行条件：${mobilityLabels[profile.mobility]}`);
   if (profile.budgetLimit) lines.push(`预算上限：${profile.budgetScope === 'per-person' ? '每人' : '全团'} ¥${profile.budgetLimit}；预留额度不等于已匹配的实时报价。`);
   if (budget.arrivalNight) lines.push('抵达安排：所选路线从完整游玩日开始，建议提前一晚抵达；住宿预算已加这一晚。若当天抵达，请将首日上午改为交通并减少景点。', '');
   days.forEach((day, index) => {
     const isLast = index === days.length - 1;
     const lodging = isLast && profile.departure && profile.departure !== 'flexible'
-      ? `返程安排：${departureLabels[profile.departure]}，当晚无住宿预留。`
+      ? `返程安排：${getDepartureLabel(profile)}，当晚无住宿预留。`
       : `当晚住宿：${isLast ? '返程日。如延住可参考 ' : ''}${day.overnight}`;
-    lines.push(`D${index + 1} ${planDate(profile.date, index)} | ${day.title}`, `所在片区：${day.region} · ${day.effort === 'high' ? '较高体力' : day.effort === 'moderate' ? '常规步行' : '低强度编辑建议'}`, ...day.stops.flatMap(stop => [`${stop.time}｜${stop.title}`, stop.detail]), `交通：${day.transport}`, `早餐：${day.breakfast}`, `午餐：${day.lunch}`, `晚餐：${day.dinner}`, `餐食：${day.meal}`, lodging, `提醒：${day.tip}`, '');
+    lines.push(`D${index + 1} ${planDate(profile.date, index)} | ${day.title}`, `所在片区：${day.region} · ${day.effort === 'high' ? '较高体力' : day.effort === 'moderate' ? '常规步行' : '低强度编辑建议'}`, ...day.stops.flatMap(stop => [`${stop.time}｜${stop.title}`, stop.detail]), `交通：${day.transport}`, `早餐：${day.breakfast}`, `午餐：${day.lunch}`, `晚餐：${day.dinner}`, `餐食：${day.meal}`, lodging, `提醒：${day.tip}`, ...(day.returnSources || []).map(source => `${source.title}：${source.url}`), '');
   });
   cityIds.forEach(id => { const city = cityById[id], info = practical[id]; lines.push(`【${city.shortName} · 住宿片区】`, ...info.stays.map(stay => `${stay.area}｜${stay.bestFor}。${stay.reason} ${stay.check}`), `【${city.shortName} · 吃什么、在哪吃】`, ...info.food.map(food => `${food.area}：${food.order} ${food.timing}`), `到达：${city.arrival}`, `季节：${city.season}`, '资料来源：', ...city.sources.map(source => `${source.title}：${source.url}`), ''); });
   const issues = getTripIssues(profile);
@@ -285,6 +387,8 @@ export function sharePlanUrl(profile: Profile): string {
   if (profile.origin) query.set('origin', profile.origin);
   if (profile.arrival) query.set('arrival', profile.arrival);
   if (profile.departure) query.set('departure', profile.departure);
+  if (profile.departureTime) query.set('departureTime', profile.departureTime);
+  if (profile.departureStation) query.set('departureStation', profile.departureStation);
   if (profile.mobility) query.set('mobility', profile.mobility);
   if (profile.budgetLimit) query.set('budgetLimit', String(profile.budgetLimit));
   if (profile.budgetScope) query.set('budgetScope', profile.budgetScope);
@@ -293,5 +397,5 @@ export function sharePlanUrl(profile: Profile): string {
 export function parsePlanUrl(search: string): Profile | undefined {
   const query = new URLSearchParams(search);
   if (!query.has('plan')) return undefined;
-  return normalizeProfile({ template: query.get('plan'), cityId: query.get('city'), indices: query.get('days')?.split(',').filter(Boolean).map(Number), date: query.get('date'), party: Number(query.get('people')), group: query.get('group'), mode: query.get('mode'), budget: query.get('budget'), interest: query.get('interest'), pace: query.get('pace'), ...(query.has('origin') ? { origin: query.get('origin') } : {}), ...(query.has('arrival') ? { arrival: query.get('arrival') } : {}), ...(query.has('departure') ? { departure: query.get('departure') } : {}), ...(query.has('mobility') ? { mobility: query.get('mobility') } : {}), ...(query.has('budgetLimit') ? { budgetLimit: Number(query.get('budgetLimit')) } : {}), ...(query.has('budgetScope') ? { budgetScope: query.get('budgetScope') } : {}) });
+  return normalizeProfile({ template: query.get('plan'), cityId: query.get('city'), indices: query.get('days')?.split(',').filter(Boolean).map(Number), date: query.get('date'), party: Number(query.get('people')), group: query.get('group'), mode: query.get('mode'), budget: query.get('budget'), interest: query.get('interest'), pace: query.get('pace'), ...(query.has('origin') ? { origin: query.get('origin') } : {}), ...(query.has('arrival') ? { arrival: query.get('arrival') } : {}), ...(query.has('departure') ? { departure: query.get('departure') } : {}), departureTime: query.get('departureTime'), departureStation: query.get('departureStation'), ...(query.has('mobility') ? { mobility: query.get('mobility') } : {}), ...(query.has('budgetLimit') ? { budgetLimit: Number(query.get('budgetLimit')) } : {}), ...(query.has('budgetScope') ? { budgetScope: query.get('budgetScope') } : {}) });
 }

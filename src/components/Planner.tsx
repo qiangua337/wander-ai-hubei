@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import { ArrowRight, Bookmark, Check, MapPin, Route, Sparkles, Trash2 } from 'lucide-react';
 import { cities, cityById, cityPhotos } from '../data';
 import { arrivalLabels, departureLabels, getTripTimingConflict, mobilityLabels, budgetLabels, buildTrip, defaultProfile, estimateBudget, groupLabels, interestLabels, normalizeProfile, recommendDays, recommendConstrainedDays, templates, tripTitle, validDate, type Profile } from '../planning';
+import { clockWindow, normalizeClockInput, normalizeStation, parseClock } from '../return-timing';
 import { Modal } from './Modal';
 import { PlannedTrip } from './PlannedTrip';
 import { Button, SelectField, InputField } from './ui';
@@ -30,7 +31,7 @@ export function Planner({ initialCity, initialDate, travelers, initialProfile, o
       // Reopening a draft keeps its dates, party and choices; an explicit profile above starts afresh.
       if (!Object.hasOwn(cityById, initialCity) || draft.cityId === initialCity) return draft;
       // A different city reuses the draft's travel preferences, dates and party, then rebuilds its chapters.
-      return { ...draft, cityId: initialCity, template: 'custom', indices: recommendDays(initialCity, Math.min(draft.indices.length || 2, cityById[initialCity].days.length), draft.interest) };
+      return { ...draft, cityId: initialCity, template: 'custom', indices: recommendDays(initialCity, Math.min(draft.indices.length || 2, cityById[initialCity].days.length), draft.interest), departureStation: undefined };
     } catch { return fallback; }
   });
   const [ready, setReady] = useState(() => Boolean(initialProfile) && !getTripTimingConflict(profile) && buildTrip(profile).length > 0);
@@ -63,7 +64,16 @@ export function Planner({ initialCity, initialDate, travelers, initialProfile, o
     return () => window.cancelAnimationFrame(frame);
   }, [initialProfile]);
   useEffect(() => { try { localStorage.setItem('wander-draft-v2', JSON.stringify(profile)); } catch { /* Planning remains usable when storage is unavailable. */ } }, [profile]);
-  const update = (patch: Partial<Profile>) => { setProfile(previous => ({ ...previous, ...patch })); setReady(false); setFeedback(''); };
+  const update = (patch: Partial<Profile>) => {
+    setProfile(previous => {
+      const next = { ...previous, ...patch };
+      const beforeEnd = templates.find(template => template.id === previous.template)?.segments.at(-1)?.cityId || previous.cityId;
+      const afterEnd = templates.find(template => template.id === next.template)?.segments.at(-1)?.cityId || next.cityId;
+      if (beforeEnd !== afterEnd && !Object.hasOwn(patch, 'departureStation')) next.departureStation = undefined;
+      return next;
+    });
+    setReady(false); setFeedback('');
+  };
   const updateChapters = (patch: Partial<Profile>, count = profile.indices.length || 2) => {
     const next = { ...profile, ...patch };
     const indices = recommendConstrainedDays(next.cityId, count, next.interest, next.mobility);
@@ -95,10 +105,15 @@ export function Planner({ initialCity, initialDate, travelers, initialProfile, o
           event.preventDefault();
           if (!days.length) return;
           if (profile.date && !validDate(profile.date)) { setFeedback('请输入有效日期，例如 2026-11-01。'); return; }
+          const time = normalizeClockInput(profile.departureTime);
+          if (profile.departureTime?.trim() && !time) { setFeedback('发车时间请填 24 小时制，例如 15:30。'); return; }
+          const station = normalizeStation(profile.departureStation);
+          if (profile.departureStation?.trim() && !station) { setFeedback('请填写票面站名，例如武昌站。站名待定时可先留空。'); return; }
           if (profile.budgetLimit !== undefined && (!Number.isInteger(profile.budgetLimit) || profile.budgetLimit < 1 || profile.budgetLimit > 1000000)) { setFeedback('目标预算请填 1–1000000 元的整数，也可以先留空。'); return; }
           if (profile.mobility === 'gentle' && days.some(day => day.effort === 'high')) { setFeedback('这份方案仍含高体力山地章节，未满足少台阶条件。请减少天数、换城市或取消冲突章节。'); return; }
           if (profile.budgetLimit && profile.budgetScope && budget.total[0] > profile.budgetLimit * (profile.budgetScope === 'per-person' ? profile.party : 1)) { setFeedback('这份方案的最低规划预留已超过目标预算。请调整天数、档位或预算后再整理。'); return; }
           if (timingConflict) { setFeedback(timingConflict); return; }
+          setProfile(previous => ({ ...previous, departureTime: time, departureStation: station }));
           setReady(true); setFeedback(''); focusResult();
         }}>
           <fieldset className="planner-form-section">
@@ -115,7 +130,15 @@ export function Planner({ initialCity, initialDate, travelers, initialProfile, o
             <label className="planner-field">出发城市<InputField aria-label="规划出发城市" value={profile.origin || ''} maxLength={24} onChange={event => update({ origin: event.target.value })} placeholder="出发地与游玩城市分别填写" /></label>
             <div className="planner-field-pair">
               <label className="planner-field">首日抵达<SelectField aria-label="规划首日抵达" value={profile.arrival || ''} onChange={event => update({ arrival: event.target.value ? event.target.value as Profile['arrival'] : undefined })}><option value="">未填写 · 沿用原方案假设</option>{Object.entries(arrivalLabels).map(([value, label]) => <option key={value} value={value}>{label}</option>)}</SelectField></label>
-              <label className="planner-field">最后一天返程<SelectField aria-label="规划返程时段" value={profile.departure || 'flexible'} onChange={event => update({ departure: event.target.value as Profile['departure'] })}>{Object.entries(departureLabels).map(([value, label]) => <option key={value} value={value}>{label}</option>)}</SelectField></label>
+              <label className="planner-field">最后一天返程<SelectField aria-label="规划返程时段" value={profile.departure || 'flexible'} onChange={event => update({ departure: event.target.value as Profile['departure'], departureTime: undefined })}>{Object.entries(departureLabels).map(([value, label]) => <option key={value} value={value}>{label}</option>)}</SelectField></label>
+            </div>
+            <div className="planner-field-pair">
+              <label className="planner-field">发车时间（可选）<InputField aria-label="规划发车时间" placeholder="如 15:30" maxLength={5} value={profile.departureTime || ''} onChange={event => {
+                const time = event.target.value;
+                const minutes = parseClock(normalizeClockInput(time));
+                update({ departureTime: time || undefined, ...(minutes !== undefined ? { departure: clockWindow(minutes) } : {}) });
+              }} /></label>
+              <label className="planner-field">上车站（可选）<InputField aria-label="规划上车站" value={profile.departureStation || ''} maxLength={20} placeholder="如武昌站" onChange={event => update({ departureStation: event.target.value })} /></label>
             </div>
           </fieldset>
           <fieldset className="planner-form-section">

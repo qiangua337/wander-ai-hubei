@@ -2,7 +2,7 @@ import { useRef, useState } from 'react';
 import { ArrowDown, BedDouble, ChevronDown, Route, Utensils, Wallet } from 'lucide-react';
 import { cityById } from '../data';
 import { practical } from '../data/practical';
-import { arrivalLabels, departureLabels, buildTrip, estimateBudget, getTripIssues, groupLabels, interestLabels, mobilityLabels, type Profile } from '../planning';
+import { arrivalLabels, getDepartureLabel, buildTrip, estimateBudget, getTripIssues, groupLabels, interestLabels, mobilityLabels, type Profile } from '../planning';
 import { planDate } from '../travel';
 import './support-plan-preview.css';
 
@@ -22,8 +22,9 @@ export function SupportPlanPreview({ profile }: { profile: Profile }) {
   const budget = estimateBudget(profile, days.length);
   const cityIds = [...new Set(days.map(day => day.cityId))];
   const issues = getTripIssues(profile);
-  const returnLabel = departureLabels[profile.departure || 'flexible'];
+  const returnLabel = getDepartureLabel(profile);
   const returnScheduled = profile.departure && profile.departure !== 'flexible';
+  const sources = [...new Map([...cityIds.flatMap(id => cityById[id].sources), ...days.flatMap(day => day.returnSources || [])].map(source => [source.url, source])).values()];
   const target = profile.budgetLimit && profile.budgetScope ? profile.budgetLimit * (profile.budgetScope === 'per-person' ? profile.party : 1) : undefined;
   if (!days.length) return null;
   return <section className="support-plan-preview" aria-label="推荐行程预览">
@@ -38,7 +39,7 @@ export function SupportPlanPreview({ profile }: { profile: Profile }) {
       <div className="support-route-overview-heading"><h4>每日安排总览</h4><span>点一天，看详细安排</span></div>
       <ol>{days.map((day, index) => <li key={`${day.cityId}-${index}`}><button type="button" onClick={() => jumpToDay(index)} aria-label={`查看第 ${index + 1} 天详细安排`}>
         <span className="support-overview-number">第 {index + 1} 天</span>
-        <span className="support-overview-main"><strong>{day.title}</strong><span>{day.region} · {effortLabels[day.effort]}</span><span className="support-overview-stay">{index < days.length - 1 ? <><BedDouble size={13} />{day.overnight}</> : <><Route size={13} />{returnLabel}</>}</span></span><ArrowDown size={15} />
+        <span className="support-overview-main"><strong>{day.title}</strong><span>{day.region} · {effortLabels[day.effort]}{day.returnMorning?.conditional ? ' · 上午可选' : ''}</span><span className="support-overview-stay">{index < days.length - 1 ? <><BedDouble size={13} />{day.overnight}</> : <><Route size={13} />{returnLabel}</>}</span>{day.stationSchedule && <span className="support-overview-schedule">{day.stationSchedule.leaveForStationBy} 前去站 · {day.stationSchedule.arriveBy} 前到站</span>}</span><ArrowDown size={15} />
       </button></li>)}</ol>
     </section>
     {budget.arrivalNight && <p className="support-plan-arrival">预算已包含抵达前夜。住宿片区可先看{practical[days[0].cityId].stays[0].area}，再按首站或实际返程站点选房。</p>}
@@ -69,7 +70,7 @@ export function SupportPlanPreview({ profile }: { profile: Profile }) {
     </details>
     <details className="support-plan-stay-guide"><summary><BedDouble size={15} /><span>住宿片区怎么选</span><ChevronDown size={15} /></summary><div>{cityIds.map(id => <section key={id}><h4>{cityById[id].shortName}</h4>{practical[id].stays.map(stay => <div className="support-plan-stay-area" key={stay.area}><strong>{stay.area}</strong><p>{stay.bestFor}。{stay.reason}</p><p>订前确认：{stay.check}</p></div>)}</section>)}</div></details>
     {profile.note && <p className="support-plan-personal-note"><strong>你的补充想法：</strong>{profile.note}</p>}
-    <details className="support-plan-source-list"><summary>继续核对 · 官方旅行资料</summary>{[...new Map(cityIds.flatMap(id => cityById[id].sources).map(source => [source.url, source])).values()].map(source => <a key={source.url} href={source.url} target="_blank" rel="noreferrer">{source.title}</a>)}</details>
+    <details className="support-plan-source-list"><summary>继续核对 · 官方旅行资料</summary>{sources.map(source => <a key={source.url} href={source.url} target="_blank" rel="noreferrer">{source.title}</a>)}</details>
     <p className="support-plan-footnote">预算不含往返与跨城大交通、租车等费用。时段与接驳为编辑建议，预约、车船和住宿安排出发前再确认。</p>
   </section>;
 }

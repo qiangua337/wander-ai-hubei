@@ -1,5 +1,7 @@
 import { cityById } from './data';
-import { buildTrip, defaultProfile, estimateBudget, normalizeProfile, recommendConstrainedDays, templates, validDate, groupLabels, interestLabels, budgetLabels, arrivalLabels, departureLabels, getTripTimingConflict, type Profile } from './planning';
+import { buildTrip, defaultProfile, estimateBudget, normalizeProfile, recommendConstrainedDays, templates, validDate, groupLabels, interestLabels, budgetLabels, arrivalLabels, departureLabels, getDepartureLabel, getTripTimingConflict, type Profile } from './planning';
+import { returnWalks } from './data/return-mornings';
+import { clockWindow, formatClock, normalizeStation, parseClock } from './return-timing';
 import type { SupportAction, SupportContext, SupportReply } from './support';
 
 export type SupportTripDraft = {
@@ -7,6 +9,7 @@ export type SupportTripDraft = {
   group?: Profile['group']; mode?: Profile['mode']; budget?: Profile['budget'];
   interest?: Profile['interest']; pace?: Profile['pace']; date?: string; note?: string;
   origin?: string; arrival?: Profile['arrival']; departure?: Profile['departure']; mobility?: Profile['mobility']; budgetLimit?: number; budgetScope?: Profile['budgetScope'];
+  departureTime?: string; departureStation?: string;
   awaiting?: 'city' | 'days' | 'party' | 'budget-scope' | 'mobility' | 'arrival' | 'departure';
 };
 
@@ -47,55 +50,97 @@ const numberValue = (text: string) => {
 };
 
 const returnPeriods = '凌晨|上午|早上|早晨|中午|午后|下午|傍晚|晚上|晚间|夜里';
-const returnClock = '(?:\\d{1,2}[:：]\\d{2}|(?:\\d{1,2}|[零〇一二两三四五六七八九十]{1,3})点)';
+const clockNumber = '(?:\\d{1,2}|[零〇一二两三四五六七八九十]{1,3})';
+const returnClock = `(?:\\d{1,2}[:：]\\d{2}|${clockNumber}点(?:半|一刻|三刻|${clockNumber}分|\\d{2}(?!\\d)|[一二三四五]?十[一二三四五六七八九]?)?)`;
 const returnTime = `(?:(?:${returnPeriods})(?:\\s*${returnClock})?|${returnClock})`;
-const returnVerbs = '返程|回程|返航|回家|回去|返回|离开|回(?!答|复|头|访|顾|来|到点)[\\u4e00-\\u9fff]{2}';
+const returnVerbs = '返程|回程|返航|回家|回去|返回|离开|回(?!答|复|头|访|顾|来|到点)(?:[\\u4e00-\\u9fff]{2}|\\s*$)';
 const lastDayMarker = /最后(?:一)?天|末日|返程日|第(?:\d{1,2}|[一二两三四五六七八九十]{1,3})(?:天|日)/;
+const namedStation = '[\\u4e00-\\u9fff]{1,16}?(?:站|机场)';
+const returnStationAssignment = new RegExp(`(?:返程(?:车)?站|乘车站|上车站)\\s*(?:改到|改成|改为|换成|是|为|在|[:：])?\\s*(${namedStation})`);
+const shortRouteStations = [...new Set(Object.values(returnWalks).flatMap(walks => (walks || []).flatMap(walk => Object.keys(walk.stationBuffers))))];
+const knownReturnStation = new RegExp([...shortRouteStations, '利川站', '神农架站'].map(station => `${station.slice(0, -1)}(?:火车|高铁)?站`).sort((a, b) => b.length - a.length).join('|'));
+const bareReturnTime = new RegExp(`^${returnTime}$`);
 
-function returnWindow(time: string): Profile['departure'] {
-  if (/凌晨|上午|早上|早晨/.test(time)) return 'morning';
-  if (/中午|午后|下午/.test(time)) return 'afternoon';
-  if (/傍晚|晚上|晚间|夜里/.test(time)) return 'evening';
-  const clock = time.match(/^(\d{1,2})[:：](\d{2})$/);
-  if (clock && (Number(clock[1]) > 23 || Number(clock[2]) > 59)) return;
-  const hour = clock ? Number(clock[1]) : numberValue(time.replace(/点$/, ''));
-  if (hour > 23 || (!clock && hour >= 1 && hour <= 12)) return;
-  return hour >= 18 ? 'evening' : hour >= 12 ? 'afternoon' : 'morning';
+function returnWindow(time: string): Pick<SupportTripDraft, 'departure' | 'departureTime'> {
+  const period = time.match(new RegExp(`^(?:${returnPeriods})`))?.[0] || '';
+  const text = time.slice(period.length).trim();
+  const dayPart = /凌晨|上午|早上|早晨/.test(period) ? 'morning'
+    : /中午|午后|下午/.test(period) ? 'afternoon' : period ? 'evening' : undefined;
+  if (!text) return { departure: dayPart };
+  const clock = text.match(/^(\d{1,2})[:：](\d{2})$/);
+  const point = text.match(new RegExp(`^(${clockNumber})点(.*)$`));
+  if (!clock && !point) return {};
+  let hours = clock ? Number(clock[1]) : numberValue(point![1]);
+  const suffix = point?.[2] || '';
+  const minutes = clock ? Number(clock[2]) : ({ 半: 30, 一刻: 15, 三刻: 45 }[suffix] ?? numberValue(suffix.replace(/分$/, '')));
+  if (hours > 23 || minutes > 59 || (!period && !clock && hours >= 1 && hours <= 12)) return {};
+  if (dayPart && dayPart !== 'morning' && hours > 0 && hours < 12) hours += 12;
+  else if (period === '凌晨' && hours === 12) hours = 0;
+  const departure = clockWindow(hours * 60 + minutes);
+  if (dayPart && departure !== dayPart && !(period === '傍晚' && hours === 17)) return {};
+  return { departure, departureTime: formatClock(hours * 60 + minutes) };
 }
 
 /** A timed return clause describes travel home, not another city to visit or a new local transport preference. */
 export function readReturnTiming(question: string, hasTrip = false) {
   let departure: Profile['departure'];
+  let departureTime: string | undefined;
+  let departureStation: string | null | undefined;
   let needsWindow = false;
   let dayNumber: number | undefined;
-  const remaining = question.split(/([，,。；;！!？?\n])/).map(part => {
+  const parts = question.split(/([，,。；;！!？?\n])/);
+  // "下午三点，武昌站返程" is one return instruction when the following clause explicitly names the station.
+  for (let i = 0; i + 2 < parts.length; i += 2) {
+    if (!bareReturnTime.test(parts[i].trim()) || !/^[，,]$/.test(parts[i + 1])) continue;
+    if (!knownReturnStation.test(parts[i + 2]) || !new RegExp(`${returnVerbs}|发车|走(?:了|吧)?\\s*$`).test(parts[i + 2])) continue;
+    parts.splice(i, 3, `${parts[i]} ${parts[i + 2]}`);
+  }
+  const remaining = parts.map(part => {
     const clear = part.match(/返程(?:时间|时段)?(?:待定|不确定|未定)|取消返程(?:时间|时段|限制)|先不填返程|不限制返程/);
     if (clear?.index !== undefined) {
-      departure = 'flexible'; needsWindow = false; dayNumber = undefined;
+      departure = 'flexible'; departureTime = undefined; needsWindow = false; dayNumber = undefined;
       return part.slice(0, clear.index);
+    }
+    const clearStation = part.match(/(?:返程(?:车)?站|上车站)(?:待定|不确定|未定)|取消返程(?:车)?站/);
+    if (clearStation?.index !== undefined) {
+      departureStation = null;
+      return part.slice(0, clearStation.index);
     }
     const marker = part.match(lastDayMarker);
     const start = marker?.index ?? 0;
     const clause = part.slice(start).replace(new RegExp(`(?:不是|不在|不要|不想|不打算)\\s*${returnTime}`, 'g'), match => ' '.repeat(match.length));
-    const action = `(?:${returnVerbs}${marker ? '|高铁|火车|航班|飞机' : ''}${marker || hasTrip ? '|走(?:了|吧)?\\s*$' : ''})`;
+    const assignment = clause.match(returnStationAssignment);
+    const known = clause.match(knownReturnStation);
+    const specified = clause.match(new RegExp(`(?:从|在|由)(${namedStation})(?=\\s*(?:返程|回|走|坐|乘|\\d|上午|下午|晚上|$))`));
+    const station = normalizeStation(assignment?.[1] || specified?.[1] || known?.[0]);
+    const returnContext = hasTrip || Boolean(marker || departure);
+    const arriving = /抵达|到达|到(?:了)?\s*[\u4e00-\u9fff]{1,16}(?:站|机场)/.test(clause);
+    const stationShorthand = station && returnContext && known && !arriving;
+    const action = `(?:${returnVerbs}${marker && !arriving ? '|高铁|火车|航班|飞机' : ''}${station ? '|发车' : ''}${stationShorthand ? `|${known[0]}` : ''}${returnContext ? '|走(?:了|吧)?\\s*$' : ''})`;
     const before = Array.from(clause.matchAll(new RegExp(`${returnTime}(?=[^。；]{0,14}${action})`, 'g'))).at(-1);
     const after = before ? null : clause.match(new RegExp(`${action}[^\\d。；]{0,10}?(${returnTime})`));
     const time = before?.[0] || after?.[1];
-    if (!time) return part;
-    departure = returnWindow(time);
-    needsWindow = !departure;
-    const numbered = marker?.[0].match(/^第(.+)[天日]$/);
-    dayNumber = numbered ? numberValue(numbered[1]) : undefined;
-    return part.slice(0, marker ? start : (before?.index ?? after?.index ?? 0));
+    if (!time && !assignment && !(station && (new RegExp(returnVerbs).test(clause) || (returnContext && /走(?:了|吧)?\s*$/.test(clause))))) return part;
+    if (station) departureStation = station;
+    else if (time && /乘机|飞机|航班|机场/.test(clause)) departureStation = '机场';
+    if (time) {
+      ({ departure, departureTime } = returnWindow(time));
+      needsWindow = !departure;
+      const numbered = marker?.[0].match(/^第(.+)[天日]$/);
+      dayNumber = numbered ? numberValue(numbered[1]) : undefined;
+    }
+    const matchIndex = before?.index ?? after?.index ?? clause.length;
+    const stationIndex = assignment?.index ?? specified?.index ?? known?.index ?? clause.length;
+    return part.slice(0, marker ? start : Math.min(matchIndex, stationIndex));
   }).join('');
-  return { departure, needsWindow, dayNumber, remaining };
+  return { departure, departureTime, departureStation, needsWindow, dayNumber, remaining };
 }
 
 export function copyTripDraft(value?: SupportTripDraft): SupportTripDraft {
   if (!value || typeof value !== 'object' || Array.isArray(value)) return {};
   const draft: SupportTripDraft = {};
   if (Array.isArray(value.cityIds)) draft.cityIds = [...new Set(value.cityIds.filter(id => typeof id === 'string'))];
-  for (const key of ['days', 'party', 'group', 'mode', 'budget', 'interest', 'pace', 'date', 'awaiting', 'arrival', 'departure', 'mobility', 'budgetLimit', 'budgetScope'] as const) {
+  for (const key of ['days', 'party', 'group', 'mode', 'budget', 'interest', 'pace', 'date', 'awaiting', 'arrival', 'departure', 'departureTime', 'departureStation', 'mobility', 'budgetLimit', 'budgetScope'] as const) {
     if (value[key] !== undefined) Object.assign(draft, { [key]: value[key] });
   }
   if (typeof value.note === 'string') draft.note = value.note.trim().slice(0, 500);
@@ -172,6 +217,7 @@ export function planSupportTrip(input: SupportTripDraft): SupportReply {
   if (draft.budgetLimit !== undefined && (!Number.isFinite(draft.budgetLimit) || draft.budgetLimit <= 0 || draft.budgetLimit > 1000000)) return tripReply('预算目标请填写大于 0、最多 100 万元的金额，再说明是全团总额还是每人预算。', draft);
   if (draft.budgetLimit !== undefined && !draft.budgetScope) return tripReply(`已记下预算目标 ¥${draft.budgetLimit.toLocaleString()}。这是所有同行人的全团总额，还是每个人的预算？我会按同一口径核对住宿、餐食、当地交通和项目预留。`, { ...draft, awaiting: 'budget-scope' });
   if (draft.date && !validDate(draft.date)) return tripReply('这个出发日期无效，请按“年-月-日”重新填写，例如 2026-12-08；还未确定也可以先不填日期。', draft);
+  if (draft.departureTime !== undefined && parseClock(draft.departureTime) === undefined) return tripReply('请把发车时间写成 24 小时制，例如 15:30。也可以只选上午、下午或晚间。', { ...draft, awaiting: 'departure' });
   const validChoices = { group: Object.keys(groupLabels), mode: ['public', 'drive'], budget: Object.keys(budgetLabels), interest: Object.keys(interestLabels), pace: ['classic', 'relaxed'], arrival: ['full-day', 'morning', 'afternoon', 'evening', 'previous-night'], departure: Object.keys(departureLabels), mobility: ['standard', 'gentle'], budgetScope: ['total', 'per-person'] };
   if (Object.entries(validChoices).some(([key, allowed]) => draft[key as keyof typeof validChoices] !== undefined && !allowed.includes(draft[key as keyof typeof validChoices] as string))) return tripReply('有一项旅行偏好暂不支持。请选择已有的同行人群、交通、玩法、预算与节奏，再整理行程。', draft);
   if (draft.group === 'solo' && draft.party !== 1) return tripReply(`“独自旅行”和 ${draft.party} 人不一致。可以改为 1 人，或说明是朋友、亲子、长辈同行，我再整理。`, { ...draft, awaiting: 'party' });
@@ -187,7 +233,7 @@ export function planSupportTrip(input: SupportTripDraft): SupportReply {
     return refused;
   }
   if (!template && ['morning', 'afternoon', 'evening'].includes(draft.arrival || '')) indices = [0, ...indices.filter(index => index !== 0).slice(0, draft.days - 1)].sort((a, b) => a - b);
-  let profile = normalizeProfile({ ...base, template: template?.id || 'custom', indices, group, mode: draft.mode || 'public', interest, budget: draft.budget || 'comfort', pace, note: draft.note || '', origin: draft.origin, arrival: draft.arrival || 'full-day', departure: draft.departure, mobility: draft.mobility || 'standard', budgetLimit: draft.budgetLimit, budgetScope: draft.budgetScope });
+  let profile = normalizeProfile({ ...base, template: template?.id || 'custom', indices, group, mode: draft.mode || 'public', interest, budget: draft.budget || 'comfort', pace, note: draft.note || '', origin: draft.origin, arrival: draft.arrival || 'full-day', departure: draft.departure, departureTime: draft.departureTime, departureStation: draft.departureStation, mobility: draft.mobility || 'standard', budgetLimit: draft.budgetLimit, budgetScope: draft.budgetScope });
   const timingConflict = getTripTimingConflict(profile);
   if (timingConflict) {
     const refused = tripReply(timingConflict, { ...draft, awaiting: undefined });
@@ -222,9 +268,15 @@ export function planSupportTrip(input: SupportTripDraft): SupportReply {
     budgetNotes.push(`预算目标：${scope}；当前${budgetLabels[profile.budget]}全团规划预留 ¥${range[0].toLocaleString()}–${range[1].toLocaleString()}。${range[1] > target ? '区间上限仍可能超出目标，不能保证控制在目标内；实际选择要向低端靠拢或继续缩减。' : '本次预留区间在目标内，但实际报价仍需另行确认。'}不含往返与跨城大交通、租车等费用。`);
   }
   const defaults = [!draft.interest && interestLabels[profile.interest], !draft.mode && '公共交通＋接驳', !draft.budget && `${budgetLabels[profile.budget]}${draft.budgetLimit !== undefined ? '（按预算目标核对）' : ''}`, !draft.pace && (pace === 'relaxed' ? '轻松慢游' : '经典节奏')].filter(Boolean);
-  const departure = draft.departure;
+  const departure = profile.departure;
   const hasReturnWindow = departure && departure !== 'flexible';
-  const lastDayIsTransferOnly = hasReturnWindow && plannedDays.at(-1)?.sightseeingRemoved;
+  const lastDay = plannedDays.at(-1);
+  const morning = lastDay?.returnMorning;
+  const stationSchedule = lastDay?.stationSchedule;
+  const lastDayIsTransferOnly = hasReturnWindow && lastDay?.sightseeingRemoved && !morning;
+  const morningNote = morning ? `上午${morning.conditional ? '可选' : '安排'}「${morning.sight}」，吃完附近的早餐再走。` : '';
+  const stationNote = stationSchedule ? `建议 ${stationSchedule.leaveForStationBy} 前去站，${stationSchedule.arriveBy} 前到站。实际车程变长时提前出发。`
+    : departure === 'afternoon' && (!profile.departureTime || !profile.departureStation) ? '补上发车时间和上车站，可以把接驳安排细化。' : '按票面和实际车程留出取行李与进站时间。';
   const arrivalNote = draft.arrival
     ? `抵达安排为${arrivalLabels[draft.arrival]}。${['morning', 'afternoon', 'evening'].includes(draft.arrival) ? '首日已给交通、用餐和安顿留时间。' : ''}`
     : '首日先按完整游玩日安排。如果当天才到，请告诉我抵达时段。';
@@ -232,7 +284,7 @@ export function planSupportTrip(input: SupportTripDraft): SupportReply {
     `已按这些条件整理好具体行程。可以继续调整${template ? '人数、交通与节奏' : '天数、人数、交通与玩法'}，或带入规划器保存与下载。`,
     defaults.length ? `未指定的项目先按：${defaults.join('、')}。` : '',
     (draft.arrival || plannedDays.length > 1 || !hasReturnWindow) ? arrivalNote : '',
-    hasReturnWindow ? `${departureLabels[departure]}。已为取行李与接驳留出时间。${lastDayIsTransferOnly ? '返程日的原景点已移除，预算保留餐食和当地交通。' : '返程日保留可选的城区上午活动。'}` : '',
+    hasReturnWindow ? `${getDepartureLabel(profile)}。${morningNote}${!morning && !lastDayIsTransferOnly ? '保留可选的城区上午活动。' : ''}${stationNote}` : '',
     plannedDays.length === 1 && lastDayIsTransferOnly ? '这一天只够安排接驳。想保留景点，可以增加游玩天数或调整返程时段。' : '',
     draft.origin ? `从${draft.origin}出发，游玩目的地是${cityIds.map(id => cityById[id].shortName).join('＋')}；往返大交通时间和费用需另外安排。` : '',
     draft.mobility === 'gentle' ? '已避开高强度章节；现有低中强度路线仍可能有台阶，不能视作无障碍或完全不走路。' : '',
@@ -240,7 +292,7 @@ export function planSupportTrip(input: SupportTripDraft): SupportReply {
     template ? `跨城采用固定主线：${template.segments.map(segment => `${cityById[segment.cityId].shortName}${segment.indices.length}天`).join(' → ')}；玩法偏好不会改动经典模板的景点。跨城日上午留给交通，原上午景点移除。` : '',
     draft.note ? '补充想法已附入方案；饮食禁忌和特殊需求未自动核实或替换，请向餐馆、酒店和运营方确认。' : '',
   ].filter(Boolean);
-  return tripReply(notes.join('\n\n'), { ...draft, awaiting: undefined }, [{ kind: 'plan', cityId: profile.cityId, label: '带入规划并继续调整', profile: { ...profile, indices: [...profile.indices] } }], profile);
+  return tripReply(notes.join('\n\n'), { ...draft, departure: profile.departure, departureTime: profile.departureTime, departureStation: profile.departureStation, awaiting: undefined }, [{ kind: 'plan', cityId: profile.cityId, label: '带入规划并继续调整', profile: { ...profile, indices: [...profile.indices] } }], profile);
 }
 
 type ParsedRequest = { patch: SupportTripDraft; fields: boolean; error?: string; errorField?: 'days' | 'party' | 'city' | 'budget-scope' | 'departure'; hasDays: boolean; hasParty: boolean };
@@ -252,8 +304,12 @@ function parseRequest(question: string, previous?: SupportTripDraft): ParsedRequ
   if (origin.origin) patch.origin = origin.origin;
   if (/取消出发地|先不填出发地/.test(question)) patch.origin = '';
   const tripText = origin.question;
-  if (returning.departure) patch.departure = returning.departure;
-  else if (previous?.awaiting === 'departure' && new RegExp(`^${returnTime}$`).test(question.trim())) patch.departure = returnWindow(question.trim());
+  if (returning.departure) { patch.departure = returning.departure; patch.departureTime = returning.departureTime; }
+  else if (previous?.awaiting === 'departure' && bareReturnTime.test(question.trim())) {
+    const time = returnWindow(question.trim());
+    if (time.departure) { patch.departure = time.departure; patch.departureTime = time.departureTime; }
+  }
+  if (returning.departureStation !== undefined) patch.departureStation = returning.departureStation || undefined;
   if (/取消(?:预算上限|预算限制)|不设预算|不限预算|先不填预算/.test(question)) { patch.budgetLimit = undefined; patch.budgetScope = undefined; }
   else {
     const amount = question.match(/(?:总预算|预算|人均|每人|每位|全团|总共|一共|合计|总额)[^\d，,。；;\n]{0,10}((?:\d{1,3}(?:,\d{3})+|\d+)(?:\.\d+)?)\s*(万|千|[kKwW])?\s*(?:元|块)?/);
@@ -335,7 +391,7 @@ function parseRequest(question: string, previous?: SupportTripDraft): ParsedRequ
   if (requirements.length) patch.note = requirements.join('；').slice(0, 300);
   const days = patch.days ?? previous?.days;
   if (returning.dayNumber && days && returning.dayNumber !== days) {
-    return { patch: { ...patch, departure: previous?.departure }, fields: true, hasDays: patch.days !== undefined, hasParty: patch.party !== undefined, errorField: 'departure', error: `你说第 ${returning.dayNumber} 天返程，但这份行程有 ${days} 天。请确认总天数和最后一天的返程时段。` };
+    return { patch: { ...patch, departure: previous?.departure, departureTime: previous?.departureTime, departureStation: previous?.departureStation }, fields: true, hasDays: patch.days !== undefined, hasParty: patch.party !== undefined, errorField: 'departure', error: `你说第 ${returning.dayNumber} 天返程，但这份行程有 ${days} 天。请确认总天数和最后一天的返程时段。` };
   }
   if (returning.needsWindow) {
     return { patch, fields: true, hasDays: patch.days !== undefined, hasParty: patch.party !== undefined, errorField: 'departure', error: '请确认返程是在上午、下午还是晚间。也可以填写 24 小时制时间，例如 15:00。' };
@@ -346,11 +402,11 @@ function parseRequest(question: string, previous?: SupportTripDraft): ParsedRequ
 /** Return undefined for ordinary guide questions, so the existing food/place help keeps working. */
 export function answerTripQuestion(question: string, context: SupportContext, mentionedCities: string[], hasPlace: boolean): SupportReply | undefined {
   const previous = context.trip ? copyTripDraft(context.trip) : undefined, parsed = parseRequest(question, previous);
-  const constraintEdited = ['origin', 'arrival', 'departure', 'mobility', 'budget', 'budgetLimit', 'budgetScope'].some(key => Object.hasOwn(parsed.patch, key));
+  const constraintEdited = ['origin', 'arrival', 'departure', 'departureStation', 'mobility', 'budget', 'budgetLimit', 'budgetScope'].some(key => Object.hasOwn(parsed.patch, key));
   const explicit = /规划|具体行程|行程推荐|推荐行程|推荐路线|生成.*行程|安排.*行程|帮.*(?:计划|安排|行程|路线)|定制|做.*攻略|制定|制订/.test(question);
   const modify = /改|换|调整|重新|增加|减少|人数.*(?:加|减|多|少)|多带|少带|喜欢|偏好|想看|想吃|希望|轻松一点|慢一点|慢点|不要太赶|不赶|快一点|经典节奏|不自驾|先不填日期|取消日期/.test(question);
   const ordinary = /住哪|住宿.*推荐|吃什么|有什么.*美食|美食.*(?:什么|推荐)|怎么(?:去|坐车|到)|交通.*(?:方式|安排)|季节|什么时候|怎么放慢|适合.*(?:亲子|孩子)|预算|花费|费用/.test(question);
-  if (hasPlace && !explicit && !/整体|全程|行程/.test(question)) return undefined;
+  if (hasPlace && !explicit && !/整体|全程|行程/.test(question) && !(parsed.patch.departure && (previous || parsed.hasDays))) return undefined;
   if (ordinary && !explicit && !parsed.hasDays && !constraintEdited && !(previous && ((modify && parsed.fields) || (previous.awaiting && parsed.hasParty) || previous.awaiting === 'budget-scope'))) return undefined;
   const route = /行程|路线|怎么玩|怎么游|游玩|周末|几天|几日|安排|好玩/.test(question);
   const start = explicit || parsed.hasDays || constraintEdited || Boolean(parsed.error && parsed.errorField) || (parsed.hasParty && (route || mentionedCities.length > 0)) || (mentionedCities.length > 0 && route && !ordinary);
@@ -358,6 +414,7 @@ export function answerTripQuestion(question: string, context: SupportContext, me
   if (!start && !continuation) return undefined;
   const cityIds = mentionedCities.length ? [...mentionedCities] : previous?.cityIds?.length ? [...previous.cityIds] : context.cityId && Object.hasOwn(cityById, context.cityId) ? [context.cityId] : undefined;
   const draft = { ...previous, ...parsed.patch, ...(cityIds ? { cityIds } : {}) };
+  if (mentionedCities.length && previous?.cityIds && !Object.hasOwn(parsed.patch, 'departureStation') && (mentionedCities.length !== previous.cityIds.length || mentionedCities.some(id => !previous.cityIds?.includes(id)))) draft.departureStation = undefined;
   if (parsed.patch.note) draft.note = [previous?.note, parsed.patch.note].filter(Boolean).join('；').slice(0, 500);
   if (parsed.error) return tripReply(parsed.error, { ...draft, awaiting: parsed.errorField || 'party' });
   return planSupportTrip(draft);
