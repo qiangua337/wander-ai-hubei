@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { ArrowRight, Bookmark, Check, MapPin, Route, Sparkles, Trash2 } from 'lucide-react';
 import { cities, cityById, cityPhotos } from '../data';
-import { arrivalLabels, mobilityLabels, budgetLabels, buildTrip, defaultProfile, estimateBudget, groupLabels, interestLabels, normalizeProfile, recommendDays, recommendConstrainedDays, templates, tripTitle, validDate, type Profile } from '../planning';
+import { arrivalLabels, departureLabels, getTripTimingConflict, mobilityLabels, budgetLabels, buildTrip, defaultProfile, estimateBudget, groupLabels, interestLabels, normalizeProfile, recommendDays, recommendConstrainedDays, templates, tripTitle, validDate, type Profile } from '../planning';
 import { Modal } from './Modal';
 import { PlannedTrip } from './PlannedTrip';
 import { Button, SelectField, InputField } from './ui';
@@ -33,14 +33,15 @@ export function Planner({ initialCity, initialDate, travelers, initialProfile, o
       return { ...draft, cityId: initialCity, template: 'custom', indices: recommendDays(initialCity, Math.min(draft.indices.length || 2, cityById[initialCity].days.length), draft.interest) };
     } catch { return fallback; }
   });
-  const [ready, setReady] = useState(() => Boolean(initialProfile) && buildTrip(profile).length > 0);
+  const [ready, setReady] = useState(() => Boolean(initialProfile) && !getTripTimingConflict(profile) && buildTrip(profile).length > 0);
   const [savedPlans, setSavedPlans] = useState<SavedPlan[]>(readPlans);
-  const [feedback, setFeedback] = useState('');
+  const [feedback, setFeedback] = useState(() => (initialProfile && getTripTimingConflict(profile)) || '');
   const result = useRef<HTMLDivElement>(null);
   const settings = useRef<HTMLDivElement>(null);
   const city = cityById[profile.cityId], selectedTemplate = templates.find(template => template.id === profile.template);
   const days = buildTrip(profile), budget = estimateBudget(profile, days.length);
   const routeCities = [...new Set(days.map(day => day.cityId))];
+  const timingConflict = getTripTimingConflict(profile);
   const previewImage = selectedTemplate?.image || (cityPhotos[city.id]?.filename ? '/images/' + cityPhotos[city.id].filename : undefined);
   const focusResult = (behavior: ScrollBehavior = 'smooth') => window.requestAnimationFrame(() => {
     result.current?.scrollIntoView({ behavior, block: 'start' });
@@ -54,7 +55,7 @@ export function Planner({ initialCity, initialDate, travelers, initialProfile, o
     });
   };
   useEffect(() => {
-    if (!initialProfile || !buildTrip(initialProfile).length) return;
+    if (!initialProfile || getTripTimingConflict(initialProfile) || !buildTrip(initialProfile).length) return;
     const frame = window.requestAnimationFrame(() => {
       result.current?.scrollIntoView({ behavior: 'instant', block: 'start' });
       result.current?.focus({ preventScroll: true });
@@ -70,6 +71,13 @@ export function Planner({ initialCity, initialDate, travelers, initialProfile, o
     if (indices.length < count) setFeedback(`现有符合体力条件的章节只有 ${indices.length} 天，原 ${count} 天条件未满足。请确认天数或换一座城市。`);
   };
   const storePlans = (next: SavedPlan[]) => { setSavedPlans(next); try { localStorage.setItem('wander-plans-v2', JSON.stringify(next)); return true; } catch { return false; } };
+  const restorePlan = (saved: Profile) => {
+    const conflict = getTripTimingConflict(saved);
+    setProfile(saved);
+    setReady(!conflict && buildTrip(saved).length > 0);
+    setFeedback(conflict || '已恢复保存的旅行方案。');
+    if (!conflict) focusResult();
+  };
   const savePlan = () => {
     const success = storePlans([{ id: String(Date.now()), profile }, ...savedPlans.filter(plan => JSON.stringify(plan.profile) !== JSON.stringify(profile))].slice(0, 5));
     setFeedback(success ? '已保存到这个浏览器的「我的行程」，最多保留 5 份。' : '当前浏览器无法持久保存，可下载完整行程清单。');
@@ -90,6 +98,7 @@ export function Planner({ initialCity, initialDate, travelers, initialProfile, o
           if (profile.budgetLimit !== undefined && (!Number.isInteger(profile.budgetLimit) || profile.budgetLimit < 1 || profile.budgetLimit > 1000000)) { setFeedback('目标预算请填 1–1000000 元的整数，也可以先留空。'); return; }
           if (profile.mobility === 'gentle' && days.some(day => day.effort === 'high')) { setFeedback('这份方案仍含高体力山地章节，未满足少台阶条件。请减少天数、换城市或取消冲突章节。'); return; }
           if (profile.budgetLimit && profile.budgetScope && budget.total[0] > profile.budgetLimit * (profile.budgetScope === 'per-person' ? profile.party : 1)) { setFeedback('这份方案的最低规划预留已超过目标预算。请调整天数、档位或预算后再整理。'); return; }
+          if (timingConflict) { setFeedback(timingConflict); return; }
           setReady(true); setFeedback(''); focusResult();
         }}>
           <fieldset className="planner-form-section">
@@ -104,7 +113,10 @@ export function Planner({ initialCity, initialDate, travelers, initialProfile, o
             </div>}
             <label className="planner-field">出发日期<span className="planner-field-hint">还没确定，可以先留空</span><InputField aria-label="行程出发日期" value={profile.date} placeholder="年-月-日" pattern="[0-9]{4}-[0-9]{2}-[0-9]{2}" maxLength={10} onChange={event => update({ date: event.target.value })} /></label>
             <label className="planner-field">出发城市<InputField aria-label="规划出发城市" value={profile.origin || ''} maxLength={24} onChange={event => update({ origin: event.target.value })} placeholder="出发地与游玩城市分别填写" /></label>
-            <div className="planner-field-pair"><label className="planner-field">首日抵达<SelectField aria-label="规划首日抵达" value={profile.arrival || ''} onChange={event => update({ arrival: event.target.value ? event.target.value as Profile['arrival'] : undefined })}><option value="">未填写 · 沿用原方案假设</option>{Object.entries(arrivalLabels).map(([value, label]) => <option key={value} value={value}>{label}</option>)}</SelectField></label><label className="planner-field">体力限制<SelectField aria-label="规划体力限制" value={profile.mobility || 'standard'} onChange={event => { const mobility = event.target.value as Profile['mobility']; const indices = selectedTemplate ? profile.indices : recommendConstrainedDays(profile.cityId, profile.indices.length || 2, profile.interest, mobility); const shortfall = !selectedTemplate && indices.length < profile.indices.length; update({ mobility, indices }); if (shortfall) setFeedback('已有较轻松章节不足原天数，已显示可用章节，请确认天数；也可以换一座城市。'); }}><option value="standard">{mobilityLabels.standard}</option><option value="gentle">{mobilityLabels.gentle}</option></SelectField></label></div>
+            <div className="planner-field-pair">
+              <label className="planner-field">首日抵达<SelectField aria-label="规划首日抵达" value={profile.arrival || ''} onChange={event => update({ arrival: event.target.value ? event.target.value as Profile['arrival'] : undefined })}><option value="">未填写 · 沿用原方案假设</option>{Object.entries(arrivalLabels).map(([value, label]) => <option key={value} value={value}>{label}</option>)}</SelectField></label>
+              <label className="planner-field">最后一天返程<SelectField aria-label="规划返程时段" value={profile.departure || 'flexible'} onChange={event => update({ departure: event.target.value as Profile['departure'] })}>{Object.entries(departureLabels).map(([value, label]) => <option key={value} value={value}>{label}</option>)}</SelectField></label>
+            </div>
           </fieldset>
           <fieldset className="planner-form-section">
             <legend className="sr-only">同行人与交通方式</legend><StepHeading number="02" title="和谁一起，怎么走" />
@@ -113,6 +125,11 @@ export function Planner({ initialCity, initialDate, travelers, initialProfile, o
               <label className="planner-field">同行人群<SelectField aria-label="同行人群" value={profile.group} onChange={event => update({ group: event.target.value as Profile['group'], ...(event.target.value === 'solo' ? { party: 1 } : {}) })}>{Object.entries(groupLabels).map(([value, label]) => <option value={value} key={value}>{label}</option>)}</SelectField></label>
             </div>
             <div role="group" aria-label="交通偏好" className="planner-transport-picks">{[{ id: 'public', text: '公共交通＋接驳', detail: '城区公交 · 跨城高铁' }, { id: 'drive', text: '自驾出行', detail: '沿途休息 · 停车预留' }].map(item => <button type="button" key={item.id} aria-pressed={profile.mode === item.id} onClick={() => update({ mode: item.id as Profile['mode'] })}><Route size={17} /><strong>{item.text}</strong><span>{item.detail}</span></button>)}</div>
+            <label className="planner-field">体力限制<SelectField aria-label="规划体力限制" value={profile.mobility || 'standard'} onChange={event => {
+              const mobility = event.target.value as Profile['mobility'];
+              if (selectedTemplate) update({ mobility });
+              else updateChapters({ mobility });
+            }}><option value="standard">{mobilityLabels.standard}</option><option value="gentle">{mobilityLabels.gentle}</option></SelectField></label>
           </fieldset>
           <fieldset className="planner-form-section">
             <legend className="sr-only">旅行偏好</legend><StepHeading number="03" title="把节奏，调成你喜欢的" />
@@ -130,7 +147,7 @@ export function Planner({ initialCity, initialDate, travelers, initialProfile, o
           </fieldset>
           <div className="planner-submit"><p><strong>{days.length} 天 · {profile.party} 人</strong><span>{budgetLabels[profile.budget]} · {profile.pace === 'relaxed' ? '轻松慢游' : '经典串游'}</span></p><Button type="submit" className="w-full" disabled={!days.length}><Sparkles size={16} />{ready ? '重新整理行程' : '整理 ' + days.length + ' 天完整方案'}<ArrowRight size={16} /></Button><span>依据编辑路线组合，无需注册。预约、车船与房价请另核对。</span></div>
         </form>
-        <details className="planner-saved"><summary><Bookmark size={15} />我的行程 <span>{savedPlans.length} / 5</span></summary><p>保存在当前浏览器。分享链接不包含自由备注。</p><div>{savedPlans.map(plan => <article key={plan.id}><button onClick={() => { setProfile(plan.profile); setReady(true); setFeedback('已恢复保存的旅行方案。'); focusResult(); }}><strong>{tripTitle(plan.profile)}</strong><span>{plan.profile.date || '日期待定'} · {plan.profile.party} 人</span></button><button aria-label={'删除' + tripTitle(plan.profile)} onClick={() => { const ok = storePlans(savedPlans.filter(item => item.id !== plan.id)); setFeedback(ok ? '已从本浏览器移除这份行程。' : '已在本次会话移除，浏览器存储未更新。'); }}><Trash2 size={15} /></button></article>)}{!savedPlans.length && <p>喜欢的方案可以存下来，下次接着安排。</p>}</div></details>
+        <details className="planner-saved"><summary><Bookmark size={15} />我的行程 <span>{savedPlans.length} / 5</span></summary><p>保存在当前浏览器。分享链接不包含自由备注。</p><div>{savedPlans.map(plan => <article key={plan.id}><button onClick={() => restorePlan(plan.profile)}><strong>{tripTitle(plan.profile)}</strong><span>{plan.profile.date || '日期待定'} · {plan.profile.party} 人</span></button><button aria-label={'删除' + tripTitle(plan.profile)} onClick={() => { const ok = storePlans(savedPlans.filter(item => item.id !== plan.id)); setFeedback(ok ? '已从本浏览器移除这份行程。' : '已在本次会话移除，浏览器存储未更新。'); }}><Trash2 size={15} /></button></article>)}{!savedPlans.length && <p>喜欢的方案可以存下来，下次接着安排。</p>}</div></details>
       </div>
       <div ref={result} tabIndex={-1} aria-label="整理好的行程" className="planner-result">
         {ready ? <PlannedTrip key={JSON.stringify(profile)} profile={profile} onCopy={onCopy} onSave={savePlan} onEdit={edit} /> : <section className="planner-preview">

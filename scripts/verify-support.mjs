@@ -547,8 +547,38 @@ try {
   assert(retainConstraints.plan && retainConstraints.plan.party === 3);
   for (const [key, expected] of Object.entries({ origin: '武汉', mobility: 'gentle', arrival: 'afternoon', budgetScope: 'per-person', budgetLimit: 5000 })) assert.equal(retainConstraints.plan[key], expected, `A normal edit retains the travel constraint ${key}.`);
 
+  const roundTrip = ask('从武汉出发，恩施3天2人，自驾，首日上午到');
+  assert(roundTrip.plan && roundTrip.plan.mode === 'drive');
+  for (const [question, departure] of [
+    ['最后一天下午三点坐高铁回武汉', 'afternoon'],
+    ['最后一天18:30回上海', 'evening'],
+    ['最后一天早上走', 'morning'],
+  ]) {
+    const returning = ask(question, roundTrip.context);
+    assert(returning.plan && returning.plan.departure === departure);
+    assert.equal(returning.plan.origin, '武汉');
+    assert.equal(returning.plan.cityId, 'enshi');
+    assert.equal(returning.plan.arrival, 'morning');
+    assert.equal(returning.plan.mode, 'drive', 'Intercity return transport does not override the local mode.');
+    assert.equal(buildTrip(returning.plan).length, 3);
+  }
+  const explicitReturn = ask('武汉2天2人首日上午到最后一天下午3点的高铁返程');
+  assert(explicitReturn.plan && explicitReturn.plan.arrival === 'morning' && explicitReturn.plan.departure === 'afternoon');
+  assert(!buildTrip(explicitReturn.plan).at(-1).stops.some(stop => /省博|东湖/.test(stop.title)));
+  const ambiguousReturn = ask('最后一天三点的高铁', roundTrip.context);
+  assert(!ambiguousReturn.plan && ambiguousReturn.context.trip?.awaiting === 'departure');
+  assert.equal(ask('下午', ambiguousReturn.context).plan?.departure, 'afternoon');
+  const wrongDay = ask('第二天下午回家', roundTrip.context);
+  assert(!wrongDay.plan && /第 2 天.*3 天/.test(wrongDay.text));
+  const sameDayConflict = ask('武汉1天2人，下午到，下午返程');
+  assert(!sameDayConflict.plan && /返程时段不晚于抵达时段/.test(sameDayConflict.text));
+  assert.equal(ask('最后一天晚上返程', sameDayConflict.context).plan?.departure, 'evening');
+  const clearedReturn = ask('返程时段待定', explicitReturn.context);
+  assert(clearedReturn.plan && clearedReturn.plan.departure === 'flexible');
+  assert(buildTrip(clearedReturn.plan).at(-1).stops.some(stop => /省博|东湖|湖北省博物馆/.test(stop.title)));
+
   assert.equal(JSON.stringify({ cities, destinations, practical, templates }), before, 'Question answering must not mutate source travel content.');
-  console.log(JSON.stringify({ result: 'passed', questions: checked, cities: cities.length, checks: '17-city stay/food/follow-up and structured plans, conversational collection and edits, Chinese party/day parsing, preferences, cross-city transfers, arrival-night budgeting, limits, references, live data boundaries, immutability' }, null, 2));
+  console.log(JSON.stringify({ result: 'passed', questions: checked, cities: cities.length, checks: '17-city stay/food/follow-up and structured plans, conversational edits, Chinese party/day parsing, arrival and return scheduling, preferences, cross-city transfers, budgeting, references, live data boundaries, immutability' }, null, 2));
 } finally {
   await server.close();
 }

@@ -1,7 +1,7 @@
 import { useRef, useState } from 'react';
 import { ArrowRight, ArrowUpRight, BedDouble, Bookmark, Check, CircleCheck, Copy, Download, Pencil, Route, Share2, Utensils, Wallet } from 'lucide-react';
 import { cityById } from '../data';
-import { arrivalLabels, mobilityLabels, getTripIssues, buildTrip, budgetLabels, estimateBudget, formatDetailedPlan, groupLabels, sharePlanUrl, tripTitle, type Profile } from '../planning';
+import { arrivalLabels, departureLabels, mobilityLabels, getTripIssues, buildTrip, budgetLabels, estimateBudget, formatDetailedPlan, groupLabels, sharePlanUrl, tripTitle, type Profile } from '../planning';
 import { downloadPlan } from '../travel';
 import { TripDays } from './TravelGuide';
 import { FoodSuggestions, StaySuggestions } from './PracticalDetails';
@@ -13,6 +13,8 @@ export function PlannedTrip({ profile, onCopy, onSave, onEdit }: { profile: Prof
   const [checked, setChecked] = useState<string[]>([]);
   const panel = useRef<HTMLDivElement>(null);
   const days = buildTrip(profile), budget = estimateBudget(profile, days.length), cityIds = [...new Set(days.map(day => day.cityId))];
+  const returnLabel = departureLabels[profile.departure || 'flexible'];
+  const returnScheduled = profile.departure && profile.departure !== 'flexible';
   const tabs = [{ id: 'route', label: '每日行程', count: days.length + ' 天', icon: Route }, { id: 'stay', label: '住在哪里', count: budget.nights + ' 晚', icon: BedDouble }, { id: 'food', label: '当地美食', count: cityIds.length + ' 城', icon: Utensils }, { id: 'budget', label: '预算预留', count: profile.party + ' 人', icon: Wallet }];
   const text = formatDetailedPlan(profile);
   const selectTab = (id: string) => {
@@ -32,6 +34,7 @@ export function PlannedTrip({ profile, onCopy, onSave, onEdit }: { profile: Prof
       <div className="trip-summary-route" aria-label="行程城市">{cityIds.map((id, index) => <span key={id}>{index > 0 && <ArrowRight size={12} />}<strong>{cityById[id].shortName}</strong><small>{days.filter(day => day.cityId === id).length} 天</small></span>)}</div>
       <p className="trip-summary-conditions">{profile.date || '日期待定'} · {profile.party} 人 · {groupLabels[profile.group]} · {profile.mode === 'drive' ? '自驾出行' : '公共交通＋接驳'} · {profile.pace === 'relaxed' ? '轻松慢游' : '经典串游'}</p>
       {(profile.origin || profile.arrival || profile.mobility === 'gentle') && <p className="trip-summary-conditions">{profile.origin ? '从' + profile.origin + '出发 · ' : ''}{profile.arrival ? arrivalLabels[profile.arrival] + ' · ' : ''}{mobilityLabels[profile.mobility || 'standard']}</p>}
+      <p className="trip-summary-conditions">{returnLabel}</p>
       {profile.budgetLimit && <p className="trip-summary-conditions">目标预算：{profile.budgetScope === 'per-person' ? '每人' : '全团'} ¥{profile.budgetLimit.toLocaleString()}，与本地规划预留比较。</p>}
       <div className="trip-summary-actions"><button onClick={() => setSaveState(onSave() ? '已保存到当前浏览器' : '保存失败，请下载清单')}><Bookmark size={14} />{saveState || '存到我的行程'}</button><button onClick={onEdit}><Pencil size={14} />调整条件</button></div>
       <div className="trip-summary-metrics"><span><strong>{days.length}</strong> 天行程</span><span><strong>{budget.nights}</strong> 晚住宿</span><span><strong>{cityIds.length}</strong> 座城市</span></div>
@@ -47,7 +50,9 @@ export function PlannedTrip({ profile, onCopy, onSave, onEdit }: { profile: Prof
         {getTripIssues(profile).length > 0 && <div className="trip-reading-note"><strong>先核对这份安排的条件</strong><ul className="mt-2 list-disc space-y-1 pl-4">{getTripIssues(profile).map(issue => <li key={issue}>{issue}</li>)}</ul></div>}
         {budget.arrivalNight && <p className="trip-reading-note">所选章节从完整游玩日开始，建议提前一晚抵达，住宿预算已加这一晚。若当天才到，首日上午改作交通并减少景点。</p>}
         <p className="trip-panel-description">每天围绕一片区域走。跨城日把上午留给交通；到得晚，就缩减当天下午的活动。</p>
-        <TripDays days={days.map((day, i) => ({ ...day, overnight: i < days.length - 1 ? day.overnight : '返程日；若延住可参考 ' + day.overnight }))} date={profile.date} />
+        <TripDays days={days.map((day, i) => i < days.length - 1 ? day : {
+          ...day, stayLabel: '返程安排', overnight: returnScheduled ? `${returnLabel}，当晚无住宿预留。` : `返程时段待定。如需延住，可参考${day.overnight}。`,
+        })} date={profile.date} />
         <div className="trip-reading-note">每日安排与接驳是编辑建议，车程和班次没有实时计算。自选不连续章节时，住宿与第二天的出发地要再次核对。</div>
         {profile.note && <p className="trip-personal-note"><strong>我的备注：</strong>{profile.note}</p>}
       </>}
@@ -61,14 +66,14 @@ export function PlannedTrip({ profile, onCopy, onSave, onEdit }: { profile: Prof
       </div>}
       {tab === 'food' && <div className="space-y-8">
         <p className="trip-panel-description">按城市找地方风味，也按每天的路线安排一餐。营业与供应请在出发前核对。</p>
-        <details className="trip-meal-index"><summary><Utensils size={16} />查看每日餐食安排<span>{days.length} 天</span></summary><ol>{days.map((day, index) => <li key={day.title}><span>第 {index + 1} 天 · {cityById[day.cityId].shortName}</span><p>{day.meal}</p></li>)}</ol></details>
+        <details className="trip-meal-index"><summary><Utensils size={16} />查看每日餐食安排<span>{days.length} 天</span></summary><ol>{days.map((day, index) => <li key={day.title}><span>第 {index + 1} 天 · {cityById[day.cityId].shortName}</span>{day.breakfast || day.lunch || day.dinner ? <><p><strong>早餐：</strong>{day.breakfast}</p><p><strong>午餐：</strong>{day.lunch}</p><p><strong>晚餐：</strong>{day.dinner}</p></> : <p>{day.meal}</p>}</li>)}</ol></details>
         {cityIds.map(id => <section key={id}><p className="trip-city-label">{cityById[id].shortName}</p><FoodSuggestions city={cityById[id]} /></section>)}
       </div>}
       {tab === 'budget' && <section>
         <p className="trip-city-label">把预算，先安排明白</p><h4 className="trip-budget-total">¥{budget.total[0].toLocaleString()}–{budget.total[1].toLocaleString()}</h4>
         <p className="trip-panel-description">{profile.party} 人全团的规划预留，按 {days.length} 天、{budget.rooms} 间双人房和 {budget.nights} 晚计算。</p>
         <div className="trip-budget-person">约 ¥{Math.floor(budget.total[0] / profile.party).toLocaleString()}–{Math.ceil(budget.total[1] / profile.party).toLocaleString()} / 人<span>用于比较出行方案，非实时报价</span></div>
-        <div className="trip-budget-items">{[{ label: '住宿 · ' + budget.nights + ' 晚', range: budget.stay }, { label: '餐食 · 含三餐的预留', range: budget.meals }, { label: profile.mode === 'drive' ? '当地交通 · 油费与停车预留' : '当地交通 · 公交、打车与接驳预留', range: budget.transport }, { label: '景点门票与项目预留', range: budget.tickets }].map(item => <div key={item.label}><span>{item.label}</span><strong>¥{item.range.join('–')}</strong></div>)}</div>
+        <div className="trip-budget-items">{[{ label: '住宿 · ' + budget.nights + ' 晚', range: budget.stay }, { label: '餐食 · 含三餐的预留', range: budget.meals }, { label: profile.mode === 'drive' ? '当地交通 · 油费与停车预留' : '当地交通 · 公交、打车与接驳预留', range: budget.transport }, { label: budget.ticketDays < days.length ? `景点项目 · 仅预留 ${budget.ticketDays} 天` : '景点门票与项目预留', range: budget.tickets }].map(item => <div key={item.label}><span>{item.label}</span><strong>¥{item.range.join('–')}</strong></div>)}</div>
         <p className="trip-reading-note">这是按预算档位计算的额度，未查询实时价格。不含出发地往返、跨城火车票、自驾租车费及超出预留的索道、船游等项目。节假日与房型变化会改变实际支出。</p>
       </section>}
     </div>

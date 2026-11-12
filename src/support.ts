@@ -3,7 +3,7 @@ import { practical } from './data/practical';
 import { travelFaq } from './data/help';
 import { templates, type Profile } from './planning';
 import { findDestinations } from './travel';
-import { answerTripQuestion, copyTripDraft, extractTripOrigin, planSupportTrip, type SupportTripDraft } from './support-planning';
+import { answerTripQuestion, copyTripDraft, extractTripOrigin, planSupportTrip, readReturnTiming, type SupportTripDraft } from './support-planning';
 export { planSupportTrip, type SupportTripDraft } from './support-planning';
 
 export type SupportContext = { cityId?: string; trip?: SupportTripDraft };
@@ -90,7 +90,7 @@ function answerGuide(question: string, context: SupportContext = {}): SupportRep
   if (typeof question !== 'string' || !question.trim()) return reply('你好，我是小游。可以帮你查湖北的住宿片区、地方餐食、到达交通和编辑路线。想先了解哪座城市？', previousCity, [{ kind: 'explore', label: '去选一座城市' }]);
   if (question.length > 240) return reply('一次最多问 240 个字。可以先告诉我城市，再分别问住宿、美食或路线，我会逐项帮你查站内攻略。', previousCity);
   const q = question.trim();
-  const scopeQuestion = extractTripOrigin(q).question;
+  const scopeQuestion = extractTripOrigin(readReturnTiming(q, Boolean(context.trip)).remaining).question;
   const normalized = compact(scopeQuestion);
   if (/赤壁/.test(scopeQuestion) && !/东坡|黄冈|黄州|三国|咸宁|古战场|赤壁市/.test(scopeQuestion)) {
     return reply('“赤壁”可能指两个不同的地方：黄冈的东坡赤壁，或咸宁的三国赤壁古战场。你想了解哪一处？', undefined, [placeAction(destinationById.dongpo), placeAction(destinationById.chibi)], [], ['黄冈东坡赤壁怎么玩？', '三国赤壁古战场怎么玩？']);

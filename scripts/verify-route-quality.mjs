@@ -8,7 +8,7 @@ try {
   const { cities } = await server.ssrLoadModule('/src/data.ts');
   const { practical } = await server.ssrLoadModule('/src/data/practical.ts');
   const { routeDetails } = await server.ssrLoadModule('/src/data/route-details.ts');
-  const { defaultProfile, buildTrip, recommendConstrainedDays, estimateBudget, normalizeProfile, sharePlanUrl, parsePlanUrl, formatDetailedPlan, getTripIssues } = await server.ssrLoadModule('/src/planning.ts');
+  const { defaultProfile, buildTrip, recommendConstrainedDays, estimateBudget, normalizeProfile, sharePlanUrl, parsePlanUrl, formatDetailedPlan, getTripIssues, getTripTimingConflict } = await server.ssrLoadModule('/src/planning.ts');
   const sourceSnapshot = JSON.stringify({ cities, practical, routeDetails });
   let chapters = 0;
   for (const city of cities) {
@@ -83,6 +83,43 @@ try {
   const eveningPrior = buildTrip({ ...defaultProfile('shennongjia'), indices: [0, 2], arrival: 'evening' });
   assert(eveningPrior[0].stops[2].title.includes('抵达住宿'));
 
+  const returnBase = { ...defaultProfile('wuhan'), indices: [0, 1, 2], arrival: 'full-day', interest: 'food' };
+  const unchangedDays = buildTrip(returnBase);
+  for (const departure of ['morning', 'afternoon', 'evening']) {
+    const profile = { ...returnBase, departure }, trip = buildTrip(profile), last = trip.at(-1);
+    assert.deepEqual(trip.slice(0, -1), unchangedDays.slice(0, -1), 'Departure changes only the final day.');
+    assert(!last.stops.some(stop => /晴川阁|古琴台|地方晚餐|江滩/.test(stop.title)), 'Do not retain sightseeing or destination dinner after departure.');
+    assert(last.dinner.includes('途中') && last.transport.includes('取行李'));
+    assert.equal(estimateBudget(profile, trip.length).nights, 2);
+    assert.equal(estimateBudget(profile, trip.length).ticketDays, departure === 'evening' ? 3 : 2);
+    assert.equal(parsePlanUrl(new URL(sharePlanUrl(profile)).search).departure, departure);
+    assert(formatDetailedPlan(profile).includes('返程设置：'));
+    if (departure === 'evening') assert.equal(last.stops[0].title, unchangedDays.at(-1).stops[0].title);
+    else assert(!last.stops.some(stop => stop.title.includes('江汉路')));
+  }
+  const mountainReturn = { ...defaultProfile('enshi'), indices: [0, 1], interest: 'nature', arrival: 'full-day', departure: 'evening' };
+  const mountainLast = buildTrip(mountainReturn).at(-1);
+  assert(!mountainLast.stops.some(stop => /七星寨|云龙|大峡谷/.test(stop.title)), 'Mountain days are removed instead of compressed before the return.');
+  assert.equal(mountainLast.effort, 'low');
+  assert(getTripIssues(mountainReturn).some(text => text.includes('玩法偏好尚未充分满足')), 'Deleted nature chapters cannot count as a delivered nature experience.');
+  for (const [arrival, departure] of [['morning', 'morning'], ['afternoon', 'morning'], ['afternoon', 'afternoon'], ['evening', 'afternoon'], ['evening', 'evening']]) {
+    const conflict = { ...defaultProfile(), indices: [0], arrival, departure };
+    assert(getTripTimingConflict(conflict));
+    assert(getTripIssues(conflict).some(text => text.includes('返程时段不晚于抵达时段')));
+  }
+  const dayReturn = { ...defaultProfile(), indices: [0], arrival: 'afternoon', departure: 'evening' };
+  assert(!getTripTimingConflict(dayReturn));
+  assert.equal(estimateBudget(dayReturn, 1).nights, 0);
+  assert(buildTrip(dayReturn)[0].stops[1].detail.includes('不安排过夜入住'));
+  assert.deepEqual(estimateBudget(dayReturn, 1).tickets, [0, 0]);
+  const overnightReturn = { ...dayReturn, arrival: 'previous-night', departure: 'morning' };
+  assert.equal(estimateBudget(overnightReturn, 1).nights, 1);
+  assert(buildTrip(overnightReturn)[0].stops[0].detail.includes('退房'));
+  const canceledLake = buildTrip({ ...defaultProfile('shennongjia'), indices: [0, 1, 2], departure: 'morning' });
+  assert(!canceledLake[1].overnight.includes('坪阡'), 'Do not move hotels just to reach a removed last-day activity.');
+  assert.deepEqual(buildTrip({ ...returnBase, departure: 'flexible' }), unchangedDays, 'Clearing the departure window restores original daily contents.');
+  assert(!normalizeProfile({ ...returnBase, departure: '__proto__' }).departure);
+
   const complete = normalizeProfile({ ...base, origin: '武汉', arrival: 'afternoon', mobility: 'gentle', budgetLimit: 2000, budgetScope: 'per-person', note: '不吃辣，需向餐馆确认' });
   const shared = sharePlanUrl(complete), restored = parsePlanUrl(new URL(shared).search);
   assert.deepEqual(restored, { ...complete, note: '' });
@@ -96,5 +133,5 @@ try {
   assert(getTripIssues({ ...base, budgetLimit: 100, budgetScope: 'total' }).some(issue => issue.includes('尚未满足预算')));
   assert(formatDetailedPlan({ ...base, budgetLimit: 100, budgetScope: 'total' }).includes('尚未满足预算'), 'Export must retain feasibility limitations, not just the requested amount.');
   assert.equal(JSON.stringify({ cities, practical, routeDetails }), sourceSnapshot, 'Planning must not rewrite the editorial data.');
-  console.log(JSON.stringify({ result: 'passed', chapters, cities: cities.length, checks: 'effort constraints, real food preference, meal timing, route-aligned nights, arrival-day activity removal, origin, explicit arrival budget, safe full-settings sharing, immutability' }, null, 2));
+  console.log(JSON.stringify({ result: 'passed', chapters, cities: cities.length, checks: 'effort constraints, real food preference, meal timing, route-aligned nights, arrival and return scheduling, same-day conflicts, return budget, safe sharing, immutability' }, null, 2));
 } finally { await server.close(); }

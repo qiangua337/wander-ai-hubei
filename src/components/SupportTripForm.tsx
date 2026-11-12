@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { ArrowRight, Route } from 'lucide-react';
 import { cities, cityById } from '../data';
-import { arrivalLabels, budgetLabels, groupLabels, interestLabels, mobilityLabels, templates, validDate, type Profile } from '../planning';
+import { arrivalLabels, departureLabels, budgetLabels, groupLabels, interestLabels, mobilityLabels, templates, validDate, type Profile } from '../planning';
 import type { SupportTripDraft } from '../support';
 import { SelectField, InputField } from './ui';
 import './support-trip-form.css';
@@ -25,6 +25,7 @@ export function SupportTripForm({ draft, initialCity, initialParty, initialDate,
   const [date, setDate] = useState(draft?.date || (validDate(initialDate) ? initialDate : ''));
   const [origin, setOrigin] = useState(draft?.origin || '');
   const [arrival, setArrival] = useState<NonNullable<Profile['arrival']>>(draft?.arrival || 'full-day');
+  const [departure, setDeparture] = useState<NonNullable<Profile['departure']>>(draft?.departure || 'flexible');
   const [mobility, setMobility] = useState<NonNullable<Profile['mobility']>>(draft?.mobility || 'standard');
   const [budgetLimit, setBudgetLimit] = useState(draft?.budgetLimit ? String(draft.budgetLimit) : '');
   const [budgetScope, setBudgetScope] = useState<NonNullable<Profile['budgetScope']>>(draft?.budgetScope || 'total');
@@ -42,16 +43,21 @@ export function SupportTripForm({ draft, initialCity, initialParty, initialDate,
     if (budgetLimit && (!Number.isInteger(Number(budgetLimit)) || Number(budgetLimit) < 1 || Number(budgetLimit) > 1000000)) { setError('目标预算请填 1–1000000 元的整数，也可以先留空。'); return; }
     const cityIds = template ? template.segments.map(segment => segment.cityId) : [route];
     const count = template ? capacity : days;
-    const request: SupportTripDraft = { ...draft, cityIds, days: count, party, interest, group, mode, pace, budget: budget === 'auto' ? undefined : budget, date, origin: origin.trim(), arrival, mobility, budgetLimit: budgetLimit ? Number(budgetLimit) : undefined, budgetScope: budgetLimit ? budgetScope : undefined };
-    const question = `${origin.trim() ? '从' + origin.trim() + '出发，' : ''}${cityIds.map(id => cityById[id].shortName).join('、')} ${count} 天，${party} 人，${groupLabels[group]}，${interestLabels[interest]}，${arrivalLabels[arrival]}，${mobilityLabels[mobility]}${budgetLimit ? '，' + (budgetScope === 'total' ? '全团' : '每人') + '预算' + budgetLimit + '元' : ''}`;
+    const request: SupportTripDraft = { ...draft, cityIds, days: count, party, interest, group, mode, pace, budget: budget === 'auto' ? undefined : budget, date, origin: origin.trim(), arrival, departure, mobility, budgetLimit: budgetLimit ? Number(budgetLimit) : undefined, budgetScope: budgetLimit ? budgetScope : undefined };
+    const question = `${origin.trim() ? '从' + origin.trim() + '出发，' : ''}${cityIds.map(id => cityById[id].shortName).join('、')} ${count} 天，${party} 人，${groupLabels[group]}，${interestLabels[interest]}，${arrivalLabels[arrival]}，${departureLabels[departure]}，${mobilityLabels[mobility]}${budgetLimit ? '，' + (budgetScope === 'total' ? '全团' : '每人') + '预算' + budgetLimit + '元' : ''}`;
     onSubmit(request, question);
   }}>
     <div className="support-trip-intro"><span><Route size={17} />一起把假期排好</span><p>选好条件，游览、每晚落脚处和沿途餐食一起安排。</p></div>
     <label>这次去哪里<SelectField aria-label="小游行程目的地" value={route} onChange={event => chooseRoute(event.target.value)}><option value="">选择一座城市或经典跨城</option><optgroup label="按城市安排">{cities.map(item => <option key={item.id} value={item.id}>{item.shortName}</option>)}</optgroup><optgroup label="经典跨城路线">{templates.filter(item => item.segments.length > 1).map(item => <option key={item.id} value={item.id}>{item.label} · {item.segments.map(segment => cityById[segment.cityId].shortName).join('—')}</option>)}</optgroup></SelectField></label>
     <div className="support-trip-pair support-trip-counts"><label>玩几天<SelectField aria-label="小游游玩天数" value={template ? capacity : days} disabled={Boolean(template)} onChange={event => setDays(Number(event.target.value))}>{Array.from({ length: capacity }, (_, index) => <option key={index + 1} value={index + 1}>{index + 1} 天</option>)}</SelectField></label><label>几个人<SelectField aria-label="小游同行人数" value={party} onChange={event => { const count = Number(event.target.value); setParty(count); if (count > 1 && group === 'solo') setGroup('friends'); if (count === 1) setGroup('solo'); }}>{[1, 2, 3, 4, 5, 6].map(count => <option key={count} value={count}>{count} 人</option>)}</SelectField></label></div>
-    <div className="support-trip-pair"><label>首日什么时候到<SelectField aria-label="小游首日抵达" value={arrival} onChange={event => setArrival(event.target.value as NonNullable<Profile['arrival']>)}>{Object.entries(arrivalLabels).map(([value, label]) => <option key={value} value={value}>{label}</option>)}</SelectField></label><label>体力与台阶<SelectField aria-label="小游体力限制" value={mobility} onChange={event => setMobility(event.target.value as NonNullable<Profile['mobility']>)}>{Object.entries(mobilityLabels).map(([value, label]) => <option key={value} value={value}>{label}</option>)}</SelectField></label></div>
-    <p className="support-trip-hint">少台阶会避开高强度山地章节；具体无障碍条件仍需逐景区确认。</p>
-    <label>从哪里出发（可留空）<InputField aria-label="小游出发城市" value={origin} maxLength={24} onChange={event => setOrigin(event.target.value)} placeholder="例如：武汉，出发地不算游玩城市" /></label>
+    <div className="support-trip-pair">
+      <label>首日抵达<SelectField aria-label="小游首日抵达" value={arrival} onChange={event => setArrival(event.target.value as NonNullable<Profile['arrival']>)}>{Object.entries(arrivalLabels).map(([value, label]) => <option key={value} value={value}>{label}</option>)}</SelectField></label>
+      <label>最后一天返程<SelectField aria-label="小游返程时段" value={departure} onChange={event => setDeparture(event.target.value as NonNullable<Profile['departure']>)}>{Object.entries(departureLabels).map(([value, label]) => <option key={value} value={value}>{label}</option>)}</SelectField></label>
+    </div>
+    <div className="support-trip-pair">
+      <label>出发城市（可留空）<InputField aria-label="小游出发城市" value={origin} maxLength={24} onChange={event => setOrigin(event.target.value)} placeholder="例如：武汉" /></label>
+      <label>体力与台阶<SelectField aria-label="小游体力限制" value={mobility} onChange={event => setMobility(event.target.value as NonNullable<Profile['mobility']>)}>{Object.entries(mobilityLabels).map(([value, label]) => <option key={value} value={value}>{label}</option>)}</SelectField></label>
+    </div>
     <fieldset className="support-interest-picks"><legend>更喜欢怎么玩</legend><div>{Object.entries(interestLabels).map(([value, label]) => <button key={value} type="button" aria-pressed={interest === value} onClick={() => setInterest(value as Profile['interest'])}>{label}</button>)}</div></fieldset>
     <div className="support-trip-pair"><label>和谁一起<SelectField aria-label="小游同行人群" value={group} onChange={event => { const value = event.target.value as Profile['group']; setGroup(value); if (value === 'solo') setParty(1); if (value === 'family' || value === 'senior') { if (party === 1) setParty(2); setPace('relaxed'); } }}>{Object.entries(groupLabels).map(([value, label]) => <option key={value} value={value}>{label}</option>)}</SelectField></label><label>怎么出行<SelectField aria-label="小游交通方式" value={mode} onChange={event => setMode(event.target.value as Profile['mode'])}><option value="public">公共交通＋接驳</option><option value="drive">自驾出行</option></SelectField></label></div>
     {template && <p className="support-trip-hint">跨城路线保留固定天数与景点主线，仍可调整同行、交通、预算和节奏。</p>}
