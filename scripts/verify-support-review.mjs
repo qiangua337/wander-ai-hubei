@@ -105,6 +105,12 @@ try {
   const logisticsDraft = supportTripDraftFromProfile(withLogistics);
   assert.deepEqual(logisticsDraft.returnLogistics, logistics);
   assert.notEqual(logisticsDraft.returnLogistics, logistics, 'Editing must not mutate the saved return settings.');
+  const dayStarts = Object.freeze({ 'wuhan:1': '12:30' });
+  const late = { ...base, dayStarts };
+  assert.deepEqual(compare(base, late).changes, [{ label: '第 2 天出门', before: '按路线建议', after: '12:30' }]);
+  const startDraft = supportTripDraftFromProfile(late);
+  assert.deepEqual(startDraft.dayStarts, dayStarts);
+  assert.notEqual(startDraft.dayStarts, dayStarts);
   draft.cityIds.push('enshi');
   assert.deepEqual(supportTripDraftFromProfile(frozen).cityIds, ['wuhan'], 'Draft arrays are independent copies.');
   assert.equal(JSON.stringify(base), snapshot);

@@ -6,7 +6,10 @@ import { arrivalLabels, getDepartureLabel, buildTrip, estimateBudget, getTripIss
 import { TripSchedule } from './TripSchedule';
 import './support-plan-preview.css';
 
-export function SupportPlanPreview({ profile, onUpdateReturn, initialDay }: { profile: Profile; onUpdateReturn: (profile: Profile) => void; initialDay?: 'last' }) {
+export function SupportPlanPreview({ profile, onUpdateReturn, onUpdateStart, dayIndex, onChooseDay }: {
+  profile: Profile; onUpdateReturn: (profile: Profile) => void; onUpdateStart: (profile: Profile, dayIndex: number) => void;
+  dayIndex: number; onChooseDay: (dayIndex: number) => void;
+}) {
   const days = buildTrip(profile);
   if (!days.length) return null;
   const firstNight = dayJourneys[days[0].cityId][days[0].originalIndex].base;
@@ -22,9 +25,9 @@ export function SupportPlanPreview({ profile, onUpdateReturn, initialDay }: { pr
       <div className="support-plan-metrics"><span><strong>{days.length}</strong> 天</span><span><strong>{profile.party}</strong> 人</span><span><strong>{budget.nights}</strong> 晚住宿</span></div>
       <p className="support-plan-timing"><Route size={15} />{profile.arrival ? arrivalLabels[profile.arrival] : '抵达时段待确认'}<span>{returnLabel}</span></p>
       {target && <p className={'support-plan-budget-check' + (budget.total[1] > target ? ' needs-review' : '')}>{budget.total[0] > target ? '当前最低规划预留已超目标。' : budget.total[1] > target ? '规划预留有超出目标的区间，建议继续调整。' : '当前规划预留范围未超目标。'}此比较不含往返、跨城大交通与租车。</p>}
-      <details className="support-plan-budget"><summary><Wallet size={15} /><span>全团预算预留<strong>¥{budget.total[0].toLocaleString()}–{budget.total[1].toLocaleString()}</strong></span><ChevronDown size={15} /></summary><div><p>{budget.nights ? `住宿按 ${budget.rooms} 间双人房、${budget.nights} 晚预留。` : '行程未计过夜住宿。'}{budget.ticketDays < days.length ? '返程日预算仅预留餐食与当地交通。' : ''}</p>{profile.budgetLimit && <p>目标预算为{profile.budgetScope === 'per-person' ? '每人' : '全团'} ¥{profile.budgetLimit.toLocaleString()}。</p>}</div></details>
+      <details className="support-plan-budget"><summary><Wallet size={15} /><span>全团预算预留<strong>¥{budget.total[0].toLocaleString()}–{budget.total[1].toLocaleString()}</strong></span><ChevronDown size={15} /></summary><div><p>{budget.nights ? `住宿按 ${budget.rooms} 间双人房、${budget.nights} 晚预留。` : '行程未计过夜住宿。'}{budget.ticketDays < days.length ? `景点项目按 ${budget.ticketDays} 天预留。` : ''}</p>{profile.budgetLimit && <p>目标预算为{profile.budgetScope === 'per-person' ? '每人' : '全团'} ¥{profile.budgetLimit.toLocaleString()}。</p>}</div></details>
     </header>
-    <TripSchedule days={days} profile={profile} onUpdateReturn={onUpdateReturn} initialDay={initialDay} />
+    <TripSchedule days={days} profile={profile} onUpdateReturn={onUpdateReturn} onUpdateStart={onUpdateStart} dayIndex={dayIndex} onChooseDay={onChooseDay} />
     {budget.arrivalNight && <p className="support-plan-arrival">预算包含抵达前夜。可住在{firstNight}，方便去第一站。</p>}
     <details className="support-plan-checks"><summary>旅行条件和行前核对</summary>
       <dl className="support-plan-constraints">

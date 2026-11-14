@@ -1,4 +1,4 @@
-import type { ButtonHTMLAttributes, InputHTMLAttributes, ReactNode, SelectHTMLAttributes } from 'react';
+import type { ButtonHTMLAttributes, ComponentPropsWithRef, ReactNode, SelectHTMLAttributes } from 'react';
 import { ChevronDown } from 'lucide-react';
 
 type ButtonProps = ButtonHTMLAttributes<HTMLButtonElement> & { variant?: 'primary' | 'neutral' | 'subtle' | 'orange' | 'white' };
@@ -19,7 +19,7 @@ type FieldProps = { label: string; icon: ReactNode; children: ReactNode; classNa
 export function Field({ label, icon, children, className = '' }: FieldProps) {
   return <label className={`block min-w-0 text-left ${className}`}><span className="mb-2.5 flex items-center gap-2 text-xs font-medium text-muted">{icon}{label}</span>{children}</label>;
 }
-export function InputField({ className = '', ...props }: InputHTMLAttributes<HTMLInputElement>) {
+export function InputField({ className = '', ...props }: ComponentPropsWithRef<'input'>) {
   return <input className={`h-12 w-full min-w-0 rounded-sm border border-line bg-white px-3 text-sm text-ink outline-none transition placeholder:text-muted/70 focus:border-pine focus:ring-2 focus:ring-pine/10 ${className}`} {...props} />;
 }
 export function SelectField({ children, className = '', ...props }: SelectHTMLAttributes<HTMLSelectElement>) {

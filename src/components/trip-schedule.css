@@ -18,6 +18,14 @@
 .trip-schedule-day p { margin-top:3px; color:var(--color-muted); font-size:12px; }
 .trip-schedule-day>div { display:flex; align-items:center; flex-wrap:wrap; gap:3px 7px; margin-top:8px; color:var(--color-pine); font-size:13px; }
 .trip-schedule-day>div span { color:var(--color-muted); font-size:12px; }
+.trip-schedule-day>.day-start-control { display:block; margin-top:9px; }
+.day-start-trigger { display:inline-flex; align-items:center; gap:7px; min-height:42px; padding:4px 11px; border:1px solid var(--color-line); border-radius:6px; background:white; color:var(--color-pine-deep); font-size:13px; font-weight:600; }
+.day-start-trigger:is(:hover,[aria-expanded="true"]) { border-color:var(--color-pine); background:var(--color-sage); }
+.day-start-form { display:grid; grid-template-columns:minmax(95px, 1fr) auto; gap:8px; margin-top:7px; padding:10px; border:1px solid var(--color-line); border-radius:7px; background:var(--color-cream); }
+.day-start-form label,.day-start-form p,.day-start-reset { grid-column:1 / -1; }
+.day-start-form input { min-height:44px; height:44px; font-size:16px; font-variant-numeric:tabular-nums; }
+.day-start-reset { justify-self:start; min-height:36px; text-decoration:underline; text-underline-offset:3px; }
+.trip-schedule-day .day-start-error { color:var(--color-pine-deep); }
 .trip-schedule-rows { padding:4px 14px; margin:0; }
 .trip-schedule-rows .schedule-row { position:relative; display:grid; grid-template-columns:54px 24px minmax(0,1fr); gap:8px; padding:9px 0; }
 .trip-schedule-rows .schedule-row+.schedule-row { border-top:1px solid var(--color-line); }

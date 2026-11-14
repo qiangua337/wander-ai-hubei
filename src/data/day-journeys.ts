@@ -16,6 +16,7 @@ export type DayJourney = {
   home?: TravelLeg;
   dinner: string;
   note?: string;
+  earlyReturn?: TravelLeg;
   nightMoves?: Record<string, TravelLeg>;
   sources?: ReturnSource[];
 };
@@ -30,7 +31,7 @@ const visit = (place: string, length: number, via: TravelLeg, note?: string): Vi
 const meal = (area: string, food: string, via?: TravelLeg, length?: number): Meal => ({ area, food, via, length });
 const journey = (
   start: string, base: string, baseMatch: RegExp, morning: Visit, lunch: Meal, afternoon: Visit | undefined,
-  night: string, dinner: string, home?: TravelLeg, extras?: Pick<DayJourney, 'note' | 'sources' | 'nightMoves'>,
+  night: string, dinner: string, home?: TravelLeg, extras?: Pick<DayJourney, 'note' | 'sources' | 'nightMoves' | 'earlyReturn'>,
 ): DayJourney => ({ start, base, baseMatch, morning, lunch, afternoon, night, dinner, home, ...extras });
 
 const wuchang = '武昌 · 司门口—昙华林';
@@ -56,12 +57,16 @@ export const dayJourneys: Record<string, DayJourney[]> = {
       visit('黄鹤楼', 135, walk(15, 30, '从住宿片区步行到所选入口；住得远可坐地铁 5 号线到司门口黄鹤楼站'), '从靠老城的一侧下山，先核对当天开放的出口。'),
       meal('户部巷—大成路', '就近吃家常菜，热干面和豆皮更适合留给早饭。', walk(10, 25, '从老城一侧出口沿武昌街巷步行')),
       visit('中华路江边', 75, walk(10, 20, '沿户部巷向中华路步行'), '沿武昌岸看长江大桥，有余量再沿江走一段。'),
-      wuchang, '在武昌岸吃排骨藕汤和家常湖北菜。想看夜景就留在同岸。', walk(15, 30, '沿武昌旧城步行或短程接驳'), { sources: [wuhanOldTown] }),
+      wuchang, '在武昌岸吃排骨藕汤和家常湖北菜。想看夜景就留在同岸。', walk(15, 30, '沿武昌旧城步行或短程接驳'), {
+        earlyReturn: walk(15, 30, '从黄鹤楼老城一侧出口沿街步行回住宿片区'),
+        sources: [wuhanOldTown],
+      }),
     journey('08:40', wuchang, /武昌|司门口|昙华林/,
       visit('湖北省博物馆', 150, ride('地铁 5 号线到徐家棚换 8 号线，至省博湖北日报站后按预约入口步行', 35, 55, [30, 50]), '按预约时段入馆，编钟演出另看当日安排。'),
       meal('省博周边', '先吃一份简餐，再去东湖。'),
       visit('东湖听涛 · 梨园', 105, ride('8 号线省博湖北日报站至梨园站，再步行入园', 20, 35, [20, 40]), '听涛和远端绿道选一个片区，走累就在原入口折返。'),
       wuchang, '回住宿片区吃藕汤或家常菜，继续住同一片区。', ride('从梨园乘地铁返回武昌老城', 35, 55, [35, 55]), {
+        earlyReturn: ride('从省博湖北日报站乘 8 号线到徐家棚，换 5 号线回司门口一带', 35, 55, [30, 50]),
         sources: [wuhanLake],
       }),
     journey('09:15', '汉口 · 江汉路周边', /汉口|江汉路|循礼门/,

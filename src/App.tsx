@@ -23,7 +23,7 @@ import { CreditsDialog } from './components/SiteDialogs';
 import { cities, cityById, destinations, destinationById, featuredDestinations, type Destination } from './data';
 import { findDestinations, type DurationFilter, type Filter } from './travel';
 
-type ModalState = { type: 'guide'; cityId: string; placeId?: string } | { type: 'planner'; profile?: Profile } | { type: 'wishlist' } | { type: 'support'; openForm?: boolean; days?: number } | { type: 'credits' } | { type: 'info'; title: string; body: string } | null;
+type ModalState = { type: 'guide'; cityId: string; placeId?: string } | { type: 'planner'; profile?: Profile; dayIndex?: number } | { type: 'wishlist' } | { type: 'support'; openForm?: boolean; days?: number } | { type: 'credits' } | { type: 'info'; title: string; body: string } | null;
 const mainNav = [['popular', '热门去处'], ['routes', '经典路线'], ['destinations', '目的地'], ['culture', '荆楚文化'], ['travel-life', '吃住指南']] as const;
 const filters: { key: Filter; label: string }[] = [{ key: 'all', label: '全部' }, { key: 'nature', label: '山水自然' }, { key: 'city', label: '古城文博' }, { key: 'family', label: '亲子研学' }, { key: 'saved', label: '已收藏' }];
 function loadBrowse() {
@@ -101,7 +101,10 @@ export default function App() {
   };
   const showSaved = () => { setModal({ type: 'wishlist' }); setMobileMenu(false); };
   const planCity = (id: string) => setModal({ type: 'planner', profile: defaultProfile(id, date, Number(travelers)) });
-  const showTemplate = (id: string) => { const template = templates.find(item => item.id === id); if (template) setModal({ type: 'planner', profile: { ...defaultProfile(template.cityId, date, Number(travelers)), template: id } }); };
+  const showTemplate = (id: string, dayIndex?: number) => {
+    const template = templates.find(item => item.id === id);
+    if (template) setModal({ type: 'planner', profile: { ...defaultProfile(template.cityId, date, Number(travelers)), template: id }, dayIndex });
+  };
   const exploreMode = (mode: 'nature' | 'city' | 'family' | 'food') => {
     if (mode === 'food') { document.getElementById('travel-life')?.scrollIntoView({ block: 'start' }); return; }
     revealDestinations(selection, '', mode);
@@ -109,7 +112,7 @@ export default function App() {
   const search = (term: string) => revealDestinations(selection, term);
   const showInfo = (title: string, body: string) => setModal({ type: 'info', title, body });
   const supportAction = (action: SupportAction) => {
-    if (action.kind === 'plan' && action.profile) { setModal({ type: 'planner', profile: normalizeProfile(action.profile) }); return; }
+    if (action.kind === 'plan' && action.profile) { setModal({ type: 'planner', profile: normalizeProfile(action.profile), dayIndex: action.dayIndex }); return; }
     if (action.kind === 'wishlist') { showSaved(); return; }
     if (action.kind === 'explore') { closeModal(); revealDestinations('all'); return; }
     if (action.kind === 'template' && action.templateId) { showTemplate(action.templateId); return; }
@@ -164,7 +167,7 @@ export default function App() {
         </div>
       </section>
 
-      <RouteTemplates onChoose={profile => showTemplate(profile.template)} />
+      <RouteTemplates onChoose={showTemplate} />
 
       <section id="destinations" aria-labelledby="destinations-title" className="city-section section-space">
         <div className="page-width">
@@ -210,7 +213,7 @@ export default function App() {
     <SupportDesk open={modal?.type === 'support'} openForm={modal?.type === 'support' && !!modal.openForm} initialCity={selection} initialDays={modal?.type === 'support' ? modal.days : undefined} initialParty={Number(travelers)} initialDate={date} onClose={closeModal} onAction={supportAction} />
     {toast && createPortal(<div role="status" aria-live="polite" className="fixed bottom-6 left-1/2 z-[70] flex max-w-[92vw] -translate-x-1/2 items-center gap-2 rounded-2xl bg-ink px-5 py-3 text-xs leading-6 text-white shadow-xl"><Check size={16} className="shrink-0 text-seafoam" />{toast}</div>, document.body)}
     {modal?.type === 'guide' && <Modal title={modal.placeId ? `${destinationById[modal.placeId].title} · 攻略与路线` : `${cityById[modal.cityId].shortName} · 城市旅行攻略`} onClose={closeModal} wide><TravelGuide key={`${modal.cityId}-${modal.placeId || 'city'}`} city={cityById[modal.cityId]} place={modal.placeId ? destinationById[modal.placeId] : undefined} date={date} travelers={travelers} onCopy={copyPlan} onOpenPlace={openPlace} onPlan={() => planCity(modal.cityId)} saved={modal.placeId ? saved.includes(modal.placeId) : undefined} onSave={modal.placeId ? () => toggleSave(destinationById[modal.placeId!]) : undefined} /></Modal>}
-    {modal?.type === 'planner' && <Planner initialCity={activeCity} initialDate={date} travelers={travelers} initialProfile={modal.profile} onClose={closeModal} onCopy={copyPlan} />}
+    {modal?.type === 'planner' && <Planner initialCity={activeCity} initialDate={date} travelers={travelers} initialProfile={modal.profile} initialDayIndex={modal.dayIndex} onClose={closeModal} onCopy={copyPlan} />}
     {modal?.type === 'wishlist' && <Wishlist saved={saved} onClose={closeModal} onOpenPlace={openPlace} onRemove={toggleSave} onPlan={planCity} onExplore={() => { closeModal(); revealDestinations('all'); }} />}
     {modal?.type === 'credits' && <CreditsDialog onClose={closeModal} />}
     {modal?.type === 'info' && <Modal title={modal.title} onClose={closeModal}><p className="p-7 text-sm leading-8 text-muted">{modal.body}</p></Modal>}

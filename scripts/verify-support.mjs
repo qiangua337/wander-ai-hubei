@@ -623,6 +623,24 @@ try {
   assert.equal(flight.plan?.departureStation, '机场');
   assert(!buildTrip(flight.plan).at(-1).stationSchedule);
 
+  const flexibleWeekend = ask('武汉2天2人');
+  const changedMorning = ask('第二天，上午十点半再出门', flexibleWeekend.context);
+  assert.deepEqual(changedMorning.plan?.dayStarts, { 'wuhan:1': '10:30' });
+  assert.equal(changedMorning.dayIndex, 1);
+  assert.equal(changedMorning.plan.departureTime, undefined);
+  assert.equal(buildTrip(changedMorning.plan).length, 2);
+  const updatedTimeline = ask('第二天几点出门？', changedMorning.context);
+  assert.match(updatedTimeline.text, /10:30 出门/);
+  assert.equal(updatedTimeline.actions.find(action => action.profile)?.dayIndex, 1);
+  assert.deepEqual(ask('换成自驾', changedMorning.context).plan?.dayStarts, changedMorning.plan.dayStarts);
+  assert.equal(ask('第二天出门时间改到8:40', changedMorning.context).plan?.dayStarts, undefined);
+  assert.match(ask('第二天14:30出门', changedMorning.context).text, /06:00–14:00/);
+  assert.match(ask('第四天10:30出门', changedMorning.context).text, /共 2 天/);
+  assert.match(ask('最后一天10:30出发', confirmedReturn.context).text, /调整返程接驳/);
+  const crossTransfer = ask('宜昌和恩施五天，两个人');
+  assert.equal(crossTransfer.plan?.template, 'west-five');
+  assert.match(ask('第三天10:30出发', crossTransfer.context).text, /车船或返程接驳/);
+
   assert.equal(JSON.stringify({ cities, destinations, practical, templates }), before, 'Question answering must not mutate source travel content.');
   console.log(JSON.stringify({ result: 'passed', questions: checked, cities: cities.length, checks: '17-city stay/food/follow-up and structured plans, conversational edits, Chinese party/day parsing, arrival and return scheduling, preferences, cross-city transfers, budgeting, references, live data boundaries, immutability' }, null, 2));
 } finally {

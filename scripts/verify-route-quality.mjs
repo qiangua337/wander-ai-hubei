@@ -37,6 +37,15 @@ try {
         const clocks = schedule.rows.flatMap(row => row.time ? [row.time] : []);
         assert.deepEqual(clocks, [...clocks].sort(), `${day.title} schedule must be chronological`);
         for (const row of schedule.rows.filter(item => item.minutes)) assert(row.minutes[0] > 0 && row.minutes[1] >= row.minutes[0]);
+        const edited = buildDaySchedule(day, { ...profile, mode, dayStarts: { [city.id + ':' + day.originalIndex]: '12:30' } }, trip[i - 1], i === trip.length - 1);
+        if (schedule.recommendedStart) {
+          assert.equal(edited.start, '12:30 出门');
+          assert(edited.rows.some(row => row.meal === '午餐' && row.time <= '13:30'), day.title);
+          const editedClocks = edited.rows.flatMap(row => row.time ? [row.time] : []);
+          assert.deepEqual(editedClocks, [...editedClocks].sort(), `${day.title} edited schedule must be chronological`);
+        } else {
+          assert.deepEqual(edited, schedule, `${day.title} must keep ticket-based or unknown timing`);
+        }
       }
     });
   }
@@ -198,6 +207,33 @@ try {
   const otherArea = buildTrip({ ...wuchangReturn, departureStation: '武汉东站', returnLogistics: { area: 'other', travelMinutes: 60 } }).at(-1);
   assert(!otherArea.returnMorning && otherArea.stationSchedule && otherArea.afternoonReturn.area === '其他落脚片区');
   assert(!byAir.afternoonReturn, 'Flight plans do not show the rail timing editor.');
+
+  const wuhanWeekend = { ...defaultProfile(), template: 'wuhan-weekend' };
+  const weekend = buildTrip(wuhanWeekend);
+  const relaxedMorning = normalizeProfile({ ...wuhanWeekend, dayStarts: { 'wuhan:1': '12:30', 'wuhan:2': '10:00', 'enshi:0': '11:00', 'wuhan:0': '99:99' } });
+  assert.deepEqual(relaxedMorning.dayStarts, { 'wuhan:1': '12:30' });
+  assert.equal(buildDaySchedule(weekend[1], wuhanWeekend, weekend[0], true).recommendedStart, '08:40');
+  assert.deepEqual(buildDaySchedule(weekend[0], relaxedMorning, undefined, false), buildDaySchedule(weekend[0], wuhanWeekend, undefined, false));
+  const lateMuseum = buildDaySchedule(weekend[1], relaxedMorning, weekend[0], true);
+  assert.equal(lateMuseum.title, '武汉 · 湖北省博物馆');
+  assert.equal(lateMuseum.rows.find(row => row.meal === '午餐').time, '11:50');
+  assert.equal(lateMuseum.rows.find(row => row.kind === 'visit').time, '13:25');
+  assert(!lateMuseum.rows.some(row => /东湖|梨园/.test(row.title)));
+  assert(lateMuseum.rows.some(row => row.kind === 'move' && row.detail.includes('换 5 号线回司门口')));
+  assert.deepEqual(parsePlanUrl(new URL(sharePlanUrl(relaxedMorning)).search), relaxedMorning);
+  const sharedTiming = new URL(sharePlanUrl(relaxedMorning));
+  sharedTiming.searchParams.append('start', 'wuhan:0@14:01');
+  assert.deepEqual(parsePlanUrl(sharedTiming.search).dayStarts, relaxedMorning.dayStarts);
+  assert.match(formatDetailedPlan(relaxedMorning), /D2 .*武汉 · 湖北省博物馆\n/);
+  assert.match(formatDetailedPlan(relaxedMorning), /11:50｜午餐：住处附近先吃早午餐/);
+
+  const lateGorge = { ...defaultProfile('enshi'), interest: 'nature', dayStarts: { 'enshi:1': '14:00' } };
+  const lateGorgeTrip = buildTrip(lateGorge);
+  const localAfternoon = buildDaySchedule(lateGorgeTrip[1], lateGorge, lateGorgeTrip[0], true);
+  assert(localAfternoon.mainVisitSkipped && localAfternoon.rows.some(row => row.kind === 'visit' && row.title.includes('清江')));
+  assert(!localAfternoon.rows.some(row => /大峡谷|七星寨|恩施城区 → 恩施城区/.test(row.title)));
+  assert.equal(estimateBudget(lateGorge, 2).ticketDays, 1);
+  assert(getTripIssues(lateGorge).some(issue => issue.includes('玩法偏好尚未充分满足')));
 
   const complete = normalizeProfile({ ...base, origin: '武汉', arrival: 'afternoon', mobility: 'gentle', budgetLimit: 2000, budgetScope: 'per-person', note: '不吃辣，需向餐馆确认' });
   const shared = sharePlanUrl(complete), restored = parsePlanUrl(new URL(shared).search);

@@ -3,13 +3,14 @@ import { practical } from './data/practical';
 import { travelFaq } from './data/help';
 import { buildTrip, templates, type Profile } from './planning';
 import { buildDaySchedule, describePlanDay } from './day-schedule';
+import { chapterKey, dayStartWindow, readDayStart, setDayStart } from './day-starts';
 import { findDestinations } from './travel';
-import { answerTripQuestion, copyTripDraft, extractTripOrigin, planSupportTrip, readReturnTiming, type SupportTripDraft } from './support-planning';
+import { answerTripQuestion, copyTripDraft, extractTripOrigin, localClockPattern, planSupportTrip, readLocalDayClock, readReturnTiming, type SupportTripDraft } from './support-planning';
 export { planSupportTrip, type SupportTripDraft } from './support-planning';
 
 export type SupportContext = { cityId?: string; trip?: SupportTripDraft };
-export type SupportAction = { kind: 'city' | 'place' | 'plan' | 'template' | 'wishlist' | 'explore'; label: string; cityId?: string; placeId?: string; templateId?: string; profile?: Profile };
-export type SupportReply = { text: string; sources: { title: string; url: string }[]; actions: SupportAction[]; suggestions: string[]; context: SupportContext; plan?: Profile };
+export type SupportAction = { kind: 'city' | 'place' | 'plan' | 'template' | 'wishlist' | 'explore'; label: string; cityId?: string; placeId?: string; templateId?: string; profile?: Profile; dayIndex?: number };
+export type SupportReply = { text: string; sources: { title: string; url: string }[]; actions: SupportAction[]; suggestions: string[]; context: SupportContext; plan?: Profile; dayIndex?: number };
 
 const placeAliases: Record<string, string[]> = {
   'hubei-museum': ['省博', '湖北博物馆', '湖北省博物馆', '曾侯乙编钟'],
@@ -219,19 +220,62 @@ function answerGuide(question: string, context: SupportContext = {}): SupportRep
   return reply('我目前只会查本站的湖北旅行和使用资料，这个问题还没有匹配到合适的答案。可以带上城市，换成“住哪里”“吃什么”“怎么去”或“怎么玩”试试。', cityId, actions, [], citySuggestions(city));
 }
 
+const numberedTravelDay = /第([一二三四五六七1-7])天/;
+const startChange = new RegExp(
+  `^(?:把|想让|我想)?\\s*(第[一二三四五六七1-7]天|最后一天|首日)\\s*[，,]?\\s*(?:改成|改为|改到|想|可以|要|就)?\\s*` +
+  `(?:(${localClockPattern})\\s*(?:再|才)?(?:出门|出发)|(?:出门|出发)(?:时间)?\\s*(?:改到|改成|改为)\\s*(${localClockPattern}))\\s*(?:吗|行吗|可以吗)?[。！!？?]?$`,
+);
+function requestedDayIndex(label: string, length: number): number {
+  if (label.startsWith('最后')) return length - 1;
+  const day = label.match(numberedTravelDay)?.[1] || '1';
+  return '一二三四五六七'.includes(day) ? '一二三四五六七'.indexOf(day) : Number(day) - 1;
+}
+
+function answerDayStartChange(question: string, context: SupportContext): SupportReply | undefined {
+  const request = question.trim().match(startChange);
+  if (!request || !context.trip) return undefined;
+  const current = planSupportTrip(context.trip);
+  if (!current.plan) return current;
+  const profile = current.plan;
+  const days = buildTrip(profile);
+  const dayIndex = requestedDayIndex(request[1], days.length);
+  const day = days[dayIndex];
+  const actions = current.actions.map(action => action.profile && day ? { ...action, dayIndex } : action);
+  const explain = (text: string): SupportReply => ({ text, actions, sources: [], suggestions: current.suggestions, context: current.context });
+  if (!day) return explain(`这份行程共 ${days.length} 天。请告诉我想改哪一天。`);
+  const suggested = buildDaySchedule(day, profile, days[dayIndex - 1], dayIndex === days.length - 1).recommendedStart;
+  if (!suggested) {
+    return explain('这一天要按抵达、车船或返程接驳来排。你可以先确认票面时间，下午乘火车返程也可以用「调整返程接驳」。');
+  }
+  const time = readDayStart(readLocalDayClock(request[2] || request[3]));
+  if (!time) return explain(`请把出门时间设在 ${dayStartWindow.min}–${dayStartWindow.max}，例如「第二天 10:30 出门」。`);
+  const reply = planSupportTrip({ ...context.trip, dayStarts: setDayStart(profile.dayStarts, chapterKey(day.cityId, day.originalIndex), time === suggested ? undefined : time) });
+  if (!reply.plan) return reply;
+  const revisedDays = buildTrip(reply.plan);
+  const revised = buildDaySchedule(revisedDays[dayIndex], reply.plan, revisedDays[dayIndex - 1], dayIndex === revisedDays.length - 1);
+  return { ...reply, dayIndex, text: `第 ${dayIndex + 1} 天已按 ${time} 出门重排。\n${revised.headline}` };
+}
+
 export function answerSupport(question: string, context: SupportContext = {}): SupportReply {
+  if (typeof question === 'string' && context.trip) {
+    const timingChange = answerDayStartChange(question, context);
+    if (timingChange) return timingChange;
+  }
   if (typeof question === 'string' && context.trip && /几点出门|几点出发|时间表|详细时间|景点之间怎么走/.test(question)
     && /^(?:(?:看看|展开|想看|看)?\s*(?:第[一二三四五六七1-7]天|最后一天|每天))[^，,。；;]*[？?。！!\s]*$/.test(question.trim())) {
     const current = planSupportTrip(context.trip);
     const profile = current.plan;
     if (profile) {
       const days = buildTrip(profile);
-      const day = question.match(/第([一二三四五六七1-7])天/)?.[1];
-      const index = question.includes('最后一天') ? days.length - 1 : day ? ('一二三四五六七'.includes(day) ? '一二三四五六七'.indexOf(day) : Number(day) - 1) : undefined;
+      const index = question.includes('每天') ? undefined : requestedDayIndex(question.replace(/^(?:看看|展开|想看|看)\s*/, ''), days.length);
       const text = index === undefined
-        ? days.map((item, i) => `第 ${i + 1} 天 · ${buildDaySchedule(item, profile, days[i - 1], i === days.length - 1).start}\n${item.title}`).join('\n\n') + '\n\n可以继续问“第二天几点出发？”，或打开行程查看每一段交通和餐食。'
+        ? days.map((item, i) => {
+          const schedule = buildDaySchedule(item, profile, days[i - 1], i === days.length - 1);
+          return `第 ${i + 1} 天 · ${schedule.start}\n${schedule.title || item.title}`;
+        }).join('\n\n') + '\n\n可以继续问“第二天几点出发？”，或打开行程查看每一段交通和餐食。'
         : describePlanDay(days, index, profile);
-      return { text, actions: current.actions, sources: current.sources, suggestions: current.suggestions, context: current.context };
+      const actions = current.actions.map(action => index !== undefined && days[index] && action.profile ? { ...action, dayIndex: index } : action);
+      return { text, actions, sources: current.sources, suggestions: current.suggestions, context: current.context };
     }
   }
   const result = answerGuide(question, context);

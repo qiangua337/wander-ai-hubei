@@ -1,6 +1,7 @@
 import { cityById } from './data';
 import { buildTrip, defaultProfile, estimateBudget, normalizeProfile, recommendConstrainedDays, templates, validDate, groupLabels, interestLabels, budgetLabels, arrivalLabels, departureLabels, getDepartureLabel, getTripTimingConflict, type Profile } from './planning';
 import { returnWalks } from './data/return-mornings';
+import { normalizeDayStarts } from './day-starts';
 import { clockWindow, formatClock, normalizeReturnLogistics, normalizeStation, parseClock, readReturnMinutes, type ReturnLogistics } from './return-timing';
 import type { SupportAction, SupportContext, SupportReply } from './support';
 
@@ -10,6 +11,7 @@ export type SupportTripDraft = {
   interest?: Profile['interest']; pace?: Profile['pace']; date?: string; note?: string;
   origin?: string; arrival?: Profile['arrival']; departure?: Profile['departure']; mobility?: Profile['mobility']; budgetLimit?: number; budgetScope?: Profile['budgetScope'];
   departureTime?: string; departureStation?: string; returnLogistics?: ReturnLogistics;
+  dayStarts?: Profile['dayStarts'];
   awaiting?: 'city' | 'days' | 'party' | 'budget-scope' | 'mobility' | 'arrival' | 'departure';
 };
 
@@ -52,6 +54,7 @@ const numberValue = (text: string) => {
 const returnPeriods = '凌晨|上午|早上|早晨|中午|午后|下午|傍晚|晚上|晚间|夜里';
 const clockNumber = '(?:\\d{1,2}|[零〇一二两三四五六七八九十]{1,3})';
 const returnClock = `(?:\\d{1,2}[:：]\\d{2}|${clockNumber}点(?:半|一刻|三刻|${clockNumber}分|\\d{2}(?!\\d)|[一二三四五]?十[一二三四五六七八九]?)?)`;
+export const localClockPattern = `(?:(?:${returnPeriods})\\s*)?${returnClock}`;
 const returnTime = `(?:(?:${returnPeriods})(?:\\s*${returnClock})?|${returnClock})`;
 const returnVerbs = '返程|回程|返航|回家|回去|返回|离开|回(?!答|复|头|访|顾|来|到点)(?:[\\u4e00-\\u9fff]{2}|\\s*$)';
 const lastDayMarker = /最后(?:一)?天|末日|返程日|第(?:\d{1,2}|[一二两三四五六七八九十]{1,3})(?:天|日)/;
@@ -61,7 +64,7 @@ const shortRouteStations = [...new Set(Object.values(returnWalks).flatMap(walks 
 const knownReturnStation = new RegExp([...shortRouteStations, '利川站', '神农架站'].map(station => `${station.slice(0, -1)}(?:火车|高铁)?站`).sort((a, b) => b.length - a.length).join('|'));
 const bareReturnTime = new RegExp(`^${returnTime}$`);
 
-function returnWindow(time: string): Pick<SupportTripDraft, 'departure' | 'departureTime'> {
+function returnWindow(time: string, defaultToMorning = false): Pick<SupportTripDraft, 'departure' | 'departureTime'> {
   const period = time.match(new RegExp(`^(?:${returnPeriods})`))?.[0] || '';
   const text = time.slice(period.length).trim();
   const dayPart = /凌晨|上午|早上|早晨/.test(period) ? 'morning'
@@ -73,12 +76,16 @@ function returnWindow(time: string): Pick<SupportTripDraft, 'departure' | 'depar
   let hours = clock ? Number(clock[1]) : numberValue(point![1]);
   const suffix = point?.[2] || '';
   const minutes = clock ? Number(clock[2]) : ({ 半: 30, 一刻: 15, 三刻: 45 }[suffix] ?? numberValue(suffix.replace(/分$/, '')));
-  if (hours > 23 || minutes > 59 || (!period && !clock && hours >= 1 && hours <= 12)) return {};
+  if (hours > 23 || minutes > 59 || (!defaultToMorning && !period && !clock && hours >= 1 && hours <= 12)) return {};
   if (dayPart && dayPart !== 'morning' && hours > 0 && hours < 12) hours += 12;
   else if (period === '凌晨' && hours === 12) hours = 0;
   const departure = clockWindow(hours * 60 + minutes);
   if (dayPart && departure !== dayPart && !(period === '傍晚' && hours === 17)) return {};
   return { departure, departureTime: formatClock(hours * 60 + minutes) };
+}
+
+export function readLocalDayClock(time: string): string | undefined {
+  return returnWindow(time, true).departureTime;
 }
 
 /** A timed return clause describes travel home, not another city to visit or a new local transport preference. */
@@ -144,6 +151,8 @@ export function copyTripDraft(value?: SupportTripDraft): SupportTripDraft {
     if (value[key] !== undefined) Object.assign(draft, { [key]: value[key] });
   }
   if (typeof value.note === 'string') draft.note = value.note.trim().slice(0, 500);
+  const dayStarts = normalizeDayStarts(value.dayStarts);
+  if (dayStarts) draft.dayStarts = dayStarts;
   if (typeof value.origin === 'string') draft.origin = cleanOrigin(value.origin);
   const routeTemplate = templates.find(template => template.segments.length === draft.cityIds?.length && template.segments.every(segment => draft.cityIds?.includes(segment.cityId)));
   const lastCity = routeTemplate?.segments.at(-1)?.cityId || draft.cityIds?.at(-1);
@@ -239,7 +248,7 @@ export function planSupportTrip(input: SupportTripDraft): SupportReply {
     return refused;
   }
   if (!template && ['morning', 'afternoon', 'evening'].includes(draft.arrival || '')) indices = [0, ...indices.filter(index => index !== 0).slice(0, draft.days - 1)].sort((a, b) => a - b);
-  let profile = normalizeProfile({ ...base, template: template?.id || 'custom', indices, group, mode: draft.mode || 'public', interest, budget: draft.budget || 'comfort', pace, note: draft.note || '', origin: draft.origin, arrival: draft.arrival || 'full-day', departure: draft.departure, departureTime: draft.departureTime, departureStation: draft.departureStation, returnLogistics: draft.returnLogistics, mobility: draft.mobility || 'standard', budgetLimit: draft.budgetLimit, budgetScope: draft.budgetScope });
+  let profile = normalizeProfile({ ...base, template: template?.id || 'custom', indices, group, mode: draft.mode || 'public', interest, budget: draft.budget || 'comfort', pace, note: draft.note || '', origin: draft.origin, arrival: draft.arrival || 'full-day', departure: draft.departure, departureTime: draft.departureTime, departureStation: draft.departureStation, returnLogistics: draft.returnLogistics, dayStarts: draft.dayStarts, mobility: draft.mobility || 'standard', budgetLimit: draft.budgetLimit, budgetScope: draft.budgetScope });
   const timingConflict = getTripTimingConflict(profile);
   if (timingConflict) {
     const refused = tripReply(timingConflict, { ...draft, awaiting: undefined });
@@ -298,7 +307,7 @@ export function planSupportTrip(input: SupportTripDraft): SupportReply {
     template ? `跨城采用固定主线：${template.segments.map(segment => `${cityById[segment.cityId].shortName}${segment.indices.length}天`).join(' → ')}；玩法偏好不会改动经典模板的景点。跨城日上午留给交通，原上午景点移除。` : '',
     draft.note ? '补充想法已附入方案；饮食禁忌和特殊需求未自动核实或替换，请向餐馆、酒店和运营方确认。' : '',
   ].filter(Boolean);
-  return tripReply(notes.join('\n\n'), { ...draft, departure: profile.departure, departureTime: profile.departureTime, departureStation: profile.departureStation, returnLogistics: profile.returnLogistics, awaiting: undefined }, [{ kind: 'plan', cityId: profile.cityId, label: '带入规划并继续调整', profile: { ...profile, indices: [...profile.indices] } }], profile);
+  return tripReply(notes.join('\n\n'), { ...draft, departure: profile.departure, departureTime: profile.departureTime, departureStation: profile.departureStation, returnLogistics: profile.returnLogistics, dayStarts: profile.dayStarts, awaiting: undefined }, [{ kind: 'plan', cityId: profile.cityId, label: '带入规划并继续调整', profile: { ...profile, indices: [...profile.indices] } }], profile);
 }
 
 function readLogisticsUpdate(question: string): { remaining: string; patch?: ReturnLogistics; error?: string } {

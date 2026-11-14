@@ -30,12 +30,12 @@ export function SupportDesk({ open, openForm = false, initialCity, initialDays, 
   const [editingTrip, setEditingTrip] = useState<SupportTripDraft>();
   const [activeProfile, setActiveProfile] = useState<Profile>();
   const [selectedId, setSelectedId] = useState<number>();
-  const [startOnReturn, setStartOnReturn] = useState(false);
+  const [activeDay, setActiveDay] = useState(0);
   const [detailOpen, setDetailOpen] = useState(false);
   const serial = useRef(0);
   const log = useRef<HTMLDivElement>(null);
   const detail = useRef<HTMLDivElement>(null);
-  const focusReturn = useRef(false);
+  const editorToFocus = useRef<'return' | 'start' | undefined>(undefined);
   const selected = messages.find(message => message.id === selectedId);
   const profile = selected?.reply.plan;
   const previous = selected?.baseProfile;
@@ -66,8 +66,9 @@ export function SupportDesk({ open, openForm = false, initialCity, initialDays, 
   }, [messages, open, formVisible]);
   useEffect(() => {
     if (!detailOpen) return;
-    const trigger = focusReturn.current && detail.current?.querySelector<HTMLButtonElement>('.return-day-trigger');
-    focusReturn.current = false;
+    const editor = editorToFocus.current;
+    const trigger = editor && detail.current?.querySelector<HTMLButtonElement>(editor === 'return' ? '.return-day-trigger' : '.day-start-trigger');
+    editorToFocus.current = undefined;
     if (trigger) {
       trigger.scrollIntoView({ block: 'nearest', behavior: 'instant' });
       trigger.focus({ preventScroll: true });
@@ -76,13 +77,13 @@ export function SupportDesk({ open, openForm = false, initialCity, initialDays, 
       detail.current?.focus({ preventScroll: true });
     }
   }, [selectedId, detailOpen]);
-  const addReply = (question: string, reply: SupportReply, from: Profile | null | undefined = context.trip ? activeProfile : undefined, showReturn = false) => {
+  const addReply = (question: string, reply: SupportReply, from: Profile | null | undefined = context.trip ? activeProfile : undefined, dayIndex = reply.dayIndex ?? 0) => {
     const id = ++serial.current;
     const baseProfile = reply.plan && from ? from : undefined;
     setMessages(before => [...before, { id, question, reply, baseProfile }].slice(-12));
     setContext(reply.context); setSuggestions(reply.suggestions.length ? reply.suggestions.slice(0, 4) : promptsFor(reply.context.cityId));
     setDraft(''); setTripForm(undefined); setEditingTrip(undefined); setFormError('');
-    if (reply.plan) { setActiveProfile(reply.plan); setSelectedId(id); setStartOnReturn(showReturn); setDetailOpen(true); }
+    if (reply.plan) { setActiveProfile(reply.plan); setSelectedId(id); setActiveDay(dayIndex); setDetailOpen(true); }
     else if ((context.trip || reply.context.trip) && !reply.actions.some(action => action.profile)) { setSelectedId(undefined); setDetailOpen(false); }
     if (!reply.context.trip) setActiveProfile(undefined);
   };
@@ -93,7 +94,7 @@ export function SupportDesk({ open, openForm = false, initialCity, initialDays, 
     setActiveProfile(message.reply.plan);
     setSuggestions(message.reply.suggestions.slice(0, 4));
     setSelectedId(message.id);
-    setStartOnReturn(false);
+    setActiveDay(message.reply.dayIndex ?? 0);
     setDetailOpen(true);
   };
   const editPlan = (plan: Profile) => {
@@ -105,12 +106,23 @@ export function SupportDesk({ open, openForm = false, initialCity, initialDays, 
     setFormError('');
     setDetailOpen(false);
   };
-  const updateReturn = (next: Profile) => {
+  const updateDay = (next: Profile, dayIndex: number, editor: 'return' | 'start') => {
     if (!profile) return;
     const requested = selected?.reply.context.trip || supportTripDraftFromProfile(profile);
-    const reply = planSupportTrip({ ...requested, departure: next.departure, departureTime: next.departureTime, departureStation: next.departureStation, returnLogistics: next.returnLogistics });
-    focusReturn.current = Boolean(reply.plan);
-    addReply('更新返程接驳', reply, profile, true);
+    const question = editor === 'return' ? '更新返程接驳' : `重排第 ${dayIndex + 1} 天`;
+    const reply = planSupportTrip({
+      ...requested,
+      departure: next.departure, departureTime: next.departureTime, departureStation: next.departureStation,
+      returnLogistics: next.returnLogistics, dayStarts: next.dayStarts,
+    });
+    if (!reply.plan) {
+      addReply(question, { ...reply, context, actions: [] });
+      setSelectedId(selected?.id);
+      returnToChat();
+      return;
+    }
+    editorToFocus.current = editor;
+    addReply(question, { ...reply, dayIndex }, profile);
   };
   const chooseCity = (cityId?: string) => {
     setContext({ cityId });
@@ -172,9 +184,11 @@ export function SupportDesk({ open, openForm = false, initialCity, initialDays, 
       {profile && !formVisible && <aside className="support-detail" aria-label="行程详情">
         <div className="support-detail-bar"><button className="support-back-chat" onClick={returnToChat}><ArrowLeft size={16} />返回对话</button><span>这份行程</span><button onClick={() => editPlan(profile)}>调整条件</button><button className="support-close-detail" onClick={() => { setSelectedId(undefined); returnToChat(); }} aria-label="收起行程详情"><X size={17} /></button></div>
         <div ref={detail} tabIndex={-1} role="region" aria-label="具体行程内容" className="support-detail-scroll">
-          <SupportPlanPreview key={`preview-${selectedId}`} profile={profile} onUpdateReturn={updateReturn} initialDay={startOnReturn ? 'last' : undefined} />
+          <SupportPlanPreview key={`preview-${selectedId}`} profile={profile}
+            onUpdateReturn={next => updateDay(next, buildTrip(next).length - 1, 'return')}
+            onUpdateStart={(next, index) => updateDay(next, index, 'start')} dayIndex={activeDay} onChooseDay={setActiveDay} />
           <SupportPlanTools key={selectedId} profile={profile} previous={previous} onEdit={editPlan} />
-          <button className="support-open-full" onClick={() => onAction({ kind: 'plan', cityId: profile.cityId, profile, label: '保存与调整完整行程' })}>保存与调整完整行程<ArrowUpRight size={16} /></button>
+          <button className="support-open-full" onClick={() => onAction({ kind: 'plan', cityId: profile.cityId, profile, dayIndex: activeDay, label: '保存与调整完整行程' })}>保存与调整完整行程<ArrowUpRight size={16} /></button>
           <p className="support-detail-footnote">这份预览在当前页面保留。进入完整行程后，可保存到本浏览器。</p>
         </div>
       </aside>}

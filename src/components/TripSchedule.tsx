@@ -1,9 +1,11 @@
-import { useId, useState } from 'react';
+import { useId } from 'react';
 import { ArrowRight, BedDouble, Clock3, Footprints, Route, Utensils } from 'lucide-react';
 import { buildDaySchedule, groupLodging, scheduleDuration } from '../day-schedule';
+import { chapterKey, setDayStart } from '../day-starts';
 import type { PlannedDay, Profile } from '../planning';
 import { planDate } from '../travel';
 import { ReturnDayEditor } from './ReturnDayEditor';
+import { DayStartEditor } from './DayStartEditor';
 import './trip-schedule.css';
 
 const rowStyle = {
@@ -13,15 +15,17 @@ const rowStyle = {
   stay: { icon: BedDouble, label: '行李与住宿' },
 };
 
-export function TripSchedule({ days, profile, onUpdateReturn, initialDay }: {
-  days: PlannedDay[]; profile: Profile; onUpdateReturn: (profile: Profile) => void; initialDay?: 'last';
+export function TripSchedule({ days, profile, onUpdateReturn, onUpdateStart, dayIndex, onChooseDay }: {
+  days: PlannedDay[]; profile: Profile; onUpdateReturn?: (profile: Profile) => void;
+  onUpdateStart?: (profile: Profile, dayIndex: number) => void; dayIndex: number; onChooseDay: (index: number) => void;
 }) {
   const prefix = useId();
-  const [selected, setSelected] = useState(initialDay === 'last' ? days.length - 1 : 0);
+  const selected = Math.min(Math.max(dayIndex, 0), days.length - 1);
   const day = days[selected];
   if (!day) return null;
   const isLast = selected === days.length - 1;
   const schedule = buildDaySchedule(day, profile, days[selected - 1], isLast);
+  const key = chapterKey(day.cityId, day.originalIndex);
   const lodging = groupLodging(days);
   const date = planDate(profile.date, selected);
 
@@ -40,12 +44,12 @@ export function TripSchedule({ days, profile, onUpdateReturn, initialDay }: {
     {days.length > 1 && <div className="trip-schedule-tabs" role="tablist" aria-label="选择行程天数">
       {days.map((item, index) => <button
         type="button" key={index} role="tab" id={`${prefix}-day-${index}`}
-        aria-selected={selected === index} aria-controls={`${prefix}-day-panel`} aria-label={`第 ${index + 1} 天 · ${item.title}`}
-        tabIndex={selected === index ? 0 : -1} onClick={() => setSelected(index)} onKeyDown={event => {
+        aria-selected={selected === index} aria-controls={`${prefix}-day-panel`} aria-label={`第 ${index + 1} 天 · ${selected === index && schedule.title ? schedule.title : item.title}`}
+        tabIndex={selected === index ? 0 : -1} onClick={() => onChooseDay(index)} onKeyDown={event => {
           const next = event.key === 'ArrowRight' ? (index + 1) % days.length : event.key === 'ArrowLeft' ? (index + days.length - 1) % days.length : event.key === 'Home' ? 0 : event.key === 'End' ? days.length - 1 : -1;
           if (next >= 0) {
             event.preventDefault();
-            setSelected(next);
+            onChooseDay(next);
             document.getElementById(`${prefix}-day-${next}`)?.focus();
           }
         }}
@@ -54,12 +58,15 @@ export function TripSchedule({ days, profile, onUpdateReturn, initialDay }: {
     <div id={`${prefix}-day-panel`} role={days.length > 1 ? 'tabpanel' : undefined} aria-labelledby={days.length > 1 ? `${prefix}-day-${selected}` : undefined} className="trip-schedule-panel">
       <header className="trip-schedule-day">
         <span>第 {selected + 1} 天{date && ` · ${date}`}</span>
-        <h4>{day.title}</h4>
+        <h4>{schedule.title || day.title}</h4>
         <p>{schedule.headline}</p>
         <div><Clock3 size={16} /><strong>{schedule.start}</strong><span>{schedule.from}</span></div>
         {schedule.note && <p>{schedule.note}</p>}
+        {schedule.recommendedStart && onUpdateStart && <DayStartEditor key={key} suggested={schedule.recommendedStart} current={profile.dayStarts?.[key]} dayNumber={selected + 1} onChange={time => {
+          if (time !== profile.dayStarts?.[key]) onUpdateStart({ ...profile, dayStarts: setDayStart(profile.dayStarts, key, time) }, selected);
+        }} />}
       </header>
-      {day.afternoonReturn && <ReturnDayEditor day={day} profile={profile} onApply={onUpdateReturn} />}
+      {day.afternoonReturn && onUpdateReturn && <ReturnDayEditor day={day} profile={profile} onApply={onUpdateReturn} />}
       <ol className="trip-schedule-rows">
         {schedule.rows.map((row, index) => {
           const { icon: Icon, label } = rowStyle[row.kind];
@@ -79,8 +86,7 @@ export function TripSchedule({ days, profile, onUpdateReturn, initialDay }: {
       </ol>
       <details className="trip-schedule-notes">
         <summary>行前提醒与资料<ArrowRight size={15} /></summary>
-        <p>{day.tip}</p>
-        <p>{day.transport}</p>
+        {schedule.title ? <p>按上方重排后的路线核对预约、开放入口与返程交通。</p> : <><p>{day.tip}</p><p>{day.transport}</p></>}
         {schedule.sources.length > 0 && <ul>{schedule.sources.map(source => <li key={source.url}><a href={source.url} target="_blank" rel="noreferrer">{source.title}</a></li>)}</ul>}
       </details>
     </div>

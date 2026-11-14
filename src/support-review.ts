@@ -1,6 +1,7 @@
 import { cityById } from './data';
 import { arrivalLabels, getDepartureLabel, mobilityLabels, buildTrip, estimateBudget, groupLabels, interestLabels, budgetLabels, templates, type PlannedDay, type Profile } from './planning';
 import { returnAreaLabel } from './return-timing';
+import { chapterKey } from './day-starts';
 import type { SupportTripDraft } from './support';
 
 export type SupportPlanComparison = {
@@ -57,6 +58,11 @@ export function compareSupportPlans(previous: Profile, current: Profile): Suppor
     ['返程落脚片区', returnAreaLabel(beforeLogistics?.area, beforeDays.at(-1)?.cityId || previous.cityId) || '随行程安排', returnAreaLabel(afterLogistics?.area, afterDays.at(-1)?.cityId || current.cityId) || '随行程安排'],
     ['地图车程', minutesLabel(beforeLogistics?.travelMinutes), minutesLabel(afterLogistics?.travelMinutes)],
     ['取行李时间', minutesLabel(beforeLogistics?.luggageMinutes), minutesLabel(afterLogistics?.luggageMinutes)],
+    ...afterDays.flatMap((day, index) => {
+      const key = chapterKey(day.cityId, day.originalIndex);
+      const before = previous.dayStarts?.[key], after = current.dayStarts?.[key];
+      return before !== after ? [[`第 ${index + 1} 天出门`, before || '按路线建议', after || '按路线建议']] : [];
+    }),
     ['体力限制', mobilityLabels[previous.mobility || 'standard'], mobilityLabels[current.mobility || 'standard']],
     ['目标预算', previous.budgetLimit ? (previous.budgetScope === 'per-person' ? '每人' : '全团') + ' ¥' + previous.budgetLimit : '未设置', current.budgetLimit ? (current.budgetScope === 'per-person' ? '每人' : '全团') + ' ¥' + current.budgetLimit : '未设置'],
     ['补充想法', previous.note.trim() || '未填写', current.note.trim() || '未填写'],
@@ -84,6 +90,7 @@ export function supportTripDraftFromProfile(profile: Profile): SupportTripDraft 
     ...(profile.departureTime ? { departureTime: profile.departureTime } : {}),
     ...(profile.departureStation ? { departureStation: profile.departureStation } : {}),
     ...(profile.returnLogistics ? { returnLogistics: { ...profile.returnLogistics } } : {}),
+    ...(profile.dayStarts ? { dayStarts: { ...profile.dayStarts } } : {}),
     ...(profile.mobility ? { mobility: profile.mobility } : {}),
     ...(profile.budgetLimit !== undefined ? { budgetLimit: profile.budgetLimit, budgetScope: profile.budgetScope } : {}),
   };

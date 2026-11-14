@@ -9,7 +9,11 @@ import { FoodSuggestions, StaySuggestions } from './PracticalDetails';
 import { TripSchedule } from './TripSchedule';
 import { Button } from './ui';
 
-export function PlannedTrip({ profile, onCopy, onSave, onEdit, onUpdateReturn, initialDay }: { profile: Profile; onCopy: (text: string) => void; onSave: () => boolean; onEdit: () => void; onUpdateReturn: (profile: Profile) => void; initialDay?: 'last' }) {
+export function PlannedTrip({ profile, onCopy, onSave, onEdit, onUpdateReturn, onUpdateStart, dayIndex, onChooseDay }: {
+  profile: Profile; onCopy: (text: string) => void; onSave: () => boolean; onEdit: () => void;
+  onUpdateReturn: (profile: Profile) => void; onUpdateStart: (profile: Profile, dayIndex: number) => void;
+  dayIndex: number; onChooseDay: (dayIndex: number) => void;
+}) {
   const [tab, setTab] = useState('route');
   const [saveState, setSaveState] = useState('');
   const [checked, setChecked] = useState<string[]>([]);
@@ -49,7 +53,7 @@ export function PlannedTrip({ profile, onCopy, onSave, onEdit, onUpdateReturn, i
     }} key={item.id} onClick={() => selectTab(item.id)}><item.icon size={16} /><span>{item.label}<small aria-hidden="true">{item.count}</small></span></button>)}</div>
     <div ref={panel} role="tabpanel" id={'plan-panel-' + tab} aria-labelledby={'plan-tab-' + tab} className="trip-tab-panel">
       {tab === 'route' && <>
-        <TripSchedule days={days} profile={profile} onUpdateReturn={onUpdateReturn} initialDay={initialDay} />
+        <TripSchedule days={days} profile={profile} onUpdateReturn={onUpdateReturn} onUpdateStart={onUpdateStart} dayIndex={dayIndex} onChooseDay={onChooseDay} />
         {issues.length > 0 && <details className="trip-reading-note trip-reading-details">
           <summary><strong>行前核对</strong><span>{issues.length} 项</span><ChevronDown size={16} /></summary>
           <ul className="mt-2 list-disc space-y-1 pl-4">{issues.map(issue => <li key={issue}>{issue}</li>)}</ul>

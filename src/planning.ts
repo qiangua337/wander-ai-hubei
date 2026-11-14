@@ -5,6 +5,7 @@ import { routeDetails, type RouteEffort } from './data/route-details';
 import { dayJourneys } from './data/day-journeys';
 import { clockWindow, formatClock, manualTravelBuffer, normalizeClockInput, normalizeReturnLogistics, normalizeStation, parseClock, returnAreaLabel, returnBreakfastMinutes, returnBreakfastStart, type DepartureWindow, type ReturnLogistics, type StationSchedule } from './return-timing';
 import { buildDaySchedule, renderScheduleText } from './day-schedule';
+import { chapterKey, normalizeDayStarts, type DayStarts } from './day-starts';
 import { planDate, selectPlanDays, validDate, type Pace } from './travel';
 export { validDate } from './travel';
 
@@ -15,6 +16,7 @@ export type Profile = {
   pace: Pace; note: string;
   origin?: string; arrival?: 'full-day' | 'morning' | 'afternoon' | 'evening' | 'previous-night';
   departure?: DepartureWindow; departureTime?: string; departureStation?: string; returnLogistics?: ReturnLogistics;
+  dayStarts?: DayStarts;
   mobility?: 'standard' | 'gentle'; budgetLimit?: number; budgetScope?: 'total' | 'per-person';
 };
 export type PlannedDay = TripDay & {
@@ -72,6 +74,10 @@ export function normalizeProfile(value: unknown, fallback = defaultProfile()): P
   if (station) optional.departureStation = station;
   const returnLogistics = normalizeReturnLogistics(v.returnLogistics === undefined ? fallback.returnLogistics : v.returnLogistics, template?.segments.at(-1)?.cityId || cityId);
   if (returnLogistics) optional.returnLogistics = returnLogistics;
+  const segments = template?.segments || [{ cityId, indices }];
+  const chapters = new Set(segments.flatMap(segment => segment.indices.map(index => chapterKey(segment.cityId, index))));
+  const dayStarts = normalizeDayStarts(v.dayStarts === undefined ? fallback.dayStarts : v.dayStarts, chapters);
+  if (dayStarts) optional.dayStarts = dayStarts;
   const mobility = v.mobility === undefined ? fallback.mobility : v.mobility;
   if (mobility === 'standard' || mobility === 'gentle') optional.mobility = mobility;
   const budgetLimit = v.budgetLimit === undefined ? fallback.budgetLimit : v.budgetLimit;
@@ -369,7 +375,10 @@ export function getTripIssues(profile: Profile): string[] {
   const high = days.filter(day => day.effort === 'high');
   if (profile.mobility === 'gentle' && high.length) issues.push(`这份路线仍包含高强度山地章节：${high.map(day => day.title).join('、')}；不满足减少高强度山地的条件，请换章节或改用单城路线。`);
   if (profile.mobility === 'gentle') issues.push('低强度与常规步行是编辑分类，仍可能有台阶、坡道和长距离步行；不代表已核实无障碍或全程可用推车。');
-  if (profile.interest === 'nature' && days.length && !days.some(day => !day.sightseeingRemoved && ['nature', 'water'].includes(practical[day.cityId].kinds[day.originalIndex]))) issues.push('现有已选章节没有对应的山水自然主线，玩法偏好尚未充分满足；可换城市或调整章节，不把文化或温泉章节当成已安排的山地游。');
+  if (profile.interest === 'nature' && days.length && !days.some((day, index) => !day.sightseeingRemoved &&
+    ['nature', 'water'].includes(practical[day.cityId].kinds[day.originalIndex]) && !wasVisitSkipped(days, index, profile))) {
+    issues.push('现有已选章节没有对应的山水自然主线，玩法偏好尚未充分满足；可换城市或调整章节，不把文化或温泉章节当成已安排的山地游。');
+  }
   if (!timingConflict && profile.departure && profile.departure !== 'flexible') {
     const last = days.at(-1);
     const activity = last?.returnMorning ? '上午是同片区短逛，可视接驳时间缩短。' : '';
@@ -392,6 +401,11 @@ export function getTripIssues(profile: Profile): string[] {
 export function tripTitle(profile: Profile): string {
   return templates.find(t => t.id === profile.template)?.title || `${cityById[profile.cityId].shortName} · 我的 ${profile.indices.length} 天旅行`;
 }
+function wasVisitSkipped(days: PlannedDay[], index: number, profile: Profile): boolean {
+  const day = days[index];
+  return Boolean(profile.dayStarts?.[chapterKey(day.cityId, day.originalIndex)])
+    && Boolean(buildDaySchedule(day, profile, days[index - 1], index === days.length - 1).mainVisitSkipped);
+}
 export function estimateBudget(profile: Profile, dayCount: number) {
   const rates = { value: { room: [180, 320], meal: [60, 100] }, comfort: { room: [320, 550], meal: [100, 160] }, boutique: { room: [550, 900], meal: [160, 240] } }[profile.budget];
   const arrivalNight = includesArrivalNight(profile);
@@ -399,8 +413,11 @@ export function estimateBudget(profile: Profile, dayCount: number) {
   const stay = rates.room.map(rate => rate * nights * rooms);
   const meals = rates.meal.map(rate => rate * profile.party * dayCount);
   const transport = (profile.mode === 'drive' ? [160, 260].map(rate => rate * vehicles) : [40, 90].map(rate => rate * profile.party)).map(rate => rate * dayCount);
-  const finalDay = profile.departure && profile.departure !== 'flexible' ? buildTrip(profile).at(-1) : undefined;
-  const ticketDays = Math.max(0, dayCount - (finalDay?.sightseeingRemoved ? 1 : 0));
+  const scheduledReturn = profile.departure && profile.departure !== 'flexible';
+  const days = scheduledReturn || profile.dayStarts ? buildTrip(profile) : [];
+  const noTicketDays = days.filter((day, index) => (scheduledReturn && index === days.length - 1 && day.sightseeingRemoved)
+    || wasVisitSkipped(days, index, profile)).length;
+  const ticketDays = Math.max(0, dayCount - noTicketDays);
   const tickets = [100, 250].map(rate => rate * profile.party * ticketDays);
   return { nights, rooms, arrivalNight, ticketDays, roomRange: rates.room, stay, meals, transport, tickets, total: [0, 1].map(i => stay[i] + meals[i] + transport[i] + tickets[i]) };
 }
@@ -422,9 +439,12 @@ export function formatDetailedPlan(profile: Profile): string {
     const lodging = isLast && profile.departure && profile.departure !== 'flexible'
       ? `返程安排：${getDepartureLabel(profile)}，当晚无住宿预留。`
       : `当晚住宿：${isLast ? '返程日。如延住可参考 ' : ''}${day.overnight}`;
-    lines.push(`D${index + 1} ${planDate(profile.date, index)} | ${day.title}`, `所在片区：${day.region} · ${day.effort === 'high' ? '较高体力' : day.effort === 'moderate' ? '常规步行' : '低强度编辑建议'}`, ...renderScheduleText(schedule),
+    lines.push(`D${index + 1} ${planDate(profile.date, index)} | ${schedule.title || day.title}`,
+      ...(schedule.mainVisitSkipped ? [`所在片区：${schedule.from}周边`] : [`所在片区：${day.region} · ${day.effort === 'high' ? '较高体力' : day.effort === 'moderate' ? '常规步行' : '低强度编辑建议'}`]),
+      ...renderScheduleText(schedule),
       ...(day.stationSchedule ? [`去站安排：${day.stationSchedule.leaveForStationBy} 前出发，${day.stationSchedule.arriveBy} 前到站。`] : []),
-      `交通补充：${day.transport}`, lodging, `提醒：${day.tip}`, ...schedule.sources.map(source => `${source.title}：${source.url}`), '');
+      ...(!schedule.title ? [`交通补充：${day.transport}`, `提醒：${day.tip}`] : []),
+      lodging, ...schedule.sources.map(source => `${source.title}：${source.url}`), '');
   });
   cityIds.forEach(id => { const city = cityById[id], info = practical[id]; lines.push(`【${city.shortName} · 住宿片区】`, ...info.stays.map(stay => `${stay.area}｜${stay.bestFor}。${stay.reason} ${stay.check}`), `【${city.shortName} · 吃什么、在哪吃】`, ...info.food.map(food => `${food.area}：${food.order} ${food.timing}`), `到达：${city.arrival}`, `季节：${city.season}`, '资料来源：', ...city.sources.map(source => `${source.title}：${source.url}`), ''); });
   const issues = getTripIssues(profile);
@@ -439,6 +459,7 @@ export function sharePlanUrl(profile: Profile): string {
   if (profile.departure) query.set('departure', profile.departure);
   if (profile.departureTime) query.set('departureTime', profile.departureTime);
   if (profile.departureStation) query.set('departureStation', profile.departureStation);
+  for (const [key, time] of Object.entries(normalizeDayStarts(profile.dayStarts) || {})) query.append('start', `${key}@${time}`);
   const logistics = profile.returnLogistics;
   if (logistics?.area) query.set('returnArea', logistics.area);
   if (logistics?.travelMinutes !== undefined) query.set('returnTravel', String(logistics.travelMinutes));
@@ -451,5 +472,6 @@ export function sharePlanUrl(profile: Profile): string {
 export function parsePlanUrl(search: string): Profile | undefined {
   const query = new URLSearchParams(search);
   if (!query.has('plan')) return undefined;
-  return normalizeProfile({ template: query.get('plan'), cityId: query.get('city'), indices: query.get('days')?.split(',').filter(Boolean).map(Number), date: query.get('date'), party: Number(query.get('people')), group: query.get('group'), mode: query.get('mode'), budget: query.get('budget'), interest: query.get('interest'), pace: query.get('pace'), ...(query.has('origin') ? { origin: query.get('origin') } : {}), ...(query.has('arrival') ? { arrival: query.get('arrival') } : {}), ...(query.has('departure') ? { departure: query.get('departure') } : {}), departureTime: query.get('departureTime'), departureStation: query.get('departureStation'), returnLogistics: { area: query.get('returnArea'), travelMinutes: query.get('returnTravel'), luggageMinutes: query.get('returnLuggage') }, ...(query.has('mobility') ? { mobility: query.get('mobility') } : {}), ...(query.has('budgetLimit') ? { budgetLimit: Number(query.get('budgetLimit')) } : {}), ...(query.has('budgetScope') ? { budgetScope: query.get('budgetScope') } : {}) });
+  const dayStarts = Object.fromEntries(query.getAll('start').map(value => value.split('@', 2)).filter(parts => parts.length === 2));
+  return normalizeProfile({ template: query.get('plan'), cityId: query.get('city'), indices: query.get('days')?.split(',').filter(Boolean).map(Number), date: query.get('date'), party: Number(query.get('people')), group: query.get('group'), mode: query.get('mode'), budget: query.get('budget'), interest: query.get('interest'), pace: query.get('pace'), ...(query.has('origin') ? { origin: query.get('origin') } : {}), ...(query.has('arrival') ? { arrival: query.get('arrival') } : {}), ...(query.has('departure') ? { departure: query.get('departure') } : {}), departureTime: query.get('departureTime'), departureStation: query.get('departureStation'), dayStarts, returnLogistics: { area: query.get('returnArea'), travelMinutes: query.get('returnTravel'), luggageMinutes: query.get('returnLuggage') }, ...(query.has('mobility') ? { mobility: query.get('mobility') } : {}), ...(query.has('budgetLimit') ? { budgetLimit: Number(query.get('budgetLimit')) } : {}), ...(query.has('budgetScope') ? { budgetScope: query.get('budgetScope') } : {}) });
 }
