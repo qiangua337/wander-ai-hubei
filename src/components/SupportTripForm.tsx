@@ -7,8 +7,9 @@ import type { SupportTripDraft } from '../support';
 import { SelectField, InputField } from './ui';
 import './support-trip-form.css';
 
-export function SupportTripForm({ draft, initialCity, initialParty, initialDate, onSubmit, onCancel }: {
+export function SupportTripForm({ draft, initialCity, initialParty, initialDate, error: planError, onClearError, onSubmit, onCancel }: {
   draft?: SupportTripDraft; initialCity?: string; initialParty: number; initialDate: string;
+  error?: string; onClearError: () => void;
   onSubmit: (draft: SupportTripDraft, question: string) => void; onCancel: () => void;
 }) {
   const selectedTemplate = templates.find(template => draft?.cityIds?.length === template.segments.length && template.segments.every(segment => draft.cityIds?.includes(segment.cityId)));
@@ -44,7 +45,7 @@ export function SupportTripForm({ draft, initialCity, initialParty, initialDate,
     const nextCapacity = nextTemplate ? nextTemplate.segments.reduce((sum, segment) => sum + segment.indices.length, 0) : cityById[id]?.days.length || 4;
     setDays(previous => nextTemplate ? nextCapacity : Math.min(previous, nextCapacity));
   };
-  return <form className="support-trip-form" onSubmit={event => {
+  return <form className="support-trip-form" onChange={() => { if (planError) onClearError(); }} onSubmit={event => {
     event.preventDefault();
     if (!route) { setError('先选一座城市或经典路线。'); return; }
     if (date && !validDate(date)) { setError('日期请填写有效的年-月-日，也可以先留空。'); return; }
@@ -90,7 +91,7 @@ export function SupportTripForm({ draft, initialCity, initialParty, initialDate,
     <div className="support-trip-pair"><label>和谁一起<SelectField aria-label="小游同行人群" value={group} onChange={event => { const value = event.target.value as Profile['group']; setGroup(value); if (value === 'solo') setParty(1); if (value === 'family' || value === 'senior') { if (party === 1) setParty(2); setPace('relaxed'); } }}>{Object.entries(groupLabels).map(([value, label]) => <option key={value} value={value}>{label}</option>)}</SelectField></label><label>怎么出行<SelectField aria-label="小游交通方式" value={mode} onChange={event => setMode(event.target.value as Profile['mode'])}><option value="public">公共交通＋接驳</option><option value="drive">自驾出行</option></SelectField></label></div>
     {template && <p className="support-trip-hint">跨城路线保留固定天数与景点主线，仍可调整同行、交通、预算和节奏。</p>}
     <details className="support-trip-more"><summary>再选节奏、预算与日期</summary><div className="support-trip-pair"><label>旅行节奏<SelectField aria-label="小游旅行节奏" value={pace} onChange={event => setPace(event.target.value as Profile['pace'])}><option value="classic">经典串游</option><option value="relaxed">轻松慢游</option></SelectField></label><label>预算档位<SelectField aria-label="小游预算档位" value={budget} onChange={event => setBudget(event.target.value as Profile['budget'] | 'auto')}><option value="auto">按目标自动匹配</option>{Object.entries(budgetLabels).map(([value, label]) => <option key={value} value={value}>{label}</option>)}</SelectField></label></div><div className="support-trip-pair"><label>目标预算（元，可留空）<InputField aria-label="小游目标预算" inputMode="numeric" value={budgetLimit} maxLength={7} onChange={event => { setBudgetLimit(event.target.value); setError(''); }} placeholder="例如：2000" /></label><label>预算口径<SelectField aria-label="小游预算口径" value={budgetScope} onChange={event => setBudgetScope(event.target.value as NonNullable<Profile['budgetScope']>)}><option value="total">全团合计</option><option value="per-person">每人</option></SelectField></label></div><p className="support-trip-hint">目标与规划预留比较，不含往返/跨城大交通、租车等费用。</p><label>出发日期（可留空）<InputField aria-label="小游出发日期" value={date} onChange={event => { setDate(event.target.value); setError(''); }} placeholder="年-月-日" maxLength={10} /></label></details>
-    {error && <p role="alert" className="support-trip-error">{error}</p>}
+    {(error || planError) && <p role="alert" className="support-trip-error">{error || planError}</p>}
     <div className="support-trip-submit"><button type="button" onClick={onCancel}>先继续问问</button><button type="submit">生成吃住行方案<ArrowRight size={15} /></button></div>
     <p className="support-trip-hint">依据本站路线组合，不自动预订。单城天数按已有章节选择。</p>
   </form>;

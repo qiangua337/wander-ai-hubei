@@ -44,6 +44,8 @@ try {
   assert(findDestinations('all', '', 'nature', []).every(place => place.category === 'nature'));
   assert.deepEqual(findDestinations('all', '', 'saved', ['enshi', 'shennongjia', 'unknown']).map(place => place.id), ['enshi', 'shennongjia']);
   assert.equal(findDestinations('all', '不存在的景点xyz', 'all', []).length, 0);
+  assert.equal(findDestinations('all', '宜昌、西陵峡', 'all', [])[0]?.id, 'xiling-gorge');
+  assert.equal(findDestinations('all', '黄鹤楼', 'all', [])[0]?.id, 'wuhan');
   const sortIds = ['wudang', 'hubei-museum', 'enshi', 'wuhan'];
   const sortInput = sortIds.map(id => destinations.find(place => place.id === id));
   assert(sortInput.every(Boolean), 'Sorting fixtures must refer to real destinations.');

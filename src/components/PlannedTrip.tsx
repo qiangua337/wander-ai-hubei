@@ -1,5 +1,5 @@
 import { useRef, useState } from 'react';
-import { ArrowRight, ArrowUpRight, BedDouble, Bookmark, Check, CircleCheck, Copy, Download, Pencil, Route, Share2, Utensils, Wallet } from 'lucide-react';
+import { ArrowRight, ArrowUpRight, BedDouble, Bookmark, ChevronDown, CircleCheck, Copy, Download, Pencil, Route, Share2, Utensils, Wallet } from 'lucide-react';
 import { cityById } from '../data';
 import { arrivalLabels, getDepartureLabel, mobilityLabels, getTripIssues, buildTrip, budgetLabels, estimateBudget, formatDetailedPlan, groupLabels, sharePlanUrl, tripTitle, type Profile } from '../planning';
 import { downloadPlan } from '../travel';
@@ -17,8 +17,8 @@ export function PlannedTrip({ profile, onCopy, onSave, onEdit, onUpdateReturn }:
   const lastDay = days.at(-1);
   const returnLabel = getDepartureLabel(profile);
   const returnScheduled = profile.departure && profile.departure !== 'flexible';
+  const issues = getTripIssues(profile);
   const tabs = [{ id: 'route', label: '每日行程', count: days.length + ' 天', icon: Route }, { id: 'stay', label: '住在哪里', count: budget.nights + ' 晚', icon: BedDouble }, { id: 'food', label: '当地美食', count: cityIds.length + ' 城', icon: Utensils }, { id: 'budget', label: '预算预留', count: profile.party + ' 人', icon: Wallet }];
-  const text = formatDetailedPlan(profile);
   const selectTab = (id: string) => {
     setTab(id);
     window.requestAnimationFrame(() => panel.current?.scrollIntoView({ behavior: 'smooth', block: 'start' }));
@@ -31,7 +31,6 @@ export function PlannedTrip({ profile, onCopy, onSave, onEdit, onUpdateReturn }:
   ];
   return <div aria-label="我的具体旅行方案" className="planned-trip min-w-0">
     <header className="trip-summary">
-      <p className="trip-summary-kicker"><Check size={15} />一份完整的湖北行程</p>
       <h3>{tripTitle(profile)}</h3>
       <div className="trip-summary-route" aria-label="行程城市">{cityIds.map((id, index) => <span key={id}>{index > 0 && <ArrowRight size={12} />}<strong>{cityById[id].shortName}</strong><small>{days.filter(day => day.cityId === id).length} 天</small></span>)}</div>
       <p className="trip-summary-conditions">{profile.date || '日期待定'} · {profile.party} 人 · {groupLabels[profile.group]} · {profile.mode === 'drive' ? '自驾出行' : '公共交通＋接驳'} · {profile.pace === 'relaxed' ? '轻松慢游' : '经典串游'}</p>
@@ -50,13 +49,13 @@ export function PlannedTrip({ profile, onCopy, onSave, onEdit, onUpdateReturn }:
     <div ref={panel} role="tabpanel" id={'plan-panel-' + tab} aria-labelledby={'plan-tab-' + tab} className="trip-tab-panel">
       {tab === 'route' && <>
         {lastDay?.afternoonReturn && <ReturnDayEditor day={lastDay} profile={profile} onApply={onUpdateReturn} />}
-        {getTripIssues(profile).length > 0 && <div className="trip-reading-note"><strong>先核对这份安排的条件</strong><ul className="mt-2 list-disc space-y-1 pl-4">{getTripIssues(profile).map(issue => <li key={issue}>{issue}</li>)}</ul></div>}
-        {budget.arrivalNight && <p className="trip-reading-note">所选章节从完整游玩日开始，建议提前一晚抵达，住宿预算已加这一晚。若当天才到，首日上午改作交通并减少景点。</p>}
-        <p className="trip-panel-description">每天围绕一片区域走。跨城日把上午留给交通；到得晚，就缩减当天下午的活动。</p>
         <TripDays days={days.map((day, i) => i < days.length - 1 ? day : {
           ...day, stayLabel: '返程安排', overnight: returnScheduled ? `${returnLabel}，当晚无住宿预留。` : `返程时段待定。如需延住，可参考${day.overnight}。`,
         })} date={profile.date} />
-        <div className="trip-reading-note">每日安排与接驳是编辑建议，车程和班次没有实时计算。自选不连续章节时，住宿与第二天的出发地要再次核对。</div>
+        {issues.length > 0 && <details className="trip-reading-note trip-reading-details">
+          <summary><strong>行前核对</strong><span>{issues.length} 项</span><ChevronDown size={16} /></summary>
+          <ul className="mt-2 list-disc space-y-1 pl-4">{issues.map(issue => <li key={issue}>{issue}</li>)}</ul>
+        </details>}
         {profile.note && <p className="trip-personal-note"><strong>我的备注：</strong>{profile.note}</p>}
       </>}
       {tab === 'stay' && <div className="space-y-8">
@@ -82,6 +81,6 @@ export function PlannedTrip({ profile, onCopy, onSave, onEdit, onUpdateReturn }:
     </div>
     <section aria-label="出发前核对清单" className="trip-departure-checks"><div><CircleCheck size={19} /><h4>出发前，再确认这几件事</h4><span>{checked.length} / {checks.length}</span></div><p>把预订和接驳核对好，路上更从容。</p><ul>{checks.map(item => <li key={item.id}><label><input type="checkbox" checked={checked.includes(item.id)} onChange={() => setChecked(previous => previous.includes(item.id) ? previous.filter(id => id !== item.id) : [...previous, item.id])} /><span><strong>{item.title}</strong><small>{item.detail}</small></span></label></li>)}</ul><small>勾选仅作本次检查，不写入保存、分享或下载清单。</small></section>
     <details className="trip-source-links"><summary>路线资料与预订前核对</summary><p>景点事实参考官方资料；片区选择、餐食组合、时间与预算为编辑规划建议，未查询实时库存或车程。</p><div>{cityIds.flatMap(id => cityById[id].sources).map(source => <a key={source.url} href={source.url} target="_blank" rel="noreferrer">{source.title}<ArrowUpRight size={12} /></a>)}</div></details>
-    <div className="trip-takeaway"><Button aria-label="复制清单" onClick={() => onCopy(text)} variant="neutral" className="whitespace-nowrap px-2 text-xs"><Copy size={15} /><span>复制<span className="hidden sm:inline">清单</span></span></Button><Button aria-label="下载行程" onClick={() => downloadPlan(text, '湖北具体')} className="whitespace-nowrap px-2 text-xs"><Download size={15} /><span>下载<span className="hidden sm:inline">行程</span></span></Button><Button aria-label="分享链接" onClick={() => onCopy(sharePlanUrl(profile))} variant="neutral" className="whitespace-nowrap px-2 text-xs"><Share2 size={15} /><span>分享<span className="hidden sm:inline">链接</span></span></Button></div>
+    <div className="trip-takeaway"><Button aria-label="复制清单" onClick={() => onCopy(formatDetailedPlan(profile))} variant="neutral" className="whitespace-nowrap px-2 text-xs"><Copy size={15} /><span>复制<span className="hidden sm:inline">清单</span></span></Button><Button aria-label="下载行程" onClick={() => downloadPlan(formatDetailedPlan(profile), '湖北具体')} className="whitespace-nowrap px-2 text-xs"><Download size={15} /><span>下载<span className="hidden sm:inline">行程</span></span></Button><Button aria-label="分享链接" onClick={() => onCopy(sharePlanUrl(profile))} variant="neutral" className="whitespace-nowrap px-2 text-xs"><Share2 size={15} /><span>分享<span className="hidden sm:inline">链接</span></span></Button></div>
   </div>;
 }

@@ -1,15 +1,12 @@
-import { useId, useState } from 'react';
+import { useState } from 'react';
 import { ArrowUpRight, BedDouble, MapPin, TrainFront, Utensils } from 'lucide-react';
-import { cityById, cityPhotos } from '../data';
+import { cities, cityById, cityPhotos } from '../data';
 import { practical } from '../data/practical';
-import { Button } from './ui';
+import { Button, SelectField } from './ui';
 
-const lifeCities = ['wuhan', 'yichang', 'enshi'] as const;
-type LifeCity = typeof lifeCities[number];
-
-export function TravelLife({ onExplore, onPlan }: { onExplore: (cityId: string) => void; onPlan: (cityId: string) => void }) {
-  const [cityId, setCityId] = useState<LifeCity>('wuhan');
-  const prefix = useId();
+export function TravelLife({ fallbackCity, onExplore, onPlan }: { fallbackCity: string; onExplore: (cityId: string) => void; onPlan: (cityId: string) => void }) {
+  const [chosenCity, setChosenCity] = useState('');
+  const cityId = chosenCity || (Object.hasOwn(cityById, fallbackCity) ? fallbackCity : 'wuhan');
   const city = cityById[cityId];
   const photo = cityPhotos[cityId];
   const stay = practical[cityId].stays[0];
@@ -18,19 +15,12 @@ export function TravelLife({ onExplore, onPlan }: { onExplore: (cityId: string) 
   return <section id="travel-life" aria-labelledby="life-title" className="life-section section-space">
     <div className="page-width">
       <div className="section-heading">
-        <div><p className="eyebrow">旅途里的日常</p><h2 id="life-title" className="section-title">住得顺路，吃得地道。</h2></div>
-        <p className="section-aside">一晚安稳的落脚处，一顿合胃口的饭。<br />让行程里的每一天，都有着落。</p>
+        <div><h2 id="life-title" className="section-title">湖北吃住交通指南</h2><p className="section-detail">住宿片区、地方味道和到达方式，按城市查。</p></div>
+        <label className="life-city-select"><span><MapPin size={15} />切换城市</span><SelectField aria-label="吃住指南城市" value={cityId} onChange={event => setChosenCity(event.target.value)}>{cities.map(item => <option value={item.id} key={item.id}>{item.shortName}</option>)}</SelectField></label>
       </div>
 
-      <div role="tablist" aria-label="吃住行城市选择" className="life-tabs">
-        {lifeCities.map((id, index) => <button key={id} type="button" role="tab" id={`${prefix}-tab-${id}`} aria-controls={`${prefix}-panel`} aria-selected={cityId === id} tabIndex={cityId === id ? 0 : -1} onClick={() => setCityId(id)} onKeyDown={event => {
-          const next = event.key === 'ArrowRight' ? (index + 1) % lifeCities.length : event.key === 'ArrowLeft' ? (index + lifeCities.length - 1) % lifeCities.length : event.key === 'Home' ? 0 : event.key === 'End' ? lifeCities.length - 1 : -1;
-          if (next >= 0) { event.preventDefault(); setCityId(lifeCities[next]); document.getElementById(`${prefix}-tab-${lifeCities[next]}`)?.focus(); }
-        }}>{cityById[id].shortName}</button>)}
-      </div>
-
-      <div id={`${prefix}-panel`} role="tabpanel" aria-labelledby={`${prefix}-tab-${cityId}`} className="life-panel">
-        {photo?.filename && <figure className="life-photo"><img key={cityId} src={`/images/${photo.filename}`} alt={photo.alt || photo.subject} width="800" height="1000" loading="lazy" /><figcaption><MapPin size={14} /><span>{city.shortName} · {photo.subject}<small>城市印象</small></span></figcaption></figure>}
+      <div role="region" aria-label={`${city.shortName}吃住交通`} className={'life-panel' + (photo?.filename ? ' has-photo' : '')}>
+        {photo?.filename && <figure className="life-photo"><img key={cityId} src={cityId === 'enshi' ? '/images/enshi-card.webp' : cityId === 'yichang' ? '/images/xiling-cover-768.webp' : `/images/${photo.filename}`} alt={photo.alt || photo.subject} width="800" height="1000" loading="lazy" /><figcaption><MapPin size={14} />{city.shortName} · {photo.subject}</figcaption></figure>}
         <div className="life-content">
           <div className="life-notes">
             <article className="life-note">

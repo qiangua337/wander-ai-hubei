@@ -78,8 +78,7 @@
 .planner-preview-promise strong { font-size: 13px; font-weight: 500; }
 .planner-preview-promise span { display: block; margin-top: 6px; color: var(--color-muted); font-size: 12px; line-height: 1.8; }
 .trip-summary { padding: 28px; background: var(--color-pine-deep); color: white; }
-.trip-summary-kicker { display: flex; align-items: center; gap: 8px; color: var(--color-seafoam); font-size: 12px; }
-.trip-summary > h3 { margin-top: 14px; font-size: 28px; font-weight: 500; line-height: 1.5; }
+.trip-summary > h3 { font-size: 28px; font-weight: 600; line-height: 1.4; }
 .trip-summary-route { display: flex; flex-wrap: wrap; gap: 12px; margin-top: 18px; }
 .trip-summary-route > span { display: inline-flex; align-items: center; gap: 8px; }
 .trip-summary-route strong { font-size: 13px; font-weight: 500; }
@@ -107,6 +106,14 @@
 .trip-reading-note:first-child { margin-top: 0; }
 .trip-reading-note > strong { color: var(--color-pine); font-size: 14px; font-weight: 500; }
 .trip-reading-note > p { margin-top: 7px; }
+.trip-reading-details > summary { display:flex; min-height:28px; align-items:center; gap:8px; cursor:pointer; }
+.trip-reading-details > summary > strong { color:var(--color-ink); font-size:13px; }
+.trip-reading-details > summary > svg { margin-left:auto; color:var(--color-pine); }
+.trip-reading-details[open] > summary > svg { transform:rotate(180deg); }
+.trip-day-jumps { display:flex; flex-wrap:wrap; gap:6px; }
+.trip-day-jumps button { min-height:40px; padding:4px 10px; border:1px solid var(--color-line); border-radius:6px; color:var(--color-pine); font-size:12px; font-weight:550; }
+.trip-day-jumps button:hover { background:var(--color-sage); }
+.trip-tab-panel > section[aria-label="分日行程"]:first-child { margin-top:0; }
 .trip-personal-note { margin-top: 18px; border: 1px solid var(--color-line); border-radius: 8px; padding: 16px; font-size: 13px; line-height: 1.9; }
 .trip-content-title { margin-bottom: 16px; font-size: 16px; font-weight: 500; }
 .trip-night-list { border-top: 1px solid var(--color-line); }

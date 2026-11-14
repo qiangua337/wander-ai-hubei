@@ -4,8 +4,8 @@
 
 | 文件 | 内容 | 作者 / 署名 | 来源 | 许可 |
 | --- | --- | --- | --- | --- |
-| `public/images/xiling.jpg` | 西陵峡 · 灯影峡 | Neil Young | [原图](https://commons.wikimedia.org/wiki/File:Dengying_Gorge_of_Yangtze_River.jpg) | [CC BY-SA 2.0](https://creativecommons.org/licenses/by-sa/2.0/) |
-| `public/images/enshi.jpg` | 恩施大峡谷 | 作者未署名 / Wikimedia Commons | [原图](https://commons.wikimedia.org/wiki/File:Enshi_grand_canyon.jpg) | [CC0](https://creativecommons.org/publicdomain/zero/1.0/) |
+| `public/images/xiling.jpg`、`xiling-cover-768.webp`、`xiling-cover-1600.webp` | 西陵峡 · 灯影峡。WebP 版由原站内图片缩放转码。 | Neil Young | [原图](https://commons.wikimedia.org/wiki/File:Dengying_Gorge_of_Yangtze_River.jpg) | [CC BY-SA 2.0](https://creativecommons.org/licenses/by-sa/2.0/) |
+| `public/images/enshi.jpg`、`enshi-card.webp` | 恩施大峡谷。WebP 版由原站内图片缩放转码。 | 作者未署名 / Wikimedia Commons | [原图](https://commons.wikimedia.org/wiki/File:Enshi_grand_canyon.jpg) | [CC0](https://creativecommons.org/publicdomain/zero/1.0/) |
 | `public/images/shennongjia.jpg` | 神农架大九湖湿地公园 | Z Zzl | [原图](https://commons.wikimedia.org/wiki/File:湖北神农架大九湖湿地公园_-_panoramio.jpg) | [CC BY 3.0](https://creativecommons.org/licenses/by/3.0/) |
 | `public/images/yellow-crane.jpg` | 黄鹤楼夜景 | Rock211lee（上传者；来源页未另署作者） | [原图](https://commons.wikimedia.org/wiki/File:夜の黄鶴楼.jpg) | [CC BY-SA 3.0](https://creativecommons.org/licenses/by-sa/3.0/) |
 | `public/images/popular-wudang.jpg` | 武当山金殿 | gongfu_king | [原图](https://commons.wikimedia.org/wiki/File:Wudangshan_pic_9.jpg) | [CC BY-SA 2.0](https://creativecommons.org/licenses/by-sa/2.0/) |

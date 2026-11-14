@@ -12,6 +12,6 @@ export function TravelStories() {
 export function JourneyInvitation({ onPlan }: { onPlan: () => void }) {
   return <section aria-labelledby="cta-title" className="journey-invitation">
     <img src="/images/shennongjia.jpg" alt="神农架大九湖湿地公园的森林与木栈道" width="1600" height="1067" loading="lazy" className="invitation-image" /><div className="invitation-shade" aria-hidden="true" />
-    <div className="page-width invitation-inner"><div><p className="eyebrow text-seafoam">山河相逢，自有回响</p><h2 id="cta-title" className="section-title text-white">下一次出发，<br />就按你喜欢的方式。</h2><p className="mt-7 text-xs tracking-wide text-white/60">此刻的风景 / 神农架 · 大九湖</p></div><div className="invitation-action"><p className="mb-7 text-sm leading-8 text-white/75">把喜欢的风景写进旅程，<br />把时间留给真正想做的事。<br />从一份有吃、有住、有沿途的计划开始。</p><Button variant="white" onClick={onPlan} className="min-h-14 px-7">开始我的湖北旅行<ArrowUpRight size={18} strokeWidth={1.5} /></Button><p className="mt-4 text-xs text-white/75">无需注册 · 支持保存与分享</p></div></div>
+    <div className="page-width invitation-inner"><div><h2 id="cta-title" className="section-title text-white">规划你的湖北行程</h2><p className="mt-3 text-sm leading-7 text-white/90">选城市和天数，把景点、美食、住宿和返程排进每天。</p><p className="mt-4 text-xs text-white/75">神农架 · 大九湖</p></div><div className="invitation-action"><Button variant="white" onClick={onPlan} className="min-h-14 px-7">开始规划<ArrowUpRight size={18} strokeWidth={1.5} /></Button></div></div>
   </section>;
 }

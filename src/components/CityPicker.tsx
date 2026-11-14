@@ -1,4 +1,13 @@
-import { cities, destinations } from '../data';
+import { MapPin } from 'lucide-react';
+import { cities } from '../data';
+import { SelectField } from './ui';
+
 export function CityPicker({ value, onChange }: { value: string; onChange: (id: string) => void }) {
-  return <nav className="city-picker" aria-label="按市州浏览"><div className="city-picker-heading"><span>选一座城，看看它的不同面貌</span><span>全省 17 市州</span></div><div className="city-choices"><button aria-pressed={value === 'all'} onClick={() => onChange('all')}>全部湖北<span>{destinations.length}</span></button>{cities.map(city => <button key={city.id} aria-pressed={value === city.id} onClick={() => onChange(city.id)}>{city.shortName}<span>{destinations.filter(place => place.cityId === city.id).length}</span></button>)}</div></nav>;
+  return <label className="catalogue-city-field">
+    <span><MapPin size={15} />目的地</span>
+    <SelectField aria-label="筛选目的地城市" value={value} onChange={event => onChange(event.target.value)}>
+      <option value="all">湖北全境</option>
+      {cities.map(city => <option key={city.id} value={city.id}>{city.shortName}</option>)}
+    </SelectField>
+  </label>;
 }

@@ -6,17 +6,24 @@ export type DurationFilter = 'any' | 'half' | 'day';
 const familyPlaces = new Set(['hubei-museum', 'east-lake', 'hankou', 'wudang-museum', 'jingzhou-museum', 'tonglvshan', 'mining-park', 'cihu', 'ezhou-museum', 'yiai', 'dongyong', 'yunmeng', 'suizhou-museum', 'caoyu', 'luyu', 'shijiahe', 'guanmenshan']);
 export type Pace = 'classic' | 'relaxed';
 export function findDestinations(cityId: string, keyword: string, filter: Filter, saved: string[], duration: DurationFilter = 'any'): Destination[] {
-  const terms = keyword.trim().toLowerCase().split(/\s+/).filter(Boolean);
-  return destinations.filter(place => {
+  const terms = keyword.toLowerCase().split(/[\s、，,·]+/).filter(Boolean);
+  const exactTitle = terms.length === 1 ? terms[0] : undefined;
+  const directMatches: Destination[] = [];
+  const relatedMatches: Destination[] = [];
+  for (const place of destinations) {
     const city = cityById[place.cityId];
     const text = [place.title, place.tag, place.description, place.overview, ...place.highlights, ...place.tips, city.name, city.shortName, city.area, ...city.food].join(' ').toLowerCase();
     // Use the numeric day bound so pure half-days differ from ranges ending in a full day.
     const dayCount = Number(place.duration.match(/(\d+(?:\.\d+)?)\s*天/)?.[1] ?? 0);
-    return (cityId === 'all' || place.cityId === cityId)
+    const matches = (cityId === 'all' || place.cityId === cityId)
       && (filter === 'all' || (filter === 'saved' ? saved.includes(place.id) : filter === 'family' ? familyPlaces.has(place.id) : place.category === filter))
       && (duration === 'any' || (duration === 'half' ? dayCount < 1 : dayCount >= 1))
       && terms.every(term => text.includes(term));
-  });
+    if (!matches) continue;
+    if (place.title.toLowerCase() === exactTitle) directMatches.push(place);
+    else relatedMatches.push(place);
+  }
+  return directMatches.concat(relatedMatches);
 }
 
 export function planDays(city: CityGuide, count: number, pace: Pace): TripDay[] {
