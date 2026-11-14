@@ -2,7 +2,9 @@ import { cityById, type TripDay } from './data';
 import { practical } from './data/practical';
 import { railwayEntrySource, returnWalks, type ReturnSource } from './data/return-mornings';
 import { routeDetails, type RouteEffort } from './data/route-details';
-import { clockWindow, formatClock, manualTravelBuffer, normalizeClockInput, normalizeReturnLogistics, normalizeStation, parseClock, returnAreaLabel, type DepartureWindow, type ReturnLogistics, type StationSchedule } from './return-timing';
+import { dayJourneys } from './data/day-journeys';
+import { clockWindow, formatClock, manualTravelBuffer, normalizeClockInput, normalizeReturnLogistics, normalizeStation, parseClock, returnAreaLabel, returnBreakfastMinutes, returnBreakfastStart, type DepartureWindow, type ReturnLogistics, type StationSchedule } from './return-timing';
+import { buildDaySchedule, renderScheduleText } from './day-schedule';
 import { planDate, selectPlanDays, validDate, type Pace } from './travel';
 export { validDate } from './travel';
 
@@ -177,20 +179,18 @@ function applyAfternoonReturn(day: PlannedDay, profile: Profile, previous: Plann
   const arrive = minutes !== undefined && toStation !== undefined ? minutes - inStationMinutes : undefined;
   const leave = arrive !== undefined && toStation !== undefined ? arrive - toStation : undefined;
   const finish = leave !== undefined ? leave - luggageMinutes : undefined;
-  const breakfastStart = 9 * 60;
-  const breakfastMinutes = 20;
-  const available = finish === undefined ? undefined : finish - breakfastStart - breakfastMinutes;
+  const available = finish === undefined ? undefined : finish - returnBreakfastStart - returnBreakfastMinutes;
   const defaultWalkFits = minutes === undefined || minutes >= 13 * 60 + 30;
   const walk = nearby && (!station || toStation !== undefined) && (available === undefined ? defaultWalkFits : available >= 15) ? nearby : undefined;
   const walkMinutes = walk ? (available !== undefined && available < walk.minutes ? 15 : walk.minutes) : undefined;
-  const cutoff = finish !== undefined && leave !== undefined && arrive !== undefined
+  const cutoff = finish !== undefined && finish >= 0 && leave !== undefined && arrive !== undefined
     ? { finishBy: formatClock(finish), leaveForStationBy: formatClock(leave), arriveBy: formatClock(arrive) }
     : undefined;
   const destination = station || '实际返程点';
   const bags = luggageMinutes === 0 ? '整理好随身行李。' : hasPriorStay ? '早上先退房并问清行李寄存。' : '带好随身行李，寄存时先确认取回地点。';
   const finishAction = luggageMinutes === 0 ? '结束上午安排' : '开始取行李';
   const goTitle = luggageMinutes === 0 ? `前往${destination}` : `取行李，前往${destination}`;
-  const breakfast = finish !== undefined && finish < breakfastStart + breakfastMinutes
+  const breakfast = finish !== undefined && finish < returnBreakfastStart + returnBreakfastMinutes
     ? '早点可前一晚备好或到站后吃，按倒推时间取行李和出发。'
     : nearby?.breakfast || '在住宿或接驳片区就近吃早餐，选出餐快的店。';
 
@@ -296,8 +296,8 @@ export function buildTrip(profile: Profile): PlannedDay[] {
     days.forEach((day, localIndex) => {
       const originalIndex = indices[localIndex];
       const meta = routeDetails[city.id][originalIndex];
-      const current = { ...day, cityId: city.id, originalIndex, overnight: practical[city.id].nights[originalIndex], region: meta.region, effort: meta.effort, title: `${city.shortName} · ${day.title}` } as PlannedDay;
-      if (segmentIndex < segments.length - 1 && localIndex === days.length - 1) current.overnight = practical[city.id].stays[0].area + '；为次日跨城出发留出接驳';
+      const journey = dayJourneys[city.id][originalIndex];
+      const current: PlannedDay = { ...day, cityId: city.id, originalIndex, overnight: journey.night, region: meta.region, effort: meta.effort, title: `${city.shortName} · ${day.title}` };
       if (segmentIndex > 0 && localIndex === 0) {
         const from = cityById[segments[segmentIndex - 1].cityId].shortName;
         current.transfer = `${from} → ${city.shortName}`;
@@ -311,13 +311,13 @@ export function buildTrip(profile: Profile): PlannedDay[] {
     });
   });
   result.forEach((day, index) => {
-    const next = result[index + 1], meta = routeDetails[day.cityId][day.originalIndex];
+    const next = result[index + 1];
     const returnNext = next && index === result.length - 2 && profile.departure && profile.departure !== 'flexible';
-    if (/原酒店/.test(day.overnight)) day.overnight = `${practical[day.cityId].stays[meta.stayAreaIndex].area}（可连住，订前核对次日接驳）`;
     if (day.cityId === 'xianning') {
       day.overnight = day.originalIndex === 0 || (day.originalIndex === 1 && (next?.originalIndex !== 2 || returnNext)) ? '赤壁城区' : '咸宁温泉城区';
       if (day.originalIndex === 1 && !returnNext && next?.cityId === day.cityId && next.originalIndex === 2) day.stops[2] = { ...day.stops[2], title: '按已确认交通移宿咸宁温泉片区', detail: '次日在咸宁城区安排温泉与休息，今晚从赤壁按已确认交通前往咸宁住宿，避免次日再往返；先落实车辆、入住和晚间供餐。' };
     }
+    if (day.cityId === 'enshi' && day.originalIndex === 3 && index > 0) day.overnight = result[index - 1].overnight;
     if (day.cityId === 'shennongjia' && !returnNext && next?.cityId === day.cityId && next.originalIndex === 2) {
       day.overnight = '九湖镇 · 坪阡古镇周边（按次日大九湖换乘安排的编辑建议）';
       day.stops[2] = { ...day.stops[2], title: '按已确认车辆移宿坪阡', detail: '次日安排大九湖，可把今晚落脚处移到九湖镇坪阡古镇周边；提前确认车辆、路况、入住与供餐，不临时夜间穿山。' };
@@ -325,12 +325,40 @@ export function buildTrip(profile: Profile): PlannedDay[] {
       day.overnight = '木鱼镇或靠近已确认返程站点的片区';
     }
     addMeals(day, profile);
+    if (day.cityId === 'wuhan' && day.originalIndex === 2 && result[index - 1]?.overnight.includes('武昌')
+      && (next || !profile.departure || profile.departure === 'flexible' || profile.departure === 'evening')) {
+      day.title = '武汉 · 汉口老街、江汉关与江滩';
+      day.region = '汉口 · 江汉路与沿江';
+      day.breakfast = '先在武昌住处附近吃早餐，再过江；糊汤粉可以留到汉口午餐。';
+      day.lunch = '江汉关与沿江一带就近吃糊汤粉或家常简餐。';
+      day.dinner = '汉口江汉路附近吃家常晚餐。';
+      day.meal = `早餐：${day.breakfast}\n午餐：${day.lunch}\n晚餐：${day.dinner}`;
+      day.stops[1] = { ...day.stops[1], title: '汉口江滩', detail: '走同一岸的街巷和江滩。轻松游可以把江滩缩成一小段。' };
+      day.stops[2] = { ...day.stops[2], title: '汉口晚餐与休息', detail: '在汉口吃晚饭。需要回武昌取行李时，预留返程地铁。' };
+      day.transport = (profile.mode === 'drive' ? '自驾先确认汉口停车点，再步行串联江汉路、江汉关和江滩。' : '从武昌搭地铁到汉口，江汉路、江汉关和江滩步行串联。') + '晚上按住宿或返程站点决定是否回武昌。';
+      day.tip = '喜欢晴川阁或古琴台，可以把它留给另一段汉阳路线。 ' + day.tip;
+    } else if (day.cityId === 'wuhan' && day.originalIndex === 2) {
+      day.stops[2] = { ...day.stops[2], title: '汉阳晚餐与休息', detail: '过江游览后就在汉阳吃饭；若酒店或车票在汉口，先安排接驳与取行李。' };
+    }
     if (index === 0) {
       applyArrival(day, profile);
       if (profile.origin) day.transport = `出发地：${profile.origin}。请先确认往返目的地的车站、车次或自驾路线；本站未实时计算路程。 ${day.transport}`;
     }
   });
-  if (result.length) applyDeparture(result[result.length - 1], profile, result.length === 1, result.at(-2));
+  if (result.length) {
+    const last = result[result.length - 1];
+    const previous = result.at(-2);
+    if (last.transfer && profile.departure && profile.departure !== 'flexible') {
+      last.title = `${cityById[last.cityId].shortName} · 跨城与返程接驳`;
+      last.effort = 'low';
+      last.sightseeingRemoved = true;
+      last.stops[1] = { time: '抵达后', title: '确认行李与下一段返程接驳', detail: '先核对下一程车站、进站口与票面时间，必要时就近补给。' };
+      last.stops[2] = { time: profile.departureTime || '按票面', title: '按票面返程', detail: '两段交通之间预留足够换站、候车与取行李时间。' };
+      last.transport = `${last.stops[0].detail} ${last.stops[1].detail} ${last.stops[2].detail}`;
+    } else {
+      applyDeparture(last, profile, result.length === 1, previous);
+    }
+  }
   return result;
 }
 
@@ -379,7 +407,7 @@ export function estimateBudget(profile: Profile, dayCount: number) {
 export function formatDetailedPlan(profile: Profile): string {
   const days = buildTrip(profile), budget = estimateBudget(profile, days.length);
   const cityIds = [...new Set(days.map(day => day.cityId))];
-  const lines = ['Wander AI · 寻游湖北', tripTitle(profile), `${profile.date || '日期待定'} · ${profile.party} 人 · ${groupLabels[profile.group]} · ${profile.mode === 'drive' ? '自驾' : '公共交通＋接驳'} · ${budgetLabels[profile.budget]}`, '路线由编辑资料与所选偏好组合；非实时 AI、导航或酒店库存。', ''];
+  const lines = ['Wander AI · 寻游湖北', tripTitle(profile), `${profile.date || '日期待定'} · ${profile.party} 人 · ${groupLabels[profile.group]} · ${profile.mode === 'drive' ? '自驾' : '公共交通＋接驳'} · ${budgetLabels[profile.budget]}`, '时间为路线规划预留。车船班次、景区开放与实际路况请以票面及出发当天的官方信息为准。', ''];
   if (profile.origin) lines.push(`出发地：${profile.origin}`);
   if (profile.arrival) lines.push(`抵达设置：${arrivalLabels[profile.arrival]}`);
   if (profile.departure || profile.departureStation) lines.push(`返程设置：${getDepartureLabel(profile)}`);
@@ -390,10 +418,13 @@ export function formatDetailedPlan(profile: Profile): string {
   if (budget.arrivalNight) lines.push('抵达安排：所选路线从完整游玩日开始，建议提前一晚抵达；住宿预算已加这一晚。若当天抵达，请将首日上午改为交通并减少景点。', '');
   days.forEach((day, index) => {
     const isLast = index === days.length - 1;
+    const schedule = buildDaySchedule(day, profile, days[index - 1], isLast);
     const lodging = isLast && profile.departure && profile.departure !== 'flexible'
       ? `返程安排：${getDepartureLabel(profile)}，当晚无住宿预留。`
       : `当晚住宿：${isLast ? '返程日。如延住可参考 ' : ''}${day.overnight}`;
-    lines.push(`D${index + 1} ${planDate(profile.date, index)} | ${day.title}`, `所在片区：${day.region} · ${day.effort === 'high' ? '较高体力' : day.effort === 'moderate' ? '常规步行' : '低强度编辑建议'}`, ...day.stops.flatMap(stop => [`${stop.time}｜${stop.title}`, stop.detail]), `交通：${day.transport}`, `早餐：${day.breakfast}`, `午餐：${day.lunch}`, `晚餐：${day.dinner}`, `餐食：${day.meal}`, lodging, `提醒：${day.tip}`, ...(day.returnSources || []).map(source => `${source.title}：${source.url}`), '');
+    lines.push(`D${index + 1} ${planDate(profile.date, index)} | ${day.title}`, `所在片区：${day.region} · ${day.effort === 'high' ? '较高体力' : day.effort === 'moderate' ? '常规步行' : '低强度编辑建议'}`, ...renderScheduleText(schedule),
+      ...(day.stationSchedule ? [`去站安排：${day.stationSchedule.leaveForStationBy} 前出发，${day.stationSchedule.arriveBy} 前到站。`] : []),
+      `交通补充：${day.transport}`, lodging, `提醒：${day.tip}`, ...schedule.sources.map(source => `${source.title}：${source.url}`), '');
   });
   cityIds.forEach(id => { const city = cityById[id], info = practical[id]; lines.push(`【${city.shortName} · 住宿片区】`, ...info.stays.map(stay => `${stay.area}｜${stay.bestFor}。${stay.reason} ${stay.check}`), `【${city.shortName} · 吃什么、在哪吃】`, ...info.food.map(food => `${food.area}：${food.order} ${food.timing}`), `到达：${city.arrival}`, `季节：${city.season}`, '资料来源：', ...city.sources.map(source => `${source.title}：${source.url}`), ''); });
   const issues = getTripIssues(profile);

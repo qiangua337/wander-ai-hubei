@@ -28,6 +28,8 @@ export function returnAreaLabel(area: string | undefined, cityId: string): strin
 }
 
 export const manualTravelBuffer = 15;
+export const returnBreakfastStart = 9 * 60;
+export const returnBreakfastMinutes = 20;
 
 export function parseClock(value: unknown): number | undefined {
   if (typeof value !== 'string' || !/^(?:[01]\d|2[0-3]):[0-5]\d$/.test(value)) return;

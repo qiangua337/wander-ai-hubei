@@ -35,6 +35,7 @@ export function Planner({ initialCity, initialDate, travelers, initialProfile, o
     } catch { return fallback; }
   });
   const [ready, setReady] = useState(() => Boolean(initialProfile) && !getTripTimingConflict(profile) && buildTrip(profile).length > 0);
+  const [startOnReturn, setStartOnReturn] = useState(false);
   const [savedPlans, setSavedPlans] = useState<SavedPlan[]>(readPlans);
   const [feedback, setFeedback] = useState(() => (initialProfile && getTripTimingConflict(profile)) || '');
   const result = useRef<HTMLDivElement>(null);
@@ -50,6 +51,7 @@ export function Planner({ initialCity, initialDate, travelers, initialProfile, o
   });
   const edit = () => {
     setReady(false);
+    setStartOnReturn(false);
     window.requestAnimationFrame(() => {
       settings.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
       settings.current?.focus({ preventScroll: true });
@@ -77,7 +79,7 @@ export function Planner({ initialCity, initialDate, travelers, initialProfile, o
       }
       return next;
     });
-    setReady(false); setFeedback('');
+    setReady(false); setStartOnReturn(false); setFeedback('');
   };
   const updateChapters = (patch: Partial<Profile>, count = profile.indices.length || 2) => {
     const next = { ...profile, ...patch };
@@ -89,12 +91,13 @@ export function Planner({ initialCity, initialDate, travelers, initialProfile, o
   const restorePlan = (saved: Profile) => {
     const conflict = getTripTimingConflict(saved);
     setProfile(saved);
+    setStartOnReturn(false);
     setReady(!conflict && buildTrip(saved).length > 0);
     setFeedback(conflict || '已恢复保存的旅行方案。');
     if (!conflict) focusResult();
   };
   const updateReturn = (next: Profile) => {
-    setProfile(next); setFeedback('已更新返程接驳。');
+    setProfile(next); setStartOnReturn(true); setFeedback('已更新返程接驳。');
     window.requestAnimationFrame(() => {
       const trigger = result.current?.querySelector<HTMLButtonElement>('.return-day-trigger');
       if (!trigger) { focusResult('instant'); return; }
@@ -187,7 +190,7 @@ export function Planner({ initialCity, initialDate, travelers, initialProfile, o
         <details className="planner-saved"><summary><Bookmark size={15} />我的行程 <span>{savedPlans.length} / 5</span></summary><p>保存在当前浏览器。分享链接不包含自由备注。</p><div>{savedPlans.map(plan => <article key={plan.id}><button onClick={() => restorePlan(plan.profile)}><strong>{tripTitle(plan.profile)}</strong><span>{plan.profile.date || '日期待定'} · {plan.profile.party} 人</span></button><button aria-label={'删除' + tripTitle(plan.profile)} onClick={() => { const ok = storePlans(savedPlans.filter(item => item.id !== plan.id)); setFeedback(ok ? '已从本浏览器移除这份行程。' : '已在本次会话移除，浏览器存储未更新。'); }}><Trash2 size={15} /></button></article>)}{!savedPlans.length && <p>喜欢的方案可以存下来，下次接着安排。</p>}</div></details>
       </div>
       <div ref={result} tabIndex={-1} aria-label="整理好的行程" className="planner-result">
-        {ready ? <PlannedTrip key={JSON.stringify(profile)} profile={profile} onCopy={onCopy} onSave={savePlan} onEdit={edit} onUpdateReturn={updateReturn} /> : <section className="planner-preview">
+        {ready ? <PlannedTrip key={JSON.stringify(profile)} profile={profile} onCopy={onCopy} onSave={savePlan} onEdit={edit} onUpdateReturn={updateReturn} initialDay={startOnReturn ? 'last' : undefined} /> : <section className="planner-preview">
           {previewImage && <figure><img src={previewImage} alt="所选旅程的湖北目的地实景" /><figcaption><MapPin size={14} />{routeCities.map(id => cityById[id].shortName).join(' → ')}</figcaption></figure>}
           <div className="planner-preview-body"><p className="planner-preview-kicker">旅程草稿 · 随条件更新</p><h3>{tripTitle(profile)}</h3><p className="planner-preview-subtitle">先看方向，再把每一天安排具体。</p><div className="planner-preview-metrics"><span><strong>{days.length}</strong> 天行程</span><span><strong>{budget.nights}</strong> 晚住宿</span><span><strong>{routeCities.length}</strong> 座城市</span></div>
             <ul className="planner-preview-tags"><li>{groupLabels[profile.group]}</li><li>{profile.mode === 'drive' ? '自驾出行' : '公共交通＋接驳'}</li><li>{profile.pace === 'relaxed' ? '轻松慢游' : '经典串游'}</li></ul>

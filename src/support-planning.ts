@@ -287,7 +287,7 @@ export function planSupportTrip(input: SupportTripDraft): SupportReply {
     ? `抵达安排为${arrivalLabels[draft.arrival]}。${['morning', 'afternoon', 'evening'].includes(draft.arrival) ? '首日已给交通、用餐和安顿留时间。' : ''}`
     : '首日先按完整游玩日安排。如果当天才到，请告诉我抵达时段。';
   const notes = [
-    `已按这些条件整理好具体行程。可以继续调整${template ? '人数、交通与节奏' : '天数、人数、交通与玩法'}，或带入规划器保存与下载。`,
+    `行程已整理好。逐日时间表里可以看建议几点出门、每段换乘留多久、在哪一站附近用餐和住宿。也可以继续调整${template ? '人数、交通与节奏' : '天数、人数、交通与玩法'}。`,
     defaults.length ? `未指定的项目先按：${defaults.join('、')}。` : '',
     (draft.arrival || plannedDays.length > 1 || !hasReturnWindow) ? arrivalNote : '',
     hasReturnWindow ? `${getDepartureLabel(profile)}。${morningNote}${!morning && !lastDayIsTransferOnly ? '保留可选的城区上午活动。' : ''}${stationNote}` : '',

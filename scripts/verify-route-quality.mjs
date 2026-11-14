@@ -8,11 +8,14 @@ try {
   const { cities } = await server.ssrLoadModule('/src/data.ts');
   const { practical } = await server.ssrLoadModule('/src/data/practical.ts');
   const { routeDetails } = await server.ssrLoadModule('/src/data/route-details.ts');
+  const { dayJourneys } = await server.ssrLoadModule('/src/data/day-journeys.ts');
+  const { buildDaySchedule, groupLodging } = await server.ssrLoadModule('/src/day-schedule.ts');
   const { defaultProfile, buildTrip, recommendConstrainedDays, estimateBudget, normalizeProfile, sharePlanUrl, parsePlanUrl, formatDetailedPlan, getTripIssues, getTripTimingConflict } = await server.ssrLoadModule('/src/planning.ts');
   const sourceSnapshot = JSON.stringify({ cities, practical, routeDetails });
   let chapters = 0;
   for (const city of cities) {
     assert.equal(routeDetails[city.id].length, city.days.length, `${city.id} chapter metadata coverage`);
+    assert.equal(dayJourneys[city.id].length, city.days.length, `${city.id} point-to-point schedule coverage`);
     for (const meta of routeDetails[city.id]) {
       assert(meta.region && ['low', 'moderate', 'high'].includes(meta.effort));
       assert(practical[city.id].stays[meta.stayAreaIndex]);
@@ -25,6 +28,17 @@ try {
     const trip = buildTrip({ ...defaultProfile(city.id), indices: city.days.map((_, index) => index), arrival: 'full-day' });
     assert(trip.every(day => day.breakfast && day.lunch && day.dinner && day.region));
     assert(trip.every(day => !/原酒店/.test(day.overnight)), 'A selected first chapter cannot reference an undefined earlier hotel.');
+    trip.forEach((day, i) => {
+      const profile = { ...defaultProfile(city.id), indices: city.days.map((_, index) => index) };
+      for (const mode of ['public', 'drive']) {
+        const schedule = buildDaySchedule(day, { ...profile, mode }, trip[i - 1], i === trip.length - 1);
+        assert(schedule.start && schedule.from && schedule.rows.some(row => row.kind === 'visit'), day.title);
+        assert(schedule.rows.some(row => row.meal === '午餐'), day.title);
+        const clocks = schedule.rows.flatMap(row => row.time ? [row.time] : []);
+        assert.deepEqual(clocks, [...clocks].sort(), `${day.title} schedule must be chronological`);
+        for (const row of schedule.rows.filter(item => item.minutes)) assert(row.minutes[0] > 0 && row.minutes[1] >= row.minutes[0]);
+      }
+    });
   }
   assert.equal(chapters, 50);
 
@@ -45,6 +59,26 @@ try {
   assert(forest[0].stops[2].title.includes('移宿坪阡'));
 
   const base = { ...defaultProfile('wuhan'), indices: [0, 2], arrival: 'full-day' };
+  const wuhanThree = { ...defaultProfile(), indices: [0, 1, 2], arrival: 'full-day' };
+  const threeDays = buildTrip(wuhanThree);
+  assert.deepEqual(groupLodging(threeDays), [{ area: '武昌 · 司门口—昙华林', firstNight: 1, lastNight: 2 }]);
+  const first = buildDaySchedule(threeDays[0], wuhanThree, undefined, false);
+  assert.equal(first.start, '08:35 建议出门');
+  assert(first.rows.some(row => row.minutes?.[0] === 10 && /户部巷/.test(row.title)));
+  assert(first.rows.some(row => row.meal === '午餐' && /大成路/.test(row.title)));
+  const third = buildDaySchedule(threeDays[2], wuhanThree, threeDays[1], true);
+  assert(third.rows.some(row => /汉口江滩/.test(row.title)) && !third.rows.some(row => /晴川阁|古琴台/.test(row.title)));
+  const museum = buildDaySchedule(threeDays[1], wuhanThree, threeDays[0], false);
+  const driving = buildDaySchedule(threeDays[1], { ...wuhanThree, mode: 'drive' }, threeDays[0], false);
+  assert(museum.rows.some(row => /8 号线.*梨园/.test(row.detail || '')));
+  assert(driving.rows.some(row => /自驾至可停车处/.test(row.detail || '')));
+  const waterProfile = { ...defaultProfile('yichang'), indices: [2], arrival: 'full-day' };
+  const water = buildDaySchedule(buildTrip(waterProfile)[0], waterProfile, undefined, true);
+  assert(water.start.startsWith('按已确认') && !water.rows.some(row => row.time), 'Unknown boat timing must not imply downstream clocks.');
+  const crossProfile = { ...defaultProfile('yichang'), template: 'west-five', arrival: 'full-day' };
+  const crossDays = buildTrip(crossProfile);
+  const crossing = buildDaySchedule(crossDays[2], crossProfile, crossDays[1], false);
+  assert(crossing.rows[0].title.includes('宜昌 → 恩施州') && /车次/.test(crossing.start) && !crossing.rows.some(row => row.time));
   const culture = buildTrip({ ...base, interest: 'culture' });
   const food = buildTrip({ ...base, interest: 'food' });
   assert.notDeepEqual(food, culture, 'A food preference must change actionable meals or an activity, not only a profile label.');
@@ -144,6 +178,9 @@ try {
   const manualReturn = normalizeProfile({ ...wuchangReturn, returnLogistics: { travelMinutes: 75, luggageMinutes: 30 } });
   const manualLast = buildTrip(manualReturn).at(-1);
   assert.deepEqual(manualLast.stationSchedule, { finishBy: '12:30', leaveForStationBy: '13:00', arriveBy: '14:30' });
+  const planOnReturn = buildDaySchedule(manualLast, manualReturn, buildTrip(manualReturn)[0], true);
+  assert(planOnReturn.rows.some(row => row.time === '13:00' && row.deadline && row.title === '出发去车站'));
+  assert(planOnReturn.rows.some(row => row.time === '15:30' && row.title === '按票面发车'));
   assert.deepEqual(buildTrip(manualReturn)[0], buildTrip(wuchangReturn)[0], 'Return settings leave the earlier day intact.');
   assert.match(formatDetailedPlan(manualReturn), /75 分钟车程，另留 15 分钟/);
   const carryOn = normalizeProfile({ ...manualReturn, returnLogistics: { area: 'jianghan-road', travelMinutes: 40, luggageMinutes: 0 }, departureStation: '汉口站' });

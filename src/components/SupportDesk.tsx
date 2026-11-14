@@ -17,8 +17,8 @@ const promptsFor = (cityId?: string) => cityId && cityById[cityId]
   ? [cityById[cityId].shortName + Math.min(2, cityById[cityId].days.length) + '天，2人，轻松游', cityById[cityId].shortName + '住哪里？', cityById[cityId].shortName + '吃什么？', '怎么保存行程？']
   : examples;
 
-export function SupportDesk({ open, openForm = false, initialCity, initialParty, initialDate, onClose, onAction }: {
-  open: boolean; openForm?: boolean; initialCity: string; initialParty: number; initialDate: string; onClose: () => void; onAction: (action: SupportAction) => void;
+export function SupportDesk({ open, openForm = false, initialCity, initialDays, initialParty, initialDate, onClose, onAction }: {
+  open: boolean; openForm?: boolean; initialCity: string; initialDays?: number; initialParty: number; initialDate: string; onClose: () => void; onAction: (action: SupportAction) => void;
 }) {
   const initial = Object.hasOwn(cityById, initialCity) ? initialCity : undefined;
   const [messages, setMessages] = useState<Message[]>([]);
@@ -30,6 +30,7 @@ export function SupportDesk({ open, openForm = false, initialCity, initialParty,
   const [editingTrip, setEditingTrip] = useState<SupportTripDraft>();
   const [activeProfile, setActiveProfile] = useState<Profile>();
   const [selectedId, setSelectedId] = useState<number>();
+  const [startOnReturn, setStartOnReturn] = useState(false);
   const [detailOpen, setDetailOpen] = useState(false);
   const serial = useRef(0);
   const log = useRef<HTMLDivElement>(null);
@@ -75,13 +76,13 @@ export function SupportDesk({ open, openForm = false, initialCity, initialParty,
       detail.current?.focus({ preventScroll: true });
     }
   }, [selectedId, detailOpen]);
-  const addReply = (question: string, reply: SupportReply, from: Profile | null | undefined = context.trip ? activeProfile : undefined) => {
+  const addReply = (question: string, reply: SupportReply, from: Profile | null | undefined = context.trip ? activeProfile : undefined, showReturn = false) => {
     const id = ++serial.current;
     const baseProfile = reply.plan && from ? from : undefined;
     setMessages(before => [...before, { id, question, reply, baseProfile }].slice(-12));
     setContext(reply.context); setSuggestions(reply.suggestions.length ? reply.suggestions.slice(0, 4) : promptsFor(reply.context.cityId));
     setDraft(''); setTripForm(undefined); setEditingTrip(undefined); setFormError('');
-    if (reply.plan) { setActiveProfile(reply.plan); setSelectedId(id); setDetailOpen(true); }
+    if (reply.plan) { setActiveProfile(reply.plan); setSelectedId(id); setStartOnReturn(showReturn); setDetailOpen(true); }
     else if ((context.trip || reply.context.trip) && !reply.actions.some(action => action.profile)) { setSelectedId(undefined); setDetailOpen(false); }
     if (!reply.context.trip) setActiveProfile(undefined);
   };
@@ -92,6 +93,7 @@ export function SupportDesk({ open, openForm = false, initialCity, initialParty,
     setActiveProfile(message.reply.plan);
     setSuggestions(message.reply.suggestions.slice(0, 4));
     setSelectedId(message.id);
+    setStartOnReturn(false);
     setDetailOpen(true);
   };
   const editPlan = (plan: Profile) => {
@@ -108,7 +110,7 @@ export function SupportDesk({ open, openForm = false, initialCity, initialParty,
     const requested = selected?.reply.context.trip || supportTripDraftFromProfile(profile);
     const reply = planSupportTrip({ ...requested, departure: next.departure, departureTime: next.departureTime, departureStation: next.departureStation, returnLogistics: next.returnLogistics });
     focusReturn.current = Boolean(reply.plan);
-    addReply('更新返程接驳', reply, profile);
+    addReply('更新返程接驳', reply, profile, true);
   };
   const chooseCity = (cityId?: string) => {
     setContext({ cityId });
@@ -136,7 +138,7 @@ export function SupportDesk({ open, openForm = false, initialCity, initialParty,
   if (!open) return null;
   const showPlanDetail = Boolean(profile && !formVisible);
   const closeTripForm = () => { setTripForm(undefined); setFormError(''); };
-  return <Modal title={formVisible ? '规划湖北行程' : '小游 · 湖北旅行问答'} onClose={onClose} dialogClassName={'support-dialog' + (showPlanDetail ? ' has-itinerary' : '')}>
+  return <Modal title={formVisible ? '规划湖北行程' : showPlanDetail && detailOpen ? '小游 · 逐日行程' : '小游 · 湖北旅行问答'} onClose={onClose} dialogClassName={'support-dialog' + (showPlanDetail ? ' has-itinerary' : '')}>
     <div className={'support-layout' + (showPlanDetail ? ' has-itinerary' : '') + (showPlanDetail && detailOpen ? ' detail-open' : '')}>
       <div className="support-shell">
         {!formVisible && <div className="support-meta"><span><Compass size={14} />根据湖北攻略作答</span><button onClick={clear} disabled={!messages.length} aria-label="清空对话"><RotateCcw size={14} />清空对话</button></div>}
@@ -148,7 +150,7 @@ export function SupportDesk({ open, openForm = false, initialCity, initialParty,
           {!formVisible && <SelectField aria-label="问答城市" value={context.cityId || ''} onChange={event => chooseCity(event.target.value || undefined)}><option value="">全部湖北</option>{cities.map(city => <option key={city.id} value={city.id}>{city.shortName}</option>)}</SelectField>}
         </div>
         <div ref={log} tabIndex={-1} className="support-log" role={formVisible ? 'region' : 'log'} aria-label={formVisible ? '行程条件' : '旅行问答记录'} aria-live={formVisible ? 'off' : 'polite'} aria-relevant="additions">
-          {formVisible ? <SupportTripForm draft={newTrip ? undefined : editingTrip || context.trip} initialCity={newTrip ? initial : context.cityId} initialParty={initialParty} initialDate={initialDate} error={formError} onClearError={() => setFormError('')} onSubmit={submitTripForm} onCancel={closeTripForm} /> : <>
+          {formVisible ? <SupportTripForm draft={newTrip ? undefined : editingTrip || context.trip} initialCity={newTrip ? initial : context.cityId} initialDays={newTrip ? initialDays : undefined} initialParty={initialParty} initialDate={initialDate} error={formError} onClearError={() => setFormError('')} onSubmit={submitTripForm} onCancel={closeTripForm} /> : <>
             <div className="support-welcome"><span className="support-avatar" aria-hidden="true"><Compass size={19} /></span><div><strong>这次想去哪儿？</strong><p>告诉我去哪、几天、几个人。也可以加上抵达和返程时段、体力或美食偏好，我会一起安排每天的吃住行。</p><small>行程依据本站编辑的湖北攻略整理。</small></div></div>
             {messages.map(message => {
               const plan = message.reply.plan;
@@ -170,7 +172,7 @@ export function SupportDesk({ open, openForm = false, initialCity, initialParty,
       {profile && !formVisible && <aside className="support-detail" aria-label="行程详情">
         <div className="support-detail-bar"><button className="support-back-chat" onClick={returnToChat}><ArrowLeft size={16} />返回对话</button><span>这份行程</span><button onClick={() => editPlan(profile)}>调整条件</button><button className="support-close-detail" onClick={() => { setSelectedId(undefined); returnToChat(); }} aria-label="收起行程详情"><X size={17} /></button></div>
         <div ref={detail} tabIndex={-1} role="region" aria-label="具体行程内容" className="support-detail-scroll">
-          <SupportPlanPreview key={`preview-${selectedId}`} profile={profile} onUpdateReturn={updateReturn} />
+          <SupportPlanPreview key={`preview-${selectedId}`} profile={profile} onUpdateReturn={updateReturn} initialDay={startOnReturn ? 'last' : undefined} />
           <SupportPlanTools key={selectedId} profile={profile} previous={previous} onEdit={editPlan} />
           <button className="support-open-full" onClick={() => onAction({ kind: 'plan', cityId: profile.cityId, profile, label: '保存与调整完整行程' })}>保存与调整完整行程<ArrowUpRight size={16} /></button>
           <p className="support-detail-footnote">这份预览在当前页面保留。进入完整行程后，可保存到本浏览器。</p>

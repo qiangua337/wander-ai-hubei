@@ -7,8 +7,8 @@ import type { SupportTripDraft } from '../support';
 import { SelectField, InputField } from './ui';
 import './support-trip-form.css';
 
-export function SupportTripForm({ draft, initialCity, initialParty, initialDate, error: planError, onClearError, onSubmit, onCancel }: {
-  draft?: SupportTripDraft; initialCity?: string; initialParty: number; initialDate: string;
+export function SupportTripForm({ draft, initialCity, initialDays, initialParty, initialDate, error: planError, onClearError, onSubmit, onCancel }: {
+  draft?: SupportTripDraft; initialCity?: string; initialDays?: number; initialParty: number; initialDate: string;
   error?: string; onClearError: () => void;
   onSubmit: (draft: SupportTripDraft, question: string) => void; onCancel: () => void;
 }) {
@@ -17,7 +17,7 @@ export function SupportTripForm({ draft, initialCity, initialParty, initialDate,
   const template = templates.find(item => item.id === route);
   const city = cityById[route];
   const capacity = template ? template.segments.reduce((sum, segment) => sum + segment.indices.length, 0) : city?.days.length || 4;
-  const [days, setDays] = useState(Math.max(1, Math.min(draft?.days || 2, capacity)));
+  const [days, setDays] = useState(Math.max(1, Math.min(draft?.days || initialDays || 2, capacity)));
   const [party, setParty] = useState(draft?.party && draft.party >= 1 && draft.party <= 6 ? draft.party : initialParty);
   const [interest, setInterest] = useState<Profile['interest']>(draft?.interest || 'balanced');
   const [group, setGroup] = useState<Profile['group']>(draft?.group || (party === 1 ? 'solo' : 'friends'));

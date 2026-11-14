@@ -1,23 +1,24 @@
 import { useRef, useState } from 'react';
 import { ArrowRight, ArrowUpRight, BedDouble, Bookmark, ChevronDown, CircleCheck, Copy, Download, Pencil, Route, Share2, Utensils, Wallet } from 'lucide-react';
 import { cityById } from '../data';
+import { dayJourneys } from '../data/day-journeys';
+import { buildDaySchedule, groupLodging } from '../day-schedule';
 import { arrivalLabels, getDepartureLabel, mobilityLabels, getTripIssues, buildTrip, budgetLabels, estimateBudget, formatDetailedPlan, groupLabels, sharePlanUrl, tripTitle, type Profile } from '../planning';
 import { downloadPlan } from '../travel';
-import { TripDays } from './TravelGuide';
 import { FoodSuggestions, StaySuggestions } from './PracticalDetails';
-import { ReturnDayEditor } from './ReturnDayEditor';
+import { TripSchedule } from './TripSchedule';
 import { Button } from './ui';
 
-export function PlannedTrip({ profile, onCopy, onSave, onEdit, onUpdateReturn }: { profile: Profile; onCopy: (text: string) => void; onSave: () => boolean; onEdit: () => void; onUpdateReturn: (profile: Profile) => void }) {
+export function PlannedTrip({ profile, onCopy, onSave, onEdit, onUpdateReturn, initialDay }: { profile: Profile; onCopy: (text: string) => void; onSave: () => boolean; onEdit: () => void; onUpdateReturn: (profile: Profile) => void; initialDay?: 'last' }) {
   const [tab, setTab] = useState('route');
   const [saveState, setSaveState] = useState('');
   const [checked, setChecked] = useState<string[]>([]);
   const panel = useRef<HTMLDivElement>(null);
   const days = buildTrip(profile), budget = estimateBudget(profile, days.length), cityIds = [...new Set(days.map(day => day.cityId))];
-  const lastDay = days.at(-1);
   const returnLabel = getDepartureLabel(profile);
-  const returnScheduled = profile.departure && profile.departure !== 'flexible';
   const issues = getTripIssues(profile);
+  const lodging = groupLodging(days);
+  const firstBase = days[0] && dayJourneys[days[0].cityId][days[0].originalIndex].base;
   const tabs = [{ id: 'route', label: '每日行程', count: days.length + ' 天', icon: Route }, { id: 'stay', label: '住在哪里', count: budget.nights + ' 晚', icon: BedDouble }, { id: 'food', label: '当地美食', count: cityIds.length + ' 城', icon: Utensils }, { id: 'budget', label: '预算预留', count: profile.party + ' 人', icon: Wallet }];
   const selectTab = (id: string) => {
     setTab(id);
@@ -48,10 +49,7 @@ export function PlannedTrip({ profile, onCopy, onSave, onEdit, onUpdateReturn }:
     }} key={item.id} onClick={() => selectTab(item.id)}><item.icon size={16} /><span>{item.label}<small aria-hidden="true">{item.count}</small></span></button>)}</div>
     <div ref={panel} role="tabpanel" id={'plan-panel-' + tab} aria-labelledby={'plan-tab-' + tab} className="trip-tab-panel">
       {tab === 'route' && <>
-        {lastDay?.afternoonReturn && <ReturnDayEditor day={lastDay} profile={profile} onApply={onUpdateReturn} />}
-        <TripDays days={days.map((day, i) => i < days.length - 1 ? day : {
-          ...day, stayLabel: '返程安排', overnight: returnScheduled ? `${returnLabel}，当晚无住宿预留。` : `返程时段待定。如需延住，可参考${day.overnight}。`,
-        })} date={profile.date} />
+        <TripSchedule days={days} profile={profile} onUpdateReturn={onUpdateReturn} initialDay={initialDay} />
         {issues.length > 0 && <details className="trip-reading-note trip-reading-details">
           <summary><strong>行前核对</strong><span>{issues.length} 项</span><ChevronDown size={16} /></summary>
           <ul className="mt-2 list-disc space-y-1 pl-4">{issues.map(issue => <li key={issue}>{issue}</li>)}</ul>
@@ -61,14 +59,14 @@ export function PlannedTrip({ profile, onCopy, onSave, onEdit, onUpdateReturn }:
       {tab === 'stay' && <div className="space-y-8">
         <div className="trip-reading-note"><strong>{budget.nights ? budget.nights + ' 晚 · 建议 ' + budget.rooms + ' 间双人房' : '本次为当日往返，住宿片区供延住参考'}</strong><p>{budget.nights ? '筛选目标 ¥' + budget.roomRange.join('–') + ' / 间 / 晚，是「' + budgetLabels[profile.budget] + '」档位的预算范围，不代表实时房价。优先按每日路线选片区，再比较酒店。' : '先核对当天返程的车船或驾驶安排；如需延住，再按次日出发位置选择片区。'}</p></div>
         {budget.nights > 0 && <section aria-label="逐晚住宿安排"><h4 className="trip-content-title">每一晚，住在旅程顺路的地方</h4><ol className="trip-night-list">
-          {budget.arrivalNight && <li><span>抵达前夜</span><div><strong>提前住在首个游玩片区</strong><p>预算已计入；以次日第一站的交通选择酒店。</p></div></li>}
-          {days.slice(0, -1).map((day, i) => <li key={day.title}><span>第 {i + 1} 晚</span><div><strong>{day.overnight}</strong><p>{day.title}之后，订房前核对次日交通。</p></div></li>)}
+          {budget.arrivalNight && <li><span>抵达前夜</span><div><strong>{firstBase}</strong><p>从第一站入园位置倒推住宿和接驳。</p></div></li>}
+          {lodging.map(block => <li key={block.firstNight}><span>{block.firstNight === block.lastNight ? `第 ${block.firstNight} 晚` : `第 ${block.firstNight}–${block.lastNight} 晚`}</span><div><strong>{block.area}</strong><p>{block.firstNight !== block.lastNight ? '这几晚可连住同一家，再按每天第一站安排出门。' : '订房前核对次日第一站与车站接驳。'}</p></div></li>)}
         </ol></section>}
         {cityIds.map(id => <section key={id}><p className="trip-city-label">{cityById[id].shortName}</p><StaySuggestions city={cityById[id]} /></section>)}
       </div>}
       {tab === 'food' && <div className="space-y-8">
         <p className="trip-panel-description">按城市找地方风味，也按每天的路线安排一餐。营业与供应请在出发前核对。</p>
-        <details className="trip-meal-index"><summary><Utensils size={16} />查看每日餐食安排<span>{days.length} 天</span></summary><ol>{days.map((day, index) => <li key={day.title}><span>第 {index + 1} 天 · {cityById[day.cityId].shortName}</span>{day.breakfast || day.lunch || day.dinner ? <><p><strong>早餐：</strong>{day.breakfast}</p><p><strong>午餐：</strong>{day.lunch}</p><p><strong>晚餐：</strong>{day.dinner}</p></> : <p>{day.meal}</p>}</li>)}</ol></details>
+        <details className="trip-meal-index"><summary><Utensils size={16} />查看每日餐食安排<span>{days.length} 天</span></summary><ol>{days.map((day, index) => <li key={day.title}><span>第 {index + 1} 天 · {cityById[day.cityId].shortName}</span>{buildDaySchedule(day, profile, days[index - 1], index === days.length - 1).rows.filter(row => row.kind === 'meal').map(row => <p key={row.title}><strong>{row.title}</strong>{row.detail && <><br />{row.detail}</>}</p>)}</li>)}</ol></details>
         {cityIds.map(id => <section key={id}><p className="trip-city-label">{cityById[id].shortName}</p><FoodSuggestions city={cityById[id]} /></section>)}
       </div>}
       {tab === 'budget' && <section>

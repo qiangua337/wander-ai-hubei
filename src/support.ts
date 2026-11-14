@@ -1,7 +1,8 @@
 import { cities, cityById, destinations, destinationById, type CityGuide, type Destination } from './data';
 import { practical } from './data/practical';
 import { travelFaq } from './data/help';
-import { templates, type Profile } from './planning';
+import { buildTrip, templates, type Profile } from './planning';
+import { buildDaySchedule, describePlanDay } from './day-schedule';
 import { findDestinations } from './travel';
 import { answerTripQuestion, copyTripDraft, extractTripOrigin, planSupportTrip, readReturnTiming, type SupportTripDraft } from './support-planning';
 export { planSupportTrip, type SupportTripDraft } from './support-planning';
@@ -219,6 +220,20 @@ function answerGuide(question: string, context: SupportContext = {}): SupportRep
 }
 
 export function answerSupport(question: string, context: SupportContext = {}): SupportReply {
+  if (typeof question === 'string' && context.trip && /几点出门|几点出发|时间表|详细时间|景点之间怎么走/.test(question)
+    && /^(?:(?:看看|展开|想看|看)?\s*(?:第[一二三四五六七1-7]天|最后一天|每天))[^，,。；;]*[？?。！!\s]*$/.test(question.trim())) {
+    const current = planSupportTrip(context.trip);
+    const profile = current.plan;
+    if (profile) {
+      const days = buildTrip(profile);
+      const day = question.match(/第([一二三四五六七1-7])天/)?.[1];
+      const index = question.includes('最后一天') ? days.length - 1 : day ? ('一二三四五六七'.includes(day) ? '一二三四五六七'.indexOf(day) : Number(day) - 1) : undefined;
+      const text = index === undefined
+        ? days.map((item, i) => `第 ${i + 1} 天 · ${buildDaySchedule(item, profile, days[i - 1], i === days.length - 1).start}\n${item.title}`).join('\n\n') + '\n\n可以继续问“第二天几点出发？”，或打开行程查看每一段交通和餐食。'
+        : describePlanDay(days, index, profile);
+      return { text, actions: current.actions, sources: current.sources, suggestions: current.suggestions, context: current.context };
+    }
+  }
   const result = answerGuide(question, context);
   if (!context.trip || result.context.trip) return result;
   const previous = copyTripDraft(context.trip), cityIds = previous.cityIds || [];

@@ -23,8 +23,8 @@ import { CreditsDialog } from './components/SiteDialogs';
 import { cities, cityById, destinations, destinationById, featuredDestinations, type Destination } from './data';
 import { findDestinations, type DurationFilter, type Filter } from './travel';
 
-type ModalState = { type: 'guide'; cityId: string; placeId?: string } | { type: 'planner'; profile?: Profile } | { type: 'wishlist' } | { type: 'support'; openForm?: boolean } | { type: 'credits' } | { type: 'info'; title: string; body: string } | null;
-const mainNav = [['popular', '热门去处'], ['destinations', '目的地'], ['routes', '经典路线'], ['culture', '荆楚文化'], ['travel-life', '吃住指南']] as const;
+type ModalState = { type: 'guide'; cityId: string; placeId?: string } | { type: 'planner'; profile?: Profile } | { type: 'wishlist' } | { type: 'support'; openForm?: boolean; days?: number } | { type: 'credits' } | { type: 'info'; title: string; body: string } | null;
+const mainNav = [['popular', '热门去处'], ['routes', '经典路线'], ['destinations', '目的地'], ['culture', '荆楚文化'], ['travel-life', '吃住指南']] as const;
 const filters: { key: Filter; label: string }[] = [{ key: 'all', label: '全部' }, { key: 'nature', label: '山水自然' }, { key: 'city', label: '古城文博' }, { key: 'family', label: '亲子研学' }, { key: 'saved', label: '已收藏' }];
 function loadBrowse() {
   try {
@@ -86,7 +86,7 @@ export default function App() {
     catalogueFilters.current?.querySelector('select')?.focus({ preventScroll: true });
   };
   const showPlanner = () => { setMobileMenu(false); setModal({ type: 'planner' }); };
-  const showSupport = (openForm = false) => { setMobileMenu(false); setModal({ type: 'support', openForm }); };
+  const showSupport = (openForm = false, days?: number) => { setMobileMenu(false); setModal({ type: 'support', openForm, days }); };
   const openPlace = (place: Destination) => setModal({ type: 'guide', cityId: place.cityId, placeId: place.id });
   const toggleSave = (place: Destination) => {
     const wasSaved = saved.includes(place.id);
@@ -94,7 +94,7 @@ export default function App() {
     setToast(wasSaved ? `已取消收藏「${place.title}」` : `已收藏「${place.title}」，在「我的收藏」中查看`);
   };
   const chooseCity = (id: string) => { setActiveCity(id); setSelection(id); setLimit(12); };
-  const reset = () => { chooseCity('all'); setKeyword(''); setFilter('all'); setDuration('any'); };
+  const reset = () => { chooseCity('all'); setKeyword(''); setFilter('all'); setDuration('any'); setOrder('recommended'); };
   const revealDestinations = (id: string, term = '', category: Filter = 'all') => {
     chooseCity(id); setKeyword(term); setFilter(category); setDuration('any'); setOrder('recommended');
     window.requestAnimationFrame(scrollToCities);
@@ -155,7 +155,7 @@ export default function App() {
     </header>
 
     <main>
-      <HomeHero selection={selection} onCity={setSelection} onSearch={search} onPlan={() => showSupport(true)} onAsk={() => showSupport()} onExplore={exploreMode} />
+      <HomeHero selection={selection} onCity={setSelection} onSearch={search} onPlan={days => showSupport(true, days)} onAsk={() => showSupport()} onExplore={exploreMode} />
 
       <section id="popular" aria-labelledby="popular-title" className="popular-section section-space">
         <div className="page-width">
@@ -163,6 +163,8 @@ export default function App() {
           <div className="featured-grid">{featuredDestinations.map(place => <DestinationCard key={place.id} place={place} featured saved={saved.includes(place.id)} onSave={() => toggleSave(place)} onOpen={() => openPlace(place)} />)}</div>
         </div>
       </section>
+
+      <RouteTemplates onChoose={profile => showTemplate(profile.template)} />
 
       <section id="destinations" aria-labelledby="destinations-title" className="city-section section-space">
         <div className="page-width">
@@ -188,7 +190,6 @@ export default function App() {
         </div>
       </section>
 
-      <RouteTemplates onChoose={profile => showTemplate(profile.template)} />
       <CultureAtlas onOpenPlace={id => openPlace(destinationById[id])} />
       <TravelLife fallbackCity={selection} onExplore={revealDestinations} onPlan={planCity} />
       <TravelFaq onAsk={() => showSupport()} />
@@ -206,7 +207,7 @@ export default function App() {
     </div></footer>
 
     {showQuickNav && <div className="travel-tools"><a href="#top" aria-label="返回顶部" className="back-to-top"><ArrowUp size={18} /></a><button className="support-launcher" onClick={() => showSupport()} aria-label="打开湖北旅行问答"><MessageCircle size={18} />问小游</button></div>}
-    <SupportDesk open={modal?.type === 'support'} openForm={modal?.type === 'support' && !!modal.openForm} initialCity={selection} initialParty={Number(travelers)} initialDate={date} onClose={closeModal} onAction={supportAction} />
+    <SupportDesk open={modal?.type === 'support'} openForm={modal?.type === 'support' && !!modal.openForm} initialCity={selection} initialDays={modal?.type === 'support' ? modal.days : undefined} initialParty={Number(travelers)} initialDate={date} onClose={closeModal} onAction={supportAction} />
     {toast && createPortal(<div role="status" aria-live="polite" className="fixed bottom-6 left-1/2 z-[70] flex max-w-[92vw] -translate-x-1/2 items-center gap-2 rounded-2xl bg-ink px-5 py-3 text-xs leading-6 text-white shadow-xl"><Check size={16} className="shrink-0 text-seafoam" />{toast}</div>, document.body)}
     {modal?.type === 'guide' && <Modal title={modal.placeId ? `${destinationById[modal.placeId].title} · 攻略与路线` : `${cityById[modal.cityId].shortName} · 城市旅行攻略`} onClose={closeModal} wide><TravelGuide key={`${modal.cityId}-${modal.placeId || 'city'}`} city={cityById[modal.cityId]} place={modal.placeId ? destinationById[modal.placeId] : undefined} date={date} travelers={travelers} onCopy={copyPlan} onOpenPlace={openPlace} onPlan={() => planCity(modal.cityId)} saved={modal.placeId ? saved.includes(modal.placeId) : undefined} onSave={modal.placeId ? () => toggleSave(destinationById[modal.placeId!]) : undefined} /></Modal>}
     {modal?.type === 'planner' && <Planner initialCity={activeCity} initialDate={date} travelers={travelers} initialProfile={modal.profile} onClose={closeModal} onCopy={copyPlan} />}

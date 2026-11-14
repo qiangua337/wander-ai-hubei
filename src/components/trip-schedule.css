@@ -1,0 +1,44 @@
+.trip-schedule { min-width:0; }
+.trip-schedule-heading { margin-bottom:13px; }
+.trip-schedule-heading h3 { font-size:20px; font-weight:650; line-height:1.45; }
+.trip-schedule-heading p { color:var(--color-muted); font-size:13px; margin-top:3px; }
+.trip-lodging-overview { display:grid; gap:8px; padding:11px 13px; margin-bottom:14px; border:1px solid var(--color-line); border-radius:8px; background:var(--color-cream); }
+.trip-lodging-overview>strong { display:flex; align-items:center; gap:7px; color:var(--color-pine); font-size:13px; }
+.trip-lodging-overview ul { display:flex; flex-wrap:wrap; column-gap:18px; row-gap:4px; }
+.trip-lodging-overview li { display:flex; flex-wrap:wrap; gap:2px 8px; color:var(--color-muted); font-size:12px; }
+.trip-lodging-overview li strong { color:var(--color-ink); font-weight:600; }
+.trip-schedule-tabs { display:flex; flex-wrap:wrap; gap:6px; margin-bottom:12px; }
+.trip-schedule-tabs button { min-height:40px; padding:4px 11px; border-radius:6px; border:1px solid var(--color-line); color:var(--color-pine); font-size:12px; }
+.trip-schedule-tabs button:is(:hover,:focus-visible) { background:var(--color-sage); }
+.trip-schedule-tabs button[aria-selected="true"] { border-color:var(--color-pine); background:var(--color-pine); color:white; }
+.trip-schedule-panel { overflow:hidden; border:1px solid var(--color-line); border-radius:10px; background:white; }
+.trip-schedule-day { padding:14px 16px; border-bottom:1px solid var(--color-line); background:var(--color-sand); }
+.trip-schedule-day>span { color:var(--color-pine); font-weight:550; font-size:12px; }
+.trip-schedule-day h4 { font-size:17px; font-weight:620; margin-top:2px; }
+.trip-schedule-day p { margin-top:3px; color:var(--color-muted); font-size:12px; }
+.trip-schedule-day>div { display:flex; align-items:center; flex-wrap:wrap; gap:3px 7px; margin-top:8px; color:var(--color-pine); font-size:13px; }
+.trip-schedule-day>div span { color:var(--color-muted); font-size:12px; }
+.trip-schedule-rows { padding:4px 14px; margin:0; }
+.trip-schedule-rows .schedule-row { position:relative; display:grid; grid-template-columns:54px 24px minmax(0,1fr); gap:8px; padding:9px 0; }
+.trip-schedule-rows .schedule-row+.schedule-row { border-top:1px solid var(--color-line); }
+.schedule-time { align-self:start; padding-top:2px; color:var(--color-muted); font-size:11px; line-height:1.65; overflow-wrap:anywhere; }
+.schedule-time.has-clock { color:var(--color-pine-deep); font-size:13px; font-weight:650; font-variant-numeric:tabular-nums; }
+.schedule-time small { padding-left:2px; font-size:10px; }
+.schedule-row-icon { display:flex; justify-content:center; margin-top:3px; color:var(--color-pine); }
+.schedule-row.schedule-move .schedule-row-icon { color:var(--color-muted); }
+.schedule-row-body h5 { font-size:14px; font-weight:620; color:var(--color-ink); line-height:1.55; }
+.schedule-option { margin-left:6px; color:var(--color-muted); font-size:11px; font-weight:450; }
+.schedule-row-body p { color:var(--color-muted); font-size:12px; line-height:1.7; margin-top:2px; }
+.schedule-duration { display:inline-block; color:var(--color-pine); font-size:11px; font-weight:550; }
+.trip-schedule-notes { border-top:1px solid var(--color-line); padding:5px 14px 8px; color:var(--color-muted); font-size:12px; line-height:1.75; }
+.trip-schedule-notes summary { display:flex; gap:10px; align-items:center; justify-content:space-between; min-height:34px; color:var(--color-pine); cursor:pointer; }
+.trip-schedule-notes p { margin-bottom:9px; }
+.trip-schedule-notes a { color:var(--color-pine); text-decoration:underline; text-underline-offset:3px; }
+.trip-schedule-foot { margin-top:8px; color:var(--color-muted); font-size:11px; line-height:1.65; }
+.trip-schedule-panel .return-day-editor { margin:10px 12px; }
+@media(max-width:480px) {
+  .trip-schedule-tabs button { padding-inline:9px; }
+  .trip-schedule-rows { padding-inline:9px; }
+  .trip-schedule-rows .schedule-row { grid-template-columns:42px 18px minmax(0,1fr); gap:5px; }
+  .trip-schedule-day { padding-inline:12px; }
+}

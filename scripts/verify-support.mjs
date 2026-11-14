@@ -578,6 +578,12 @@ try {
   assert(buildTrip(clearedReturn.plan).at(-1).stops.some(stop => /省博|东湖|湖北省博物馆/.test(stop.title)));
 
   const shortMorning = ask('武汉2天2人，最后一天下午才返程，上午想吃点东西再逛逛');
+  const byDay = ask('第一天几点出发？', shortMorning.context);
+  assert(/08:35.*建议出门/.test(byDay.text) && /户部巷/.test(byDay.text) && /10–25 分钟/.test(byDay.text));
+  const everyDay = ask('每天几点出门？', byDay.context);
+  assert(everyDay.text.includes('第 1 天') && everyDay.text.includes('第 2 天'));
+  const notInPlan = ask('第四天的时间表', byDay.context);
+  assert.match(notInPlan.text, /共 2 天/);
   assert(shortMorning.plan && buildTrip(shortMorning.plan).at(-1).returnMorning?.conditional);
   const confirmedReturn = ask('最后一天下午三点半从武昌火车站坐高铁回上海', shortMorning.context);
   assert(confirmedReturn.plan && confirmedReturn.plan.cityId === 'wuhan');
