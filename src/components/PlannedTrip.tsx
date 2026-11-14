@@ -5,14 +5,16 @@ import { arrivalLabels, getDepartureLabel, mobilityLabels, getTripIssues, buildT
 import { downloadPlan } from '../travel';
 import { TripDays } from './TravelGuide';
 import { FoodSuggestions, StaySuggestions } from './PracticalDetails';
+import { ReturnDayEditor } from './ReturnDayEditor';
 import { Button } from './ui';
 
-export function PlannedTrip({ profile, onCopy, onSave, onEdit }: { profile: Profile; onCopy: (text: string) => void; onSave: () => boolean; onEdit: () => void }) {
+export function PlannedTrip({ profile, onCopy, onSave, onEdit, onUpdateReturn }: { profile: Profile; onCopy: (text: string) => void; onSave: () => boolean; onEdit: () => void; onUpdateReturn: (profile: Profile) => void }) {
   const [tab, setTab] = useState('route');
   const [saveState, setSaveState] = useState('');
   const [checked, setChecked] = useState<string[]>([]);
   const panel = useRef<HTMLDivElement>(null);
   const days = buildTrip(profile), budget = estimateBudget(profile, days.length), cityIds = [...new Set(days.map(day => day.cityId))];
+  const lastDay = days.at(-1);
   const returnLabel = getDepartureLabel(profile);
   const returnScheduled = profile.departure && profile.departure !== 'flexible';
   const tabs = [{ id: 'route', label: '每日行程', count: days.length + ' 天', icon: Route }, { id: 'stay', label: '住在哪里', count: budget.nights + ' 晚', icon: BedDouble }, { id: 'food', label: '当地美食', count: cityIds.length + ' 城', icon: Utensils }, { id: 'budget', label: '预算预留', count: profile.party + ' 人', icon: Wallet }];
@@ -47,6 +49,7 @@ export function PlannedTrip({ profile, onCopy, onSave, onEdit }: { profile: Prof
     }} key={item.id} onClick={() => selectTab(item.id)}><item.icon size={16} /><span>{item.label}<small aria-hidden="true">{item.count}</small></span></button>)}</div>
     <div ref={panel} role="tabpanel" id={'plan-panel-' + tab} aria-labelledby={'plan-tab-' + tab} className="trip-tab-panel">
       {tab === 'route' && <>
+        {lastDay?.afternoonReturn && <ReturnDayEditor day={lastDay} profile={profile} onApply={onUpdateReturn} />}
         {getTripIssues(profile).length > 0 && <div className="trip-reading-note"><strong>先核对这份安排的条件</strong><ul className="mt-2 list-disc space-y-1 pl-4">{getTripIssues(profile).map(issue => <li key={issue}>{issue}</li>)}</ul></div>}
         {budget.arrivalNight && <p className="trip-reading-note">所选章节从完整游玩日开始，建议提前一晚抵达，住宿预算已加这一晚。若当天才到，首日上午改作交通并减少景点。</p>}
         <p className="trip-panel-description">每天围绕一片区域走。跨城日把上午留给交通；到得晚，就缩减当天下午的活动。</p>

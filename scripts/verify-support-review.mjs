@@ -99,6 +99,12 @@ try {
   assert(constraintsChange.afterTotal[1] < constraintsChange.beforeTotal[1]);
   const constraintsDraft = supportTripDraftFromProfile(constrained);
   for (const key of ['origin', 'arrival', 'departure', 'departureTime', 'departureStation', 'mobility', 'budgetLimit', 'budgetScope']) assert.equal(constraintsDraft[key], constrained[key], 'Editing must retain travel constraints.');
+  const logistics = { area: 'wuchang-old-town', travelMinutes: 65, luggageMinutes: 0 };
+  const withLogistics = { ...constrained, returnLogistics: logistics };
+  assert.deepEqual(compare(constrained, withLogistics).changes.map(change => change.label), ['返程落脚片区', '地图车程', '取行李时间']);
+  const logisticsDraft = supportTripDraftFromProfile(withLogistics);
+  assert.deepEqual(logisticsDraft.returnLogistics, logistics);
+  assert.notEqual(logisticsDraft.returnLogistics, logistics, 'Editing must not mutate the saved return settings.');
   draft.cityIds.push('enshi');
   assert.deepEqual(supportTripDraftFromProfile(frozen).cityIds, ['wuhan'], 'Draft arrays are independent copies.');
   assert.equal(JSON.stringify(base), snapshot);

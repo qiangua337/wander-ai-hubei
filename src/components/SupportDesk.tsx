@@ -33,6 +33,7 @@ export function SupportDesk({ open, initialCity, initialParty, initialDate, onCl
   const serial = useRef(0);
   const log = useRef<HTMLDivElement>(null);
   const detail = useRef<HTMLDivElement>(null);
+  const focusReturn = useRef(false);
   const selected = messages.find(message => message.id === selectedId);
   const profile = selected?.reply.plan;
   const previous = selected?.baseProfile;
@@ -47,10 +48,21 @@ export function SupportDesk({ open, initialCity, initialParty, initialDate, onCl
     const top = !showTripForm && messages.length && last ? element.scrollTop + last.getBoundingClientRect().top - element.getBoundingClientRect().top - 12 : 0;
     element.scrollTo({ top: Math.max(0, top), behavior: 'instant' });
   }, [messages, open, showTripForm]);
-  useEffect(() => { if (detailOpen) { detail.current?.scrollTo({ top: 0, behavior: 'instant' }); detail.current?.focus({ preventScroll: true }); } }, [selectedId, detailOpen]);
-  const addReply = (question: string, reply: SupportReply) => {
+  useEffect(() => {
+    if (!detailOpen) return;
+    const trigger = focusReturn.current && detail.current?.querySelector<HTMLButtonElement>('.return-day-trigger');
+    focusReturn.current = false;
+    if (trigger) {
+      trigger.scrollIntoView({ block: 'nearest', behavior: 'instant' });
+      trigger.focus({ preventScroll: true });
+    } else {
+      detail.current?.scrollTo({ top: 0, behavior: 'instant' });
+      detail.current?.focus({ preventScroll: true });
+    }
+  }, [selectedId, detailOpen]);
+  const addReply = (question: string, reply: SupportReply, from = context.trip ? activeProfile : undefined) => {
     const id = ++serial.current;
-    const baseProfile = reply.plan && context.trip ? activeProfile : undefined;
+    const baseProfile = reply.plan ? from : undefined;
     setMessages(before => [...before, { id, question, reply, baseProfile }].slice(-12));
     setContext(reply.context); setSuggestions(reply.suggestions.length ? reply.suggestions.slice(0, 4) : promptsFor(reply.context.cityId));
     setDraft(''); setShowTripForm(false); setEditingTrip(undefined);
@@ -74,6 +86,13 @@ export function SupportDesk({ open, initialCity, initialParty, initialDate, onCl
     setEditingTrip({ ...supportTripDraftFromProfile(plan), budget: selected.reply.context.trip?.budget });
     setShowTripForm(true);
     setDetailOpen(false);
+  };
+  const updateReturn = (next: Profile) => {
+    if (!profile) return;
+    const requested = selected?.reply.context.trip || supportTripDraftFromProfile(profile);
+    const reply = planSupportTrip({ ...requested, departure: next.departure, departureTime: next.departureTime, departureStation: next.departureStation, returnLogistics: next.returnLogistics });
+    focusReturn.current = Boolean(reply.plan);
+    addReply('更新返程接驳', reply, profile);
   };
   const chooseCity = (cityId?: string) => {
     setContext({ cityId });
@@ -119,7 +138,15 @@ export function SupportDesk({ open, initialCity, initialParty, initialDate, onCl
         {!showTripForm && <><div className="support-suggestions" aria-label="可以继续问">{suggestions.map(question => <button key={question} onClick={() => ask(question)}>{question}</button>)}</div><form className="support-form" onSubmit={event => { event.preventDefault(); ask(draft); }}><label className="sr-only" htmlFor="support-question">输入旅行问题</label><textarea id="support-question" aria-label="输入旅行问题" rows={2} maxLength={240} value={draft} onChange={event => setDraft(event.target.value)} onKeyDown={event => { if (event.key === 'Enter' && !event.shiftKey && !event.nativeEvent.isComposing) { event.preventDefault(); ask(draft); } }} placeholder="例如：武汉2天2人，下午到，少台阶" /><button type="submit" disabled={!draft.trim()}><Send size={16} />发送</button></form></>}
         <p className="support-privacy">问题不上传，刷新清空对话。车船、开放与房价需核对当期信息。</p>
       </div>
-      {profile && <aside className="support-detail" aria-label="行程详情"><div className="support-detail-bar"><button className="support-back-chat" onClick={returnToChat}><ArrowLeft size={16} />返回对话</button><span>这份行程</span><button onClick={() => editPlan(profile)}>调整条件</button><button className="support-close-detail" onClick={() => { setSelectedId(undefined); returnToChat(); }} aria-label="收起行程详情"><X size={17} /></button></div><div ref={detail} tabIndex={-1} role="region" aria-label="具体行程内容" className="support-detail-scroll"><SupportPlanPreview key={`preview-${selectedId}`} profile={profile} /><SupportPlanTools key={selectedId} profile={profile} previous={previous} onEdit={editPlan} /><button className="support-open-full" onClick={() => onAction({ kind: 'plan', cityId: profile.cityId, profile, label: '保存与调整完整行程' })}>保存与调整完整行程<ArrowUpRight size={16} /></button><p className="support-detail-footnote">这份预览在当前页面保留。进入完整行程后，可保存到本浏览器。</p></div></aside>}
+      {profile && <aside className="support-detail" aria-label="行程详情">
+        <div className="support-detail-bar"><button className="support-back-chat" onClick={returnToChat}><ArrowLeft size={16} />返回对话</button><span>这份行程</span><button onClick={() => editPlan(profile)}>调整条件</button><button className="support-close-detail" onClick={() => { setSelectedId(undefined); returnToChat(); }} aria-label="收起行程详情"><X size={17} /></button></div>
+        <div ref={detail} tabIndex={-1} role="region" aria-label="具体行程内容" className="support-detail-scroll">
+          <SupportPlanPreview key={`preview-${selectedId}`} profile={profile} onUpdateReturn={updateReturn} />
+          <SupportPlanTools key={selectedId} profile={profile} previous={previous} onEdit={editPlan} />
+          <button className="support-open-full" onClick={() => onAction({ kind: 'plan', cityId: profile.cityId, profile, label: '保存与调整完整行程' })}>保存与调整完整行程<ArrowUpRight size={16} /></button>
+          <p className="support-detail-footnote">这份预览在当前页面保留。进入完整行程后，可保存到本浏览器。</p>
+        </div>
+      </aside>}
     </div>
   </Modal>;
 }

@@ -1,5 +1,6 @@
 import { cityById } from './data';
 import { arrivalLabels, getDepartureLabel, mobilityLabels, buildTrip, estimateBudget, groupLabels, interestLabels, budgetLabels, templates, type PlannedDay, type Profile } from './planning';
+import { returnAreaLabel } from './return-timing';
 import type { SupportTripDraft } from './support';
 
 export type SupportPlanComparison = {
@@ -23,9 +24,14 @@ function interestLabel(profile: Profile): string {
   return `${interestLabels[profile.interest]}${fixed ? '（固定主线，景点不变）' : ''}`;
 }
 
+function minutesLabel(minutes: number | undefined): string {
+  return minutes === undefined ? '按行程估算' : `${minutes} 分钟`;
+}
+
 /** Compare actual route days and settings without changing either plan or editorial data. */
 export function compareSupportPlans(previous: Profile, current: Profile): SupportPlanComparison {
   const beforeDays = buildTrip(previous), afterDays = buildTrip(current);
+  const beforeLogistics = previous.returnLogistics, afterLogistics = current.returnLogistics;
   const keyFor = (day: PlannedDay) => `${day.cityId}:${day.originalIndex}`;
   const beforeKeys = new Set(beforeDays.map(keyFor)), afterKeys = new Set(afterDays.map(keyFor));
   const revisedDays = afterDays.flatMap((day, index) => {
@@ -48,6 +54,9 @@ export function compareSupportPlans(previous: Profile, current: Profile): Suppor
     ['出发城市', previous.origin || '未填写', current.origin || '未填写'],
     ['首日抵达', previous.arrival ? arrivalLabels[previous.arrival] : '沿用原方案假设', current.arrival ? arrivalLabels[current.arrival] : '沿用原方案假设'],
     ['返程时段', getDepartureLabel(previous), getDepartureLabel(current)],
+    ['返程落脚片区', returnAreaLabel(beforeLogistics?.area, beforeDays.at(-1)?.cityId || previous.cityId) || '随行程安排', returnAreaLabel(afterLogistics?.area, afterDays.at(-1)?.cityId || current.cityId) || '随行程安排'],
+    ['地图车程', minutesLabel(beforeLogistics?.travelMinutes), minutesLabel(afterLogistics?.travelMinutes)],
+    ['取行李时间', minutesLabel(beforeLogistics?.luggageMinutes), minutesLabel(afterLogistics?.luggageMinutes)],
     ['体力限制', mobilityLabels[previous.mobility || 'standard'], mobilityLabels[current.mobility || 'standard']],
     ['目标预算', previous.budgetLimit ? (previous.budgetScope === 'per-person' ? '每人' : '全团') + ' ¥' + previous.budgetLimit : '未设置', current.budgetLimit ? (current.budgetScope === 'per-person' ? '每人' : '全团') + ' ¥' + current.budgetLimit : '未设置'],
     ['补充想法', previous.note.trim() || '未填写', current.note.trim() || '未填写'],
@@ -74,6 +83,7 @@ export function supportTripDraftFromProfile(profile: Profile): SupportTripDraft 
     ...(profile.departure ? { departure: profile.departure } : {}),
     ...(profile.departureTime ? { departureTime: profile.departureTime } : {}),
     ...(profile.departureStation ? { departureStation: profile.departureStation } : {}),
+    ...(profile.returnLogistics ? { returnLogistics: { ...profile.returnLogistics } } : {}),
     ...(profile.mobility ? { mobility: profile.mobility } : {}),
     ...(profile.budgetLimit !== undefined ? { budgetLimit: profile.budgetLimit, budgetScope: profile.budgetScope } : {}),
   };

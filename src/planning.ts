@@ -2,7 +2,7 @@ import { cityById, type TripDay } from './data';
 import { practical } from './data/practical';
 import { railwayEntrySource, returnWalks, type ReturnSource } from './data/return-mornings';
 import { routeDetails, type RouteEffort } from './data/route-details';
-import { clockWindow, formatClock, normalizeClockInput, normalizeStation, parseClock, type DepartureWindow, type StationSchedule } from './return-timing';
+import { clockWindow, formatClock, manualTravelBuffer, normalizeClockInput, normalizeReturnLogistics, normalizeStation, parseClock, returnAreaLabel, type DepartureWindow, type ReturnLogistics, type StationSchedule } from './return-timing';
 import { planDate, selectPlanDays, validDate, type Pace } from './travel';
 export { validDate } from './travel';
 
@@ -12,14 +12,15 @@ export type Profile = {
   budget: 'value' | 'comfort' | 'boutique'; interest: 'balanced' | 'culture' | 'nature' | 'food';
   pace: Pace; note: string;
   origin?: string; arrival?: 'full-day' | 'morning' | 'afternoon' | 'evening' | 'previous-night';
-  departure?: DepartureWindow; departureTime?: string; departureStation?: string;
+  departure?: DepartureWindow; departureTime?: string; departureStation?: string; returnLogistics?: ReturnLogistics;
   mobility?: 'standard' | 'gentle'; budgetLimit?: number; budgetScope?: 'total' | 'per-person';
 };
 export type PlannedDay = TripDay & {
   cityId: string; originalIndex: number; overnight: string; transfer?: string; region: string; effort: RouteEffort;
   breakfast?: string; lunch?: string; dinner?: string; sightseeingRemoved?: boolean;
-  returnMorning?: { sight: string; conditional: boolean };
+  returnMorning?: { sight: string; conditional: boolean; minutes: number };
   stationSchedule?: StationSchedule;
+  afternoonReturn?: { area?: string; stationMinutes: number; luggageMinutes: number; travelAllowance?: number };
   returnSources?: ReturnSource[];
 };
 export const templates = [
@@ -46,6 +47,7 @@ export function normalizeProfile(value: unknown, fallback = defaultProfile()): P
   if (!value || typeof value !== 'object') return fallback;
   const v = value as Partial<Profile>;
   const cityId = typeof v.cityId === 'string' && Object.hasOwn(cityById, v.cityId) ? v.cityId : fallback.cityId;
+  const template = templates.find(t => t.id === v.template);
   const indices = Array.isArray(v.indices) ? [...new Set(v.indices.filter(index => Number.isInteger(index) && index >= 0 && index < cityById[cityId].days.length))].sort((a, b) => a - b) : fallback.indices;
   const party = Number.isInteger(v.party) && v.party! >= 1 && v.party! <= 6 ? v.party! : fallback.party;
   const group = v.group && Object.hasOwn(groupLabels, v.group) ? v.group : fallback.group;
@@ -66,6 +68,8 @@ export function normalizeProfile(value: unknown, fallback = defaultProfile()): P
   }
   const station = normalizeStation(v.departureStation === undefined ? fallback.departureStation : v.departureStation);
   if (station) optional.departureStation = station;
+  const returnLogistics = normalizeReturnLogistics(v.returnLogistics === undefined ? fallback.returnLogistics : v.returnLogistics, template?.segments.at(-1)?.cityId || cityId);
+  if (returnLogistics) optional.returnLogistics = returnLogistics;
   const mobility = v.mobility === undefined ? fallback.mobility : v.mobility;
   if (mobility === 'standard' || mobility === 'gentle') optional.mobility = mobility;
   const budgetLimit = v.budgetLimit === undefined ? fallback.budgetLimit : v.budgetLimit;
@@ -73,7 +77,7 @@ export function normalizeProfile(value: unknown, fallback = defaultProfile()): P
   const budgetScope = v.budgetScope === undefined ? fallback.budgetScope : v.budgetScope;
   if (budgetScope === 'total' || budgetScope === 'per-person') optional.budgetScope = budgetScope;
   return {
-    cityId, template: templates.some(t => t.id === v.template) ? v.template! : 'custom', indices,
+    cityId, template: template?.id || 'custom', indices,
     date: typeof v.date === 'string' && validDate(v.date) ? v.date : '',
     party,
     group: group === 'solo' && party > 1 ? 'friends' : group,
@@ -161,49 +165,61 @@ function applyAfternoonReturn(day: PlannedDay, profile: Profile, previous: Plann
   const minutes = parseClock(departureTime);
   const lodging = previous?.cityId === day.cityId ? previous.overnight : practical[day.cityId].stays[0].area;
   const options = returnWalks[day.cityId] || [];
-  const nearby = (!hasPriorStay && station ? options.find(option => Object.hasOwn(option.stationBuffers, station)) : undefined)
+  const logistics = normalizeReturnLogistics(profile.returnLogistics, day.cityId);
+  const suggestedArea = (!hasPriorStay && station ? options.find(option => Object.hasOwn(option.stationBuffers, station)) : undefined)
     || options.find(option => option.base.test(lodging));
-  const toStation = station && nearby && Object.hasOwn(nearby.stationBuffers, station) ? nearby.stationBuffers[station] : undefined;
-  const luggageMinutes = hasPriorStay ? 20 : 15;
+  const nearby = logistics?.area ? options.find(option => option.id === logistics.area) : suggestedArea;
+  const mapMinutes = logistics?.travelMinutes;
+  const travelAllowance = mapMinutes !== undefined ? mapMinutes + manualTravelBuffer : station && nearby?.stationBuffers[station];
+  const toStation = station && !byAir && typeof travelAllowance === 'number' ? travelAllowance : undefined;
+  const luggageMinutes = logistics?.luggageMinutes ?? (hasPriorStay ? 20 : 15);
   const inStationMinutes = profile.group === 'senior' || profile.group === 'family' || profile.party >= 5 ? 75 : 60;
   const arrive = minutes !== undefined && toStation !== undefined ? minutes - inStationMinutes : undefined;
   const leave = arrive !== undefined && toStation !== undefined ? arrive - toStation : undefined;
   const finish = leave !== undefined ? leave - luggageMinutes : undefined;
-  const hasTimeToWalk = finish !== undefined
-    ? finish >= 9 * 60 + (nearby?.minutes || 0) + 15
-    : minutes === undefined || minutes >= 13 * 60 + 30;
-  const walk = nearby && (!station || toStation !== undefined) && hasTimeToWalk ? nearby : undefined;
+  const breakfastStart = 9 * 60;
+  const breakfastMinutes = 20;
+  const available = finish === undefined ? undefined : finish - breakfastStart - breakfastMinutes;
+  const defaultWalkFits = minutes === undefined || minutes >= 13 * 60 + 30;
+  const walk = nearby && (!station || toStation !== undefined) && (available === undefined ? defaultWalkFits : available >= 15) ? nearby : undefined;
+  const walkMinutes = walk ? (available !== undefined && available < walk.minutes ? 15 : walk.minutes) : undefined;
   const cutoff = finish !== undefined && leave !== undefined && arrive !== undefined
     ? { finishBy: formatClock(finish), leaveForStationBy: formatClock(leave), arriveBy: formatClock(arrive) }
     : undefined;
   const destination = station || '实际返程点';
-  const bags = hasPriorStay ? '早上先退房并问清行李寄存。' : '带好随身行李，寄存时先确认取回地点。';
+  const bags = luggageMinutes === 0 ? '整理好随身行李。' : hasPriorStay ? '早上先退房并问清行李寄存。' : '带好随身行李，寄存时先确认取回地点。';
+  const finishAction = luggageMinutes === 0 ? '结束上午安排' : '开始取行李';
+  const goTitle = luggageMinutes === 0 ? `前往${destination}` : `取行李，前往${destination}`;
+  const breakfast = finish !== undefined && finish < breakfastStart + breakfastMinutes
+    ? '早点可前一晚备好或到站后吃，按倒推时间取行李和出发。'
+    : nearby?.breakfast || '在住宿或接驳片区就近吃早餐，选出餐快的店。';
 
   day.title = `${city.shortName} · ${walk ? walk.sight + '后返程' : '早餐与返程接驳'}`;
   day.region = walk?.area || `${city.shortName} · 返程接驳`;
   day.effort = 'low';
   // The original full sightseeing chapter and ticket allowance are replaced even when there is an exterior walk.
   day.sightseeingRemoved = true;
-  if (walk) day.returnMorning = { sight: walk.sight, conditional: !cutoff };
+  if (walk && walkMinutes !== undefined) day.returnMorning = { sight: walk.sight, conditional: !cutoff, minutes: walkMinutes };
   day.stationSchedule = cutoff;
+  if (!byAir) day.afternoonReturn = { area: returnAreaLabel(logistics?.area, day.cityId) || nearby?.area, stationMinutes: inStationMinutes, luggageMinutes, travelAllowance: toStation };
   day.returnSources = [...(nearby?.sources || []), ...(byAir ? [] : [railwayEntrySource])];
 
   day.stops[0] = walk ? {
-    time: `上午 · ${cutoff ? '约' : '可选约'} ${walk.minutes} 分钟`,
+    time: `上午 · ${cutoff ? '约' : '可选约'} ${walkMinutes} 分钟`,
     title: walk.sight,
-    detail: `${bags}${walk.breakfast}${walk.detail}${cutoff ? `把 ${cutoff.finishBy} 当作结束活动、开始取行李的时间。` : '先确认车站和车程，余量足够再出发。'}`,
+    detail: `${bags}${breakfast}${walkMinutes === 15 ? '只走街口或步道入口附近一小段，再按原路折返。' : walk.detail}${cutoff ? `建议最晚 ${cutoff.finishBy} ${finishAction}。` : '先确认车站和车程，余量足够再出发。'}`,
   } : {
-    time: '上午 · 就近用餐',
-    title: `吃过早餐，准备${byAir ? '去机场' : '返程'}`,
-    detail: `${bags}${nearby?.breakfast || '在实际落脚处附近选一份早餐。'}${nearby && station && toStation === undefined ? `住宿片区与${station}的接驳需先核对，上午先不跨区逛。` : '车程不确定或时间紧时，吃完就去乘车点。'}`,
+    time: '上午 · 早餐和行李',
+    title: `早餐与${byAir ? '机场接驳' : '返程准备'}`,
+    detail: `${bags}${breakfast}${nearby && station && !byAir && toStation === undefined ? `住宿片区与${station}的接驳需先核对，上午先不跨区逛。` : ''}`,
   };
   day.stops[1] = cutoff ? {
-    time: `${cutoff.finishBy} 开始取行李 · ${cutoff.leaveForStationBy} 前出发`,
-    title: `取行李，前往${destination}`,
-    detail: `取行李留 ${luggageMinutes} 分钟，去站交通暂按 ${toStation} 分钟预留。出发前查地图上的实际路线、路况和进站口。需要更久就提前结束活动。`,
+    time: luggageMinutes === 0 ? `${cutoff.leaveForStationBy} 前出发` : `${cutoff.finishBy} 开始取行李 · ${cutoff.leaveForStationBy} 前出发`,
+    title: goTitle,
+    detail: `${luggageMinutes === 0 ? '携带随身行李直接出发。' : `取行李留 ${luggageMinutes} 分钟。`}${mapMinutes !== undefined ? `按你填的 ${mapMinutes} 分钟车程，另留 ${manualTravelBuffer} 分钟等车或换乘。` : `去站交通暂按 ${toStation} 分钟预留。`}出发前查地图上的实际路线、路况和进站口。需要更久就提前结束活动。`,
   } : {
     time: '离开街区前 · 核对接驳',
-    title: `取行李，前往${destination}`,
+    title: goTitle,
     detail: byAir ? '先按航司要求确认值机、托运和安检时间，再往前留取行李与去机场的车程。'
       : `用发车时间倒推交通与取行李时间。乘火车可先留 ${inStationMinutes} 分钟进站候车，再看车站提示。自驾按实际停车和路况留余量。时间紧就缩短步行。`,
   };
@@ -216,16 +232,16 @@ function applyAfternoonReturn(day: PlannedDay, profile: Profile, previous: Plann
     title: byAir ? '到机场后按要求办理乘机手续' : station ? '到站后安检与候车' : '按确认的方式返程',
     detail: byAir ? '以票面航站楼和航司通知为准。' : '乘车时核对出发站和进站口，按票面及车站公告预留时间。',
   };
-  day.breakfast = nearby?.breakfast || '在住宿或接驳片区就近吃早餐，选出餐快的店。';
+  day.breakfast = breakfast;
   day.lunch = walk && (finish === undefined || finish >= 12 * 60 + 30)
     ? walk.lunch
-    : '如果从取行李到发车时间紧，午餐带走或到站后补给。不要为坐下来吃饭推迟去站。';
+    : '时间紧就把午餐带走，或到站后补给。按计划出发去车站。';
   day.dinner = '返程途中或抵达后用餐，按实际到达和供餐时间决定。';
   day.meal = `早餐：${day.breakfast}\n午餐：${day.lunch}\n晚餐：${day.dinner}`;
   day.transport = `${day.stops[1].detail} ${day.stops[2].detail}`;
   day.tip = walk
-    ? '这一段只走街区或步道，遇排队、下雨或接驳变长就先删短逛。车站时间为规划预留，最终按票面、车站公告和当天交通核对。'
-    : '优先落实行李、站点和接驳。上午有余量时，也可以只在落脚处附近走一小段。';
+    ? '遇排队、下雨或车程变长时可以缩短或取消短逛。以票面、车站公告和当天交通为准。'
+    : available !== undefined && available < 15 ? '按当前时间预留，上午以行李与接驳为主。' : '先落实行李与接驳。有余量时只在实际落脚处附近短走。';
 }
 
 function applyDeparture(day: PlannedDay, profile: Profile, singleDay: boolean, previous?: PlannedDay) {
@@ -330,7 +346,8 @@ export function getTripIssues(profile: Profile): string[] {
     const last = days.at(-1);
     const activity = last?.returnMorning ? '上午是同片区短逛，可视接驳时间缩短。' : '';
     const budgetNote = last?.sightseeingRemoved ? '返程日预算保留餐食与当地交通。' : '';
-    issues.push(`${getDepartureLabel(profile)}，已留出取行李和接驳时间。${activity}${budgetNote}`);
+    const connection = last?.stationSchedule ? '已倒排出发和到站时间。' : '按票面和实际车程核对行李与接驳时间。';
+    issues.push(`${getDepartureLabel(profile)}。${connection}${activity}${budgetNote}`);
   }
   if (profile.arrival === 'morning' || profile.arrival === 'afternoon' || profile.arrival === 'evening') issues.push(`${arrivalLabels[profile.arrival]}，首日已给交通与安顿留时间，被移除的原景点没有自动补到其他时段。`);
   if (profile.origin && (!profile.arrival || profile.arrival === 'full-day')) issues.push(`出发地为${profile.origin}，当前按首日已有完整游玩时间安排；若当天仍需长途移动，请选择实际抵达时段。`);
@@ -366,6 +383,8 @@ export function formatDetailedPlan(profile: Profile): string {
   if (profile.origin) lines.push(`出发地：${profile.origin}`);
   if (profile.arrival) lines.push(`抵达设置：${arrivalLabels[profile.arrival]}`);
   if (profile.departure || profile.departureStation) lines.push(`返程设置：${getDepartureLabel(profile)}`);
+  const returnArea = days.at(-1)?.afternoonReturn?.area;
+  if (returnArea) lines.push(`返程落脚片区：${returnArea}`);
   if (profile.mobility) lines.push(`步行条件：${mobilityLabels[profile.mobility]}`);
   if (profile.budgetLimit) lines.push(`预算上限：${profile.budgetScope === 'per-person' ? '每人' : '全团'} ¥${profile.budgetLimit}；预留额度不等于已匹配的实时报价。`);
   if (budget.arrivalNight) lines.push('抵达安排：所选路线从完整游玩日开始，建议提前一晚抵达；住宿预算已加这一晚。若当天抵达，请将首日上午改为交通并减少景点。', '');
@@ -389,6 +408,10 @@ export function sharePlanUrl(profile: Profile): string {
   if (profile.departure) query.set('departure', profile.departure);
   if (profile.departureTime) query.set('departureTime', profile.departureTime);
   if (profile.departureStation) query.set('departureStation', profile.departureStation);
+  const logistics = profile.returnLogistics;
+  if (logistics?.area) query.set('returnArea', logistics.area);
+  if (logistics?.travelMinutes !== undefined) query.set('returnTravel', String(logistics.travelMinutes));
+  if (logistics?.luggageMinutes !== undefined) query.set('returnLuggage', String(logistics.luggageMinutes));
   if (profile.mobility) query.set('mobility', profile.mobility);
   if (profile.budgetLimit) query.set('budgetLimit', String(profile.budgetLimit));
   if (profile.budgetScope) query.set('budgetScope', profile.budgetScope);
@@ -397,5 +420,5 @@ export function sharePlanUrl(profile: Profile): string {
 export function parsePlanUrl(search: string): Profile | undefined {
   const query = new URLSearchParams(search);
   if (!query.has('plan')) return undefined;
-  return normalizeProfile({ template: query.get('plan'), cityId: query.get('city'), indices: query.get('days')?.split(',').filter(Boolean).map(Number), date: query.get('date'), party: Number(query.get('people')), group: query.get('group'), mode: query.get('mode'), budget: query.get('budget'), interest: query.get('interest'), pace: query.get('pace'), ...(query.has('origin') ? { origin: query.get('origin') } : {}), ...(query.has('arrival') ? { arrival: query.get('arrival') } : {}), ...(query.has('departure') ? { departure: query.get('departure') } : {}), departureTime: query.get('departureTime'), departureStation: query.get('departureStation'), ...(query.has('mobility') ? { mobility: query.get('mobility') } : {}), ...(query.has('budgetLimit') ? { budgetLimit: Number(query.get('budgetLimit')) } : {}), ...(query.has('budgetScope') ? { budgetScope: query.get('budgetScope') } : {}) });
+  return normalizeProfile({ template: query.get('plan'), cityId: query.get('city'), indices: query.get('days')?.split(',').filter(Boolean).map(Number), date: query.get('date'), party: Number(query.get('people')), group: query.get('group'), mode: query.get('mode'), budget: query.get('budget'), interest: query.get('interest'), pace: query.get('pace'), ...(query.has('origin') ? { origin: query.get('origin') } : {}), ...(query.has('arrival') ? { arrival: query.get('arrival') } : {}), ...(query.has('departure') ? { departure: query.get('departure') } : {}), departureTime: query.get('departureTime'), departureStation: query.get('departureStation'), returnLogistics: { area: query.get('returnArea'), travelMinutes: query.get('returnTravel'), luggageMinutes: query.get('returnLuggage') }, ...(query.has('mobility') ? { mobility: query.get('mobility') } : {}), ...(query.has('budgetLimit') ? { budgetLimit: Number(query.get('budgetLimit')) } : {}), ...(query.has('budgetScope') ? { budgetScope: query.get('budgetScope') } : {}) });
 }

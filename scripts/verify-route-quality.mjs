@@ -141,6 +141,27 @@ try {
   const byAir = buildTrip({ ...wuchangReturn, departureStation: '机场' }).at(-1);
   assert(!byAir.stationSchedule && !byAir.returnMorning && byAir.transport.includes('值机'));
 
+  const manualReturn = normalizeProfile({ ...wuchangReturn, returnLogistics: { travelMinutes: 75, luggageMinutes: 30 } });
+  const manualLast = buildTrip(manualReturn).at(-1);
+  assert.deepEqual(manualLast.stationSchedule, { finishBy: '12:30', leaveForStationBy: '13:00', arriveBy: '14:30' });
+  assert.deepEqual(buildTrip(manualReturn)[0], buildTrip(wuchangReturn)[0], 'Return settings leave the earlier day intact.');
+  assert.match(formatDetailedPlan(manualReturn), /75 分钟车程，另留 15 分钟/);
+  const carryOn = normalizeProfile({ ...manualReturn, returnLogistics: { area: 'jianghan-road', travelMinutes: 40, luggageMinutes: 0 }, departureStation: '汉口站' });
+  const carryOnLast = buildTrip(carryOn).at(-1);
+  assert.equal(carryOnLast.stationSchedule.finishBy, carryOnLast.stationSchedule.leaveForStationBy);
+  assert.match(carryOnLast.returnMorning.sight, /江汉路/);
+  assert.doesNotMatch(carryOnLast.stops[1].title, /取行李/);
+  assert.deepEqual(parsePlanUrl(new URL(sharePlanUrl(carryOn)).search), carryOn);
+  assert(!normalizeProfile({ ...wuchangReturn, returnLogistics: { area: 'yichang-erma-road', travelMinutes: 0, luggageMinutes: 121 } }).returnLogistics);
+  const compressed = buildTrip({ ...wuchangReturn, departureTime: '12:10', returnLogistics: { travelMinutes: 60 } }).at(-1);
+  assert.equal(compressed.returnMorning.minutes, 15);
+  assert.equal(compressed.stationSchedule.finishBy, '09:35');
+  const noBreakfastWindow = buildTrip({ ...wuchangReturn, departureTime: '12:10', returnLogistics: { travelMinutes: 90 } }).at(-1);
+  assert(!noBreakfastWindow.returnMorning && noBreakfastWindow.breakfast.includes('到站后吃'));
+  const otherArea = buildTrip({ ...wuchangReturn, departureStation: '武汉东站', returnLogistics: { area: 'other', travelMinutes: 60 } }).at(-1);
+  assert(!otherArea.returnMorning && otherArea.stationSchedule && otherArea.afternoonReturn.area === '其他落脚片区');
+  assert(!byAir.afternoonReturn, 'Flight plans do not show the rail timing editor.');
+
   const complete = normalizeProfile({ ...base, origin: '武汉', arrival: 'afternoon', mobility: 'gentle', budgetLimit: 2000, budgetScope: 'per-person', note: '不吃辣，需向餐馆确认' });
   const shared = sharePlanUrl(complete), restored = parsePlanUrl(new URL(shared).search);
   assert.deepEqual(restored, { ...complete, note: '' });

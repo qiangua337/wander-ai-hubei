@@ -4,11 +4,12 @@ import { cityById } from '../data';
 import { practical } from '../data/practical';
 import { arrivalLabels, getDepartureLabel, buildTrip, estimateBudget, getTripIssues, groupLabels, interestLabels, mobilityLabels, type Profile } from '../planning';
 import { planDate } from '../travel';
+import { ReturnDayEditor } from './ReturnDayEditor';
 import './support-plan-preview.css';
 
 const effortLabels = { low: '较轻松', moderate: '适量步行', high: '高体力' };
 
-export function SupportPlanPreview({ profile }: { profile: Profile }) {
+export function SupportPlanPreview({ profile, onUpdateReturn }: { profile: Profile; onUpdateReturn: (profile: Profile) => void }) {
   const dayRefs = useRef<(HTMLDetailsElement | null)[]>([]);
   const [expanded, setExpanded] = useState<number[]>([0]);
   const jumpToDay = (index: number) => {
@@ -19,6 +20,7 @@ export function SupportPlanPreview({ profile }: { profile: Profile }) {
     });
   };
   const days = buildTrip(profile);
+  const lastDay = days.at(-1);
   const budget = estimateBudget(profile, days.length);
   const cityIds = [...new Set(days.map(day => day.cityId))];
   const issues = getTripIssues(profile);
@@ -35,11 +37,12 @@ export function SupportPlanPreview({ profile }: { profile: Profile }) {
       {target && <p className={'support-plan-budget-check' + (budget.total[1] > target ? ' needs-review' : '')}>{budget.total[0] > target ? '当前最低规划预留已超目标。' : budget.total[1] > target ? '规划预留有超出目标的区间，建议继续调整。' : '当前规划预留范围未超目标。'}此比较不含往返、跨城大交通与租车。</p>}
       <details className="support-plan-budget"><summary><Wallet size={15} /><span>全团预算预留<strong>¥{budget.total[0].toLocaleString()}–{budget.total[1].toLocaleString()}</strong></span><ChevronDown size={15} /></summary><div><p>{budget.nights ? `住宿按 ${budget.rooms} 间双人房、${budget.nights} 晚预留。` : '行程未计过夜住宿。'}{budget.ticketDays < days.length ? '返程日预算仅预留餐食与当地交通。' : ''}</p>{profile.budgetLimit && <p>目标预算为{profile.budgetScope === 'per-person' ? '每人' : '全团'} ¥{profile.budgetLimit.toLocaleString()}。</p>}</div></details>
     </header>
+    {lastDay?.afternoonReturn && <ReturnDayEditor day={lastDay} profile={profile} onApply={onUpdateReturn} />}
     <section className="support-route-overview" aria-label="每天去哪住哪">
       <div className="support-route-overview-heading"><h4>每日安排总览</h4><span>点一天，看详细安排</span></div>
       <ol>{days.map((day, index) => <li key={`${day.cityId}-${index}`}><button type="button" onClick={() => jumpToDay(index)} aria-label={`查看第 ${index + 1} 天详细安排`}>
         <span className="support-overview-number">第 {index + 1} 天</span>
-        <span className="support-overview-main"><strong>{day.title}</strong><span>{day.region} · {effortLabels[day.effort]}{day.returnMorning?.conditional ? ' · 上午可选' : ''}</span><span className="support-overview-stay">{index < days.length - 1 ? <><BedDouble size={13} />{day.overnight}</> : <><Route size={13} />{returnLabel}</>}</span>{day.stationSchedule && <span className="support-overview-schedule">{day.stationSchedule.leaveForStationBy} 前去站 · {day.stationSchedule.arriveBy} 前到站</span>}</span><ArrowDown size={15} />
+        <span className="support-overview-main"><strong>{day.title}</strong><span>{day.region} · {effortLabels[day.effort]}{day.returnMorning?.conditional ? ' · 上午可选' : ''}</span><span className="support-overview-stay">{index < days.length - 1 ? <><BedDouble size={13} />{day.overnight}</> : <><Route size={13} />{returnLabel}</>}</span></span><ArrowDown size={15} />
       </button></li>)}</ol>
     </section>
     {budget.arrivalNight && <p className="support-plan-arrival">预算已包含抵达前夜。住宿片区可先看{practical[days[0].cityId].stays[0].area}，再按首站或实际返程站点选房。</p>}

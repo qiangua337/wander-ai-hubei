@@ -29,6 +29,7 @@ export function SupportTripForm({ draft, initialCity, initialParty, initialDate,
   const [departure, setDeparture] = useState<NonNullable<Profile['departure']>>(draft?.departure || 'flexible');
   const [departureTime, setDepartureTime] = useState(draft?.departureTime || '');
   const [departureStation, setDepartureStation] = useState(draft?.departureStation || '');
+  const [returnLogistics, setReturnLogistics] = useState(draft?.returnLogistics);
   const [mobility, setMobility] = useState<NonNullable<Profile['mobility']>>(draft?.mobility || 'standard');
   const [budgetLimit, setBudgetLimit] = useState(draft?.budgetLimit ? String(draft.budgetLimit) : '');
   const [budgetScope, setBudgetScope] = useState<NonNullable<Profile['budgetScope']>>(draft?.budgetScope || 'total');
@@ -36,7 +37,10 @@ export function SupportTripForm({ draft, initialCity, initialParty, initialDate,
   const chooseRoute = (id: string) => {
     setRoute(id); setError('');
     const nextTemplate = templates.find(item => item.id === id);
-    if ((nextTemplate?.segments.at(-1)?.cityId || id) !== (template?.segments.at(-1)?.cityId || route)) setDepartureStation('');
+    if ((nextTemplate?.segments.at(-1)?.cityId || id) !== (template?.segments.at(-1)?.cityId || route)) {
+      setDepartureStation('');
+      setReturnLogistics(undefined);
+    }
     const nextCapacity = nextTemplate ? nextTemplate.segments.reduce((sum, segment) => sum + segment.indices.length, 0) : cityById[id]?.days.length || 4;
     setDays(previous => nextTemplate ? nextCapacity : Math.min(previous, nextCapacity));
   };
@@ -51,7 +55,13 @@ export function SupportTripForm({ draft, initialCity, initialParty, initialDate,
     if (departureStation.trim() && !station) { setError('请填写票面站名，例如武昌站。站名还没确定也可以先留空。'); return; }
     const cityIds = template ? template.segments.map(segment => segment.cityId) : [route];
     const count = template ? capacity : days;
-    const request: SupportTripDraft = { ...draft, cityIds, days: count, party, interest, group, mode, pace, budget: budget === 'auto' ? undefined : budget, date, origin: origin.trim(), arrival, departure, departureTime: time, departureStation: station, mobility, budgetLimit: budgetLimit ? Number(budgetLimit) : undefined, budgetScope: budgetLimit ? budgetScope : undefined };
+    const sameStation = station === normalizeStation(draft?.departureStation);
+    const request: SupportTripDraft = {
+      ...draft, cityIds, days: count, party, interest, group, mode, pace, budget: budget === 'auto' ? undefined : budget,
+      date, origin: origin.trim(), arrival, departure, departureTime: time, departureStation: station,
+      returnLogistics: returnLogistics && { ...returnLogistics, travelMinutes: sameStation ? returnLogistics.travelMinutes : undefined },
+      mobility, budgetLimit: budgetLimit ? Number(budgetLimit) : undefined, budgetScope: budgetLimit ? budgetScope : undefined,
+    };
     const question = `${origin.trim() ? '从' + origin.trim() + '出发，' : ''}${cityIds.map(id => cityById[id].shortName).join('、')} ${count} 天，${party} 人，${groupLabels[group]}，${interestLabels[interest]}，${arrivalLabels[arrival]}，${getDepartureLabel(request)}，${mobilityLabels[mobility]}${budgetLimit ? '，' + (budgetScope === 'total' ? '全团' : '每人') + '预算' + budgetLimit + '元' : ''}`;
     onSubmit(request, question);
   }}>

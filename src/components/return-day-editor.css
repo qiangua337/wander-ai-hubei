@@ -1,0 +1,27 @@
+.return-day-editor { margin: 14px; padding: 16px; border: 1px solid var(--color-line); border-radius: 8px; background: var(--color-cream); color: var(--color-ink); font-size: 13px; }
+.return-day-header { display: flex; align-items: flex-start; justify-content: space-between; gap: 10px; flex-wrap: wrap; }
+.return-day-header h4 { display: flex; align-items: center; gap: 7px; font-size: 15px; font-weight: 650; }
+.return-day-header h4 svg { color: var(--color-pine); }
+.return-day-header p { margin-top: 4px; color: var(--color-muted); }
+.return-day-times { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; margin-top: 13px; }
+.return-day-times div { border-top: 1px solid var(--color-line); padding-top: 7px; }
+.return-day-times dt { font-size: 11px; color: var(--color-muted); }
+.return-day-times dd { margin: 0; color: var(--color-pine); font-weight: 650; font-variant-numeric: tabular-nums; }
+.return-day-walk, .return-day-live { display: flex; align-items: flex-start; gap: 6px; }
+.return-day-editor .return-day-walk { margin-top: 10px; }
+.return-day-editor .return-day-breakfast { margin-top: 6px; color: var(--color-muted); line-height: 1.6; }
+.return-day-walk svg, .return-day-live svg { flex: none; margin-top: 4px; color: var(--color-pine); }
+.return-day-editor .return-day-hint { margin-top: 8px; color: var(--color-muted); }
+.return-day-form { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; margin-top: 14px; padding-top: 14px; border-top: 1px solid var(--color-line); }
+.return-day-form label { display: grid; gap: 4px; min-width: 0; font-size: 12px; }
+.return-day-form input, .return-day-form select { height: 40px; font-size: 13px; }
+.return-day-form label svg { top: 12px; }
+.return-day-area, .return-day-form > p, .return-day-action { grid-column: 1 / -1; }
+.return-day-form .return-day-live { margin: 0; padding: 9px; background: white; color: var(--color-pine); border-radius: 4px; }
+.return-day-error { color: var(--color-pine-deep); font-weight: 550; }
+.return-day-action { display: flex; justify-content: flex-end; }
+.trip-tab-panel .return-day-editor { margin: 14px 0 18px; }
+@media (max-width: 359px) {
+  .return-day-editor { margin: 10px; padding: 11px; }
+  .return-day-times { gap: 4px; }
+}

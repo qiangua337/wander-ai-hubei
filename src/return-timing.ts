@@ -1,4 +1,33 @@
+import { returnWalks } from './data/return-mornings';
+
 export type DepartureWindow = 'morning' | 'afternoon' | 'evening' | 'flexible';
+
+export type ReturnLogistics = { area?: string; travelMinutes?: number; luggageMinutes?: number };
+
+export const returnMinuteLimits = { travelMinutes: { min: 1, max: 360 }, luggageMinutes: { min: 0, max: 120 } };
+
+export function readReturnMinutes(value: unknown, field: keyof typeof returnMinuteLimits): number | undefined {
+  const bounds = returnMinuteLimits[field];
+  const minutes = typeof value === 'string' && /^\d{1,3}$/.test(value.trim()) ? Number(value) : value;
+  if (typeof minutes === 'number' && Number.isInteger(minutes) && minutes >= bounds.min && minutes <= bounds.max) return minutes;
+}
+
+export function normalizeReturnLogistics(value: unknown, cityId: string): ReturnLogistics | undefined {
+  if (!value || typeof value !== 'object') return;
+  const input = value as Partial<ReturnLogistics>;
+  const area = input.area === 'other' || returnWalks[cityId]?.some(walk => walk.id === input.area) ? input.area : undefined;
+  const travelMinutes = readReturnMinutes(input.travelMinutes, 'travelMinutes');
+  const luggageMinutes = readReturnMinutes(input.luggageMinutes, 'luggageMinutes');
+  if (area === undefined && travelMinutes === undefined && luggageMinutes === undefined) return;
+  return { ...(area ? { area } : {}), ...(travelMinutes !== undefined ? { travelMinutes } : {}), ...(luggageMinutes !== undefined ? { luggageMinutes } : {}) };
+}
+
+export function returnAreaLabel(area: string | undefined, cityId: string): string | undefined {
+  if (area === 'other') return '其他落脚片区';
+  return returnWalks[cityId]?.find(walk => walk.id === area)?.area;
+}
+
+export const manualTravelBuffer = 15;
 
 export function parseClock(value: unknown): number | undefined {
   if (typeof value !== 'string' || !/^(?:[01]\d|2[0-3]):[0-5]\d$/.test(value)) return;

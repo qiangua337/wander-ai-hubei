@@ -31,7 +31,7 @@ export function Planner({ initialCity, initialDate, travelers, initialProfile, o
       // Reopening a draft keeps its dates, party and choices; an explicit profile above starts afresh.
       if (!Object.hasOwn(cityById, initialCity) || draft.cityId === initialCity) return draft;
       // A different city reuses the draft's travel preferences, dates and party, then rebuilds its chapters.
-      return { ...draft, cityId: initialCity, template: 'custom', indices: recommendDays(initialCity, Math.min(draft.indices.length || 2, cityById[initialCity].days.length), draft.interest), departureStation: undefined };
+      return { ...draft, cityId: initialCity, template: 'custom', indices: recommendDays(initialCity, Math.min(draft.indices.length || 2, cityById[initialCity].days.length), draft.interest), departureStation: undefined, returnLogistics: undefined };
     } catch { return fallback; }
   });
   const [ready, setReady] = useState(() => Boolean(initialProfile) && !getTripTimingConflict(profile) && buildTrip(profile).length > 0);
@@ -69,7 +69,12 @@ export function Planner({ initialCity, initialDate, travelers, initialProfile, o
       const next = { ...previous, ...patch };
       const beforeEnd = templates.find(template => template.id === previous.template)?.segments.at(-1)?.cityId || previous.cityId;
       const afterEnd = templates.find(template => template.id === next.template)?.segments.at(-1)?.cityId || next.cityId;
-      if (beforeEnd !== afterEnd && !Object.hasOwn(patch, 'departureStation')) next.departureStation = undefined;
+      if (beforeEnd !== afterEnd) {
+        if (!Object.hasOwn(patch, 'departureStation')) next.departureStation = undefined;
+        next.returnLogistics = undefined;
+      } else if (previous.returnLogistics && next.departureStation !== previous.departureStation) {
+        next.returnLogistics = { area: previous.returnLogistics.area, luggageMinutes: previous.returnLogistics.luggageMinutes };
+      }
       return next;
     });
     setReady(false); setFeedback('');
@@ -87,6 +92,15 @@ export function Planner({ initialCity, initialDate, travelers, initialProfile, o
     setReady(!conflict && buildTrip(saved).length > 0);
     setFeedback(conflict || '已恢复保存的旅行方案。');
     if (!conflict) focusResult();
+  };
+  const updateReturn = (next: Profile) => {
+    setProfile(next); setFeedback('已更新返程接驳。');
+    window.requestAnimationFrame(() => {
+      const trigger = result.current?.querySelector<HTMLButtonElement>('.return-day-trigger');
+      if (!trigger) { focusResult('instant'); return; }
+      trigger.scrollIntoView({ block: 'nearest', behavior: 'instant' });
+      trigger.focus({ preventScroll: true });
+    });
   };
   const savePlan = () => {
     const success = storePlans([{ id: String(Date.now()), profile }, ...savedPlans.filter(plan => JSON.stringify(plan.profile) !== JSON.stringify(profile))].slice(0, 5));
@@ -173,7 +187,7 @@ export function Planner({ initialCity, initialDate, travelers, initialProfile, o
         <details className="planner-saved"><summary><Bookmark size={15} />我的行程 <span>{savedPlans.length} / 5</span></summary><p>保存在当前浏览器。分享链接不包含自由备注。</p><div>{savedPlans.map(plan => <article key={plan.id}><button onClick={() => restorePlan(plan.profile)}><strong>{tripTitle(plan.profile)}</strong><span>{plan.profile.date || '日期待定'} · {plan.profile.party} 人</span></button><button aria-label={'删除' + tripTitle(plan.profile)} onClick={() => { const ok = storePlans(savedPlans.filter(item => item.id !== plan.id)); setFeedback(ok ? '已从本浏览器移除这份行程。' : '已在本次会话移除，浏览器存储未更新。'); }}><Trash2 size={15} /></button></article>)}{!savedPlans.length && <p>喜欢的方案可以存下来，下次接着安排。</p>}</div></details>
       </div>
       <div ref={result} tabIndex={-1} aria-label="整理好的行程" className="planner-result">
-        {ready ? <PlannedTrip key={JSON.stringify(profile)} profile={profile} onCopy={onCopy} onSave={savePlan} onEdit={edit} /> : <section className="planner-preview">
+        {ready ? <PlannedTrip key={JSON.stringify(profile)} profile={profile} onCopy={onCopy} onSave={savePlan} onEdit={edit} onUpdateReturn={updateReturn} /> : <section className="planner-preview">
           {previewImage && <figure><img src={previewImage} alt="所选旅程的湖北目的地实景" /><figcaption><MapPin size={14} />{routeCities.map(id => cityById[id].shortName).join(' → ')}</figcaption></figure>}
           <div className="planner-preview-body"><p className="planner-preview-kicker">旅程草稿 · 随条件更新</p><h3>{tripTitle(profile)}</h3><p className="planner-preview-subtitle">先看方向，再把每一天安排具体。</p><div className="planner-preview-metrics"><span><strong>{days.length}</strong> 天行程</span><span><strong>{budget.nights}</strong> 晚住宿</span><span><strong>{routeCities.length}</strong> 座城市</span></div>
             <ul className="planner-preview-tags"><li>{groupLabels[profile.group]}</li><li>{profile.mode === 'drive' ? '自驾出行' : '公共交通＋接驳'}</li><li>{profile.pace === 'relaxed' ? '轻松慢游' : '经典串游'}</li></ul>
