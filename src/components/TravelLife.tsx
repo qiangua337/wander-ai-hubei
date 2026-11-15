@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { ArrowUpRight, BedDouble, MapPin, TrainFront, Utensils } from 'lucide-react';
 import { cities, cityById, cityPhotos } from '../data';
 import { practical } from '../data/practical';
+import { displayPhoto } from '../data/photos';
 import { Button, SelectField } from './ui';
 
 export function TravelLife({ fallbackCity, onExplore, onPlan }: { fallbackCity: string; onExplore: (cityId: string) => void; onPlan: (cityId: string) => void }) {
@@ -20,7 +21,7 @@ export function TravelLife({ fallbackCity, onExplore, onPlan }: { fallbackCity: 
       </div>
 
       <div role="region" aria-label={`${city.shortName}吃住交通`} className={'life-panel' + (photo?.filename ? ' has-photo' : '')}>
-        {photo?.filename && <figure className="life-photo"><img key={cityId} src={cityId === 'enshi' ? '/images/enshi-card.webp' : cityId === 'yichang' ? '/images/xiling-cover-768.webp' : `/images/${photo.filename}`} alt={photo.alt || photo.subject} width="800" height="1000" loading="lazy" /><figcaption><MapPin size={14} />{city.shortName} · {photo.subject}</figcaption></figure>}
+        {photo?.filename && <figure className="life-photo"><img key={cityId} src={displayPhoto(`/images/${photo.filename}`)} alt={photo.alt || photo.subject} width="800" height="1000" loading="lazy" decoding="async" /><figcaption><MapPin size={14} />{city.shortName} · {photo.subject}</figcaption></figure>}
         <div className="life-content">
           <div className="life-notes">
             <article className="life-note">

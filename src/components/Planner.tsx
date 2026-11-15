@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { ArrowRight, Bookmark, Check, MapPin, Route, Sparkles, Trash2 } from 'lucide-react';
 import { cities, cityById, cityPhotos } from '../data';
+import { displayPhoto } from '../data/photos';
 import { arrivalLabels, departureLabels, getTripTimingConflict, mobilityLabels, budgetLabels, buildTrip, defaultProfile, estimateBudget, groupLabels, interestLabels, normalizeProfile, recommendDays, recommendConstrainedDays, templates, tripTitle, validDate, type Profile } from '../planning';
 import { clockWindow, normalizeClockInput, normalizeStation, parseClock } from '../return-timing';
 import { changeVisit, type VisitChange } from '../visit-changes';
@@ -11,6 +12,20 @@ import { Button, SelectField, InputField } from './ui';
 import './planning-ui.css';
 
 type SavedPlan = { id: string; profile: Profile };
+const draftKey = 'wander-draft-v2';
+
+function readDraft(fallback: Profile) {
+  try {
+    const stored = JSON.parse(localStorage.getItem(draftKey) || 'null') as (Partial<Profile> & { ready?: unknown; activeDay?: unknown }) | null;
+    if (!stored || typeof stored.cityId !== 'string' || !Object.hasOwn(cityById, stored.cityId) || !Array.isArray(stored.indices)) return;
+    return {
+      profile: normalizeProfile(stored, fallback),
+      ready: stored.ready !== false,
+      activeDay: typeof stored.activeDay === 'number' && Number.isInteger(stored.activeDay) ? stored.activeDay : 0,
+    };
+  } catch { return undefined; }
+}
+
 function readPlans(): SavedPlan[] {
   try {
     const value = JSON.parse(localStorage.getItem('wander-plans-v2') || '[]');
@@ -24,32 +39,28 @@ export function Planner({ initialCity, initialDate, travelers, initialProfile, i
   initialCity: string; initialDate: string; travelers: string; initialProfile?: Profile; initialDayIndex?: number;
   onClose: () => void; onCopy: (text: string) => void;
 }) {
-  const [profile, setProfile] = useState<Profile>(() => {
+  const [opening] = useState(() => {
     const fallback = defaultProfile(initialCity, initialDate, Number(travelers));
-    if (initialProfile) return normalizeProfile(initialProfile, fallback);
-    try {
-      const stored: unknown = JSON.parse(localStorage.getItem('wander-draft-v2') || 'null');
-      if (!stored || typeof stored !== 'object' || Array.isArray(stored)) return fallback;
-      const candidate = stored as Partial<Profile>;
-      if (typeof candidate.cityId !== 'string' || !Object.hasOwn(cityById, candidate.cityId) || !Array.isArray(candidate.indices)) return fallback;
-      const draft = normalizeProfile(stored, fallback);
-      // Reopening a draft keeps its dates, party and choices; an explicit profile above starts afresh.
-      if (!Object.hasOwn(cityById, initialCity) || draft.cityId === initialCity) return draft;
-      // A different city reuses the draft's travel preferences, dates and party, then rebuilds its chapters.
-      return { ...draft, cityId: initialCity, template: 'custom', indices: recommendDays(initialCity, Math.min(draft.indices.length || 2, cityById[initialCity].days.length), draft.interest), departureStation: undefined, returnLogistics: undefined, dayStarts: undefined, visitChanges: undefined };
-    } catch { return fallback; }
+    const seed = initialProfile ? { profile: normalizeProfile(initialProfile, fallback), ready: true, activeDay: initialDayIndex }
+      : readDraft(fallback) || { profile: fallback, ready: false, activeDay: 0 };
+    const openingDays = buildTrip(seed.profile);
+    const conflict = getTripTimingConflict(seed.profile);
+    return { ...seed, ready: seed.ready && !conflict && openingDays.length > 0, conflict,
+      activeDay: Math.max(0, Math.min(seed.activeDay, openingDays.length - 1)) };
   });
-  const [ready, setReady] = useState(() => Boolean(initialProfile) && !getTripTimingConflict(profile) && buildTrip(profile).length > 0);
-  const [activeDay, setActiveDay] = useState(initialDayIndex);
+  const [profile, setProfile] = useState(opening.profile);
+  const [ready, setReady] = useState(opening.ready);
+  const [activeDay, setActiveDay] = useState(opening.activeDay);
+  const [writeDraft, setWriteDraft] = useState(!initialProfile);
   const [savedPlans, setSavedPlans] = useState<SavedPlan[]>(readPlans);
-  const [feedback, setFeedback] = useState(() => (initialProfile && getTripTimingConflict(profile)) || '');
+  const [feedback, setFeedback] = useState(opening.conflict || '');
   const result = useRef<HTMLDivElement>(null);
   const settings = useRef<HTMLDivElement>(null);
   const city = cityById[profile.cityId], selectedTemplate = templates.find(template => template.id === profile.template);
   const days = buildTrip(profile), budget = estimateBudget(profile, days.length);
   const routeCities = [...new Set(days.map(day => day.cityId))];
   const timingConflict = getTripTimingConflict(profile);
-  const previewImage = selectedTemplate?.image || (cityPhotos[city.id]?.filename ? '/images/' + cityPhotos[city.id].filename : undefined);
+  const previewImage = displayPhoto(selectedTemplate?.image || (cityPhotos[city.id]?.filename ? '/images/' + cityPhotos[city.id].filename : undefined));
   const focusResult = (behavior: ScrollBehavior = 'smooth') => window.requestAnimationFrame(() => {
     result.current?.scrollIntoView({ behavior, block: 'start' });
     result.current?.focus({ preventScroll: true });
@@ -63,15 +74,19 @@ export function Planner({ initialCity, initialDate, travelers, initialProfile, i
     });
   };
   useEffect(() => {
-    if (!initialProfile || getTripTimingConflict(initialProfile) || !buildTrip(initialProfile).length) return;
+    if (!opening.ready) return;
     const frame = window.requestAnimationFrame(() => {
       result.current?.scrollIntoView({ behavior: 'instant', block: 'start' });
       result.current?.focus({ preventScroll: true });
     });
     return () => window.cancelAnimationFrame(frame);
-  }, [initialProfile]);
-  useEffect(() => { try { localStorage.setItem('wander-draft-v2', JSON.stringify(profile)); } catch { /* Planning remains usable when storage is unavailable. */ } }, [profile]);
+  }, [opening.ready]);
+  useEffect(() => {
+    if (!writeDraft) return;
+    try { localStorage.setItem(draftKey, JSON.stringify({ ...profile, ready, activeDay })); } catch { /* Planning remains usable when storage is unavailable. */ }
+  }, [profile, ready, activeDay, writeDraft]);
   const update = (patch: Partial<Profile>) => {
+    setWriteDraft(true);
     setProfile(previous => {
       const next = { ...previous, ...patch };
       const beforeEnd = templates.find(template => template.id === previous.template)?.segments.at(-1)?.cityId || previous.cityId;
@@ -100,6 +115,7 @@ export function Planner({ initialCity, initialDate, travelers, initialProfile, i
   const storePlans = (next: SavedPlan[]) => { setSavedPlans(next); try { localStorage.setItem('wander-plans-v2', JSON.stringify(next)); return true; } catch { return false; } };
   const restorePlan = (saved: Profile) => {
     const conflict = getTripTimingConflict(saved);
+    setWriteDraft(true);
     setProfile(saved);
     setActiveDay(0);
     setReady(!conflict && buildTrip(saved).length > 0);
@@ -107,6 +123,7 @@ export function Planner({ initialCity, initialDate, travelers, initialProfile, i
     if (!conflict) focusResult();
   };
   const updateDay = (next: Profile, dayIndex: number, kind: 'return' | 'start' | 'visit') => {
+    setWriteDraft(true);
     setProfile(next);
     setActiveDay(dayIndex);
     const adjustingReturn = kind === 'return';
@@ -135,6 +152,7 @@ export function Planner({ initialCity, initialDate, travelers, initialProfile, i
   };
   const savePlan = () => {
     const success = storePlans([{ id: String(Date.now()), profile }, ...savedPlans.filter(plan => JSON.stringify(plan.profile) !== JSON.stringify(profile))].slice(0, 5));
+    if (success) setWriteDraft(true);
     setFeedback(success ? '已保存到这个浏览器的「我的行程」，最多保留 5 份。' : '当前浏览器无法持久保存，可下载完整行程清单。');
     return success;
   };
@@ -158,6 +176,7 @@ export function Planner({ initialCity, initialDate, travelers, initialProfile, i
           if (profile.mobility === 'gentle' && days.some(day => day.effort === 'high')) { setFeedback('这份方案仍含高体力山地章节，未满足少台阶条件。请减少天数、换城市或取消冲突章节。'); return; }
           if (profile.budgetLimit && profile.budgetScope && budget.total[0] > profile.budgetLimit * (profile.budgetScope === 'per-person' ? profile.party : 1)) { setFeedback('这份方案的最低规划预留已超过目标预算。请调整天数、档位或预算后再整理。'); return; }
           if (timingConflict) { setFeedback(timingConflict); return; }
+          setWriteDraft(true);
           setProfile(previous => ({ ...previous, departureTime: time, departureStation: station }));
           setReady(true); setFeedback(''); focusResult();
         }}>

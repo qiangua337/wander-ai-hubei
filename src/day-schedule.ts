@@ -89,7 +89,7 @@ export function localTransfer(leg: TravelLeg, profile: Profile) {
 }
 
 export function journeyForDay(day: PlannedDay): DayJourney {
-  return day.cityId === 'wuhan' && day.originalIndex === 2 && day.region.startsWith('汉口')
+  return day.cityId === 'wuhan' && day.originalIndex === 2 && day.region === '汉口 · 江汉路与沿江'
     ? hankouFromWuchang : dayJourneys[day.cityId][day.originalIndex];
 }
 

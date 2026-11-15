@@ -9,7 +9,8 @@ const server = await createServer({ root, configFile: false, server: { middlewar
 try {
   const { cities, cityById, destinations, featuredDestinations, imageCredits } = await server.ssrLoadModule('/src/data.ts');
   const { findDestinations, planDays, selectPlanDays, planDate, formatPlan } = await server.ssrLoadModule('/src/travel.ts');
-  const { sortDestinations } = await server.ssrLoadModule('/src/discovery.ts');
+  const { cityGroups, guideFromSearch, placesByCity, routeForPlace, shareGuideUrl, sortDestinations } = await server.ssrLoadModule('/src/discovery.ts');
+  const { buildDaySchedule } = await server.ssrLoadModule('/src/day-schedule.ts');
   const { practical } = await server.ssrLoadModule('/src/data/practical.ts');
   const { defaultProfile, normalizeProfile, validDate, recommendDays, buildTrip, estimateBudget, formatDetailedPlan, sharePlanUrl, parsePlanUrl, templates } = await server.ssrLoadModule('/src/planning.ts');
   const expectedCities = ['wuhan', 'yichang', 'enshi', 'shiyan', 'xiangyang', 'jingzhou', 'jingmen', 'huangshi', 'ezhou', 'huanggang', 'xianning', 'xiaogan', 'suizhou', 'xiantao', 'qianjiang', 'tianmen', 'shennongjia'];
@@ -46,6 +47,26 @@ try {
   assert.equal(findDestinations('all', '不存在的景点xyz', 'all', []).length, 0);
   assert.equal(findDestinations('all', '宜昌、西陵峡', 'all', [])[0]?.id, 'xiling-gorge');
   assert.equal(findDestinations('all', '黄鹤楼', 'all', [])[0]?.id, 'wuhan');
+  assert.equal(findDestinations('all', '省博？', 'all', [])[0]?.id, 'hubei-museum');
+  assert.equal(findDestinations('all', '武汉 东湖', 'all', [])[0]?.id, 'east-lake');
+  assert.deepEqual(cityGroups.flatMap(group => group.cities.map(city => city.id)).sort(), expectedCities);
+  assert.deepEqual(Object.values(placesByCity).flat().map(place => place.id).sort(), destinations.map(place => place.id).sort());
+  let linkedGuides = 0;
+  for (const place of destinations) {
+    assert.deepEqual(guideFromSearch(new URL(shareGuideUrl(place.cityId, place.id)).search), { cityId: place.cityId, placeId: place.id });
+    const match = routeForPlace(place.id);
+    if (!match) continue;
+    linkedGuides++;
+    const profile = { ...defaultProfile(place.cityId), indices: [match.chapter] };
+    const day = buildTrip(profile)[0];
+    assert(day, `Missing route for ${place.title}`);
+    assert(buildDaySchedule(day, profile, undefined, true).rows.some(row => row.kind === 'visit' && row.title === match.visit),
+      `${place.title} must open an itinerary that actually visits it`);
+  }
+  assert.equal(routeForPlace('mulan'), undefined, 'A standalone attraction must not point to an unrelated city chapter.');
+  assert(linkedGuides >= 50);
+  assert.deepEqual(guideFromSearch(new URL(shareGuideUrl('yichang')).search), { cityId: 'yichang' });
+  assert.equal(guideFromSearch('?place=__proto__&guide=constructor'), undefined);
   const sortIds = ['wudang', 'hubei-museum', 'enshi', 'wuhan'];
   const sortInput = sortIds.map(id => destinations.find(place => place.id === id));
   assert(sortInput.every(Boolean), 'Sorting fixtures must refer to real destinations.');

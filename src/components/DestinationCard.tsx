@@ -1,9 +1,10 @@
 import { ArrowUpRight, Clock3, Heart } from 'lucide-react';
 import { cityById, type Destination } from '../data';
 import { placeContexts } from '../data/editorial';
+import { displayPhoto } from '../data/photos';
 
 export function DestinationCard({ place, saved, onSave, onOpen, featured = false }: { place: Destination; saved: boolean; onSave: () => void; onOpen: () => void; featured?: boolean }) {
-  const photo = place.id === 'enshi' ? '/images/enshi-card.webp' : place.id === 'xiling-gorge' ? '/images/xiling-cover-768.webp' : place.image;
+  const photo = displayPhoto(place.image);
   const saveButton = <button onClick={onSave} aria-label={`${saved ? '取消收藏' : '收藏'}${place.title}`} aria-pressed={saved} className={`place-save ${saved ? 'text-terracotta' : 'text-ink'}`}><Heart size={17} strokeWidth={1.4} fill={saved ? 'currentColor' : 'none'} /></button>;
   if (featured) return <article className="featured-card group">
     <div className="featured-image">

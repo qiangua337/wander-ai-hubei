@@ -1,6 +1,7 @@
 import { useId, useRef, useState } from 'react';
 import { ArrowDown, ArrowUpRight, Clock3, Heart, Landmark, MapPin, Mountain, Route, X } from 'lucide-react';
 import { cityById, destinationById, type Destination } from '../data';
+import { displayPhoto } from '../data/photos';
 import { Modal } from './Modal';
 import { Button } from './ui';
 import './wishlist.css';
@@ -38,7 +39,7 @@ export function Wishlist({ saved, onClose, onOpenPlace, onRemove, onPlan, onExpl
           <div className="wishlist-city-heading"><div><p>{cityById[id].area}</p><h3 id={`${prefix}-${id}-title`}>{cityById[id].shortName}<span>{places.filter(place => place.cityId === id).length} 个心动去处</span></h3></div><Button variant="neutral" onClick={() => onPlan(id)}><Route size={16} />规划{cityById[id].shortName}行程<ArrowUpRight size={15} /></Button></div>
           <div className={'wishlist-place-grid ' + (places.filter(place => place.cityId === id).length === 1 ? 'is-single' : '')}>{places.filter(place => place.cityId === id).map(place => <article key={place.id} className="wishlist-place">
             <button type="button" className="wishlist-place-open" aria-label={`查看${place.title}攻略`} onClick={() => onOpenPlace(place)}>
-              <span className="wishlist-place-image">{place.image ? <img src={place.image} alt={place.imageAlt || place.title} width="180" height="224" loading="lazy" style={place.imagePosition ? { objectPosition: place.imagePosition } : undefined} /> : <span aria-hidden="true">{place.category === 'nature' ? <Mountain size={30} strokeWidth={1.2} /> : <Landmark size={30} strokeWidth={1.2} />}<small>{place.category === 'nature' ? '山水自然' : '城市人文'}</small></span>}</span>
+              <span className="wishlist-place-image">{place.image ? <img src={displayPhoto(place.image)} alt={place.imageAlt || place.title} width="180" height="224" loading="lazy" decoding="async" style={place.imagePosition ? { objectPosition: place.imagePosition } : undefined} /> : <span aria-hidden="true">{place.category === 'nature' ? <Mountain size={30} strokeWidth={1.2} /> : <Landmark size={30} strokeWidth={1.2} />}<small>{place.category === 'nature' ? '山水自然' : '城市人文'}</small></span>}</span>
               <span className="wishlist-place-copy"><strong>{place.title}</strong><span className="wishlist-place-meta">{place.tag}<span><Clock3 size={12} />{place.duration}</span></span><span className="wishlist-place-description">{place.description}</span><span className="wishlist-read">查看攻略<ArrowUpRight size={14} /></span></span>
             </button>
             <button type="button" className="wishlist-remove" aria-label={`移除${place.title}收藏`} onClick={() => remove(place)}><X size={16} /></button>

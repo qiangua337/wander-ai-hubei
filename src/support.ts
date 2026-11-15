@@ -1,6 +1,7 @@
 import { cities, cityById, destinations, destinationById, type CityGuide, type Destination } from './data';
 import { practical } from './data/practical';
 import { travelFaq } from './data/help';
+import { placeAliases } from './data/destinations';
 import { buildTrip, templates, type Profile } from './planning';
 import { buildDaySchedule, describePlanDay } from './day-schedule';
 import { chapterKey, dayStartWindow, readDayStart, setDayStart } from './day-starts';
@@ -14,13 +15,6 @@ export type SupportContext = { cityId?: string; trip?: SupportTripDraft; visitDa
 export type SupportAction = { kind: 'city' | 'place' | 'plan' | 'template' | 'wishlist' | 'explore'; label: string; cityId?: string; placeId?: string; templateId?: string; profile?: Profile; dayIndex?: number };
 export type SupportReply = { text: string; sources: { title: string; url: string }[]; actions: SupportAction[]; suggestions: string[]; context: SupportContext; plan?: Profile; dayIndex?: number };
 
-const placeAliases: Record<string, string[]> = {
-  'hubei-museum': ['省博', '湖北博物馆', '湖北省博物馆', '曾侯乙编钟'],
-  'east-lake': ['东湖'], 'qingchuan': ['晴川阁', '古琴台'],
-  'xiling-gorge': ['西陵峡', '灯影峡', '两坝一峡'],
-  'three-gorges-dam': ['三峡大坝'], 'tenglong': ['腾龙洞'],
-  'dongpo': ['东坡赤壁', '黄冈赤壁', '黄州赤壁'], 'chibi': ['三国赤壁', '赤壁古战场'],
-};
 const cityAliases: Record<string, string[]> = {
   wuhan: ['武昌', '汉口', '汉阳', '江城'], enshi: ['恩施', '利川', '建始', '咸丰'],
   yichang: ['秭归', '长阳'], shiyan: ['丹江口'], huanggang: ['黄州', '罗田', '麻城'],

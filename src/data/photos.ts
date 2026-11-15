@@ -16,3 +16,9 @@ export const destinationPhotos: Record<string, PhotoCredit | undefined> = {
   'jingzhou-wall': cityPhotos.jingzhou, xianling: cityPhotos.jingmen, dongpo: cityPhotos.huanggang,
   tonglvshan: cityPhotos.huangshi, jiugong: cityPhotos.xianning, 'ezhou-xishan': cityPhotos.ezhou,
 };
+
+export function displayPhoto(image: string | undefined, wide = false): string | undefined {
+  if (image === '/images/xiling.jpg') return wide ? '/images/xiling-cover-1600.webp' : '/images/xiling-cover-768.webp';
+  if (image === '/images/enshi.jpg') return '/images/enshi-card.webp';
+  return image;
+}

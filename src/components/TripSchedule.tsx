@@ -18,9 +18,9 @@ const rowStyle = {
   stay: { icon: BedDouble, label: '行李与住宿' },
 };
 
-export function TripSchedule({ days, profile, onUpdateReturn, onUpdateStart, onVisitChange, dayIndex, onChooseDay }: {
+export function TripSchedule({ days, profile, onUpdateReturn, onUpdateStart, onVisitChange, dayIndex = 0, onChooseDay }: {
   days: PlannedDay[]; profile: Profile; onUpdateReturn?: (profile: Profile) => void;
-  onUpdateStart?: (profile: Profile, dayIndex: number) => void; dayIndex: number; onChooseDay: (index: number) => void;
+  onUpdateStart?: (profile: Profile, dayIndex: number) => void; dayIndex?: number; onChooseDay?: (index: number) => void;
   onVisitChange?: (change: VisitChange, dayIndex: number, undo?: boolean) => void;
 }) {
   const prefix = useId();
@@ -48,7 +48,7 @@ export function TripSchedule({ days, profile, onUpdateReturn, onUpdateStart, onV
         <strong>{block.area}</strong>
       </li>)}</ul>
     </div>}
-    {days.length > 1 && <div className="trip-schedule-tabs" role="tablist" aria-label="选择行程天数">
+    {days.length > 1 && onChooseDay && <div className="trip-schedule-tabs" role="tablist" aria-label="选择行程天数">
       {days.map((item, index) => <button
         type="button" key={index} role="tab" id={`${prefix}-day-${index}`}
         aria-selected={selected === index} aria-controls={`${prefix}-day-panel`} aria-label={`第 ${index + 1} 天 · ${schedules[index].title || item.title}`}
@@ -62,7 +62,7 @@ export function TripSchedule({ days, profile, onUpdateReturn, onUpdateStart, onV
         }}
       >第 {index + 1} 天</button>)}
     </div>}
-    <div id={`${prefix}-day-panel`} role={days.length > 1 ? 'tabpanel' : undefined} aria-labelledby={days.length > 1 ? `${prefix}-day-${selected}` : undefined} className="trip-schedule-panel">
+    <div id={`${prefix}-day-panel`} role={days.length > 1 && onChooseDay ? 'tabpanel' : undefined} aria-labelledby={days.length > 1 && onChooseDay ? `${prefix}-day-${selected}` : undefined} className="trip-schedule-panel">
       <header className="trip-schedule-day" tabIndex={-1}>
         <span>第 {selected + 1} 天{date && ` · ${date}`}</span>
         <h4>{schedule.title || day.title}</h4>

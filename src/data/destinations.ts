@@ -1,6 +1,14 @@
 import { destinationPhotos } from './photos';
 import type { Destination } from './types';
 
+export const placeAliases: Readonly<Record<string, readonly string[]>> = {
+  'hubei-museum': ['省博', '湖北博物馆', '湖北省博物馆', '曾侯乙编钟'],
+  'east-lake': ['东湖'], qingchuan: ['晴川阁', '古琴台'],
+  'xiling-gorge': ['西陵峡', '灯影峡', '两坝一峡'],
+  'three-gorges-dam': ['三峡大坝'], tenglong: ['腾龙洞'],
+  dongpo: ['东坡赤壁', '黄冈赤壁', '黄州赤壁'], chibi: ['三国赤壁', '赤壁古战场'],
+};
+
 function spot(cityId: string, id: string, title: string, category: Destination['category'], tag: string, duration: string, description: string, overview: string, highlights: string[], tips: string[]): Destination {
   const photo = destinationPhotos[id];
   return { cityId, id, title, category, tag, duration, description, overview, highlights, tips, image: photo?.filename ? `/images/${photo.filename}` : undefined, imageAlt: photo?.alt, imagePosition: id === 'enshi' ? '62% center' : id === 'wuhan' ? 'center 38%' : undefined };

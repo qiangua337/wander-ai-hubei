@@ -1,59 +1,136 @@
-import { ArrowUpRight, BedDouble, ChevronDown, Clock3, Copy, Download, Heart, MapPin, Route, TrainFront, Utensils, Leaf } from 'lucide-react';
 import { useId, useRef, useState } from 'react';
-import { cityPhotos, destinations, type CityGuide, type Destination, type TripDay } from '../data';
-import { practical } from '../data/practical';
-import { downloadPlan, formatPlan, planDate, type Pace } from '../travel';
-import { Button } from './ui';
+import { ArrowRight, ArrowUpRight, Clock3, Copy, Download, Heart, MapPin, Route, Share2, TrainFront, Utensils } from 'lucide-react';
+import { cityPhotos, type CityGuide, type Destination } from '../data';
+import { displayPhoto } from '../data/photos';
+import { placesByCity, routeForPlace, shareGuideUrl } from '../discovery';
+import { buildTrip, defaultProfile, type Profile } from '../planning';
+import { buildDaySchedule } from '../day-schedule';
+import { downloadPlan, formatPlan } from '../travel';
 import { FoodSuggestions, StaySuggestions } from './PracticalDetails';
+import { TripSchedule } from './TripSchedule';
+import { Button, SelectField } from './ui';
+import './travel-guide.css';
 
-export function TripDays({ days, date = '' }: { days: (TripDay & { overnight?: string; stayLabel?: string })[]; date?: string }) {
-  const [expanded, setExpanded] = useState<number[]>([0]);
-  const dayRefs = useRef<(HTMLDetailsElement | null)[]>([]);
-  const allOpen = expanded.length === days.length;
-  const jumpToDay = (index: number) => {
-    setExpanded(previous => [...new Set([...previous, index])]);
-    window.requestAnimationFrame(() => { dayRefs.current[index]?.scrollIntoView({ block: 'start' }); dayRefs.current[index]?.querySelector('summary')?.focus({ preventScroll: true }); });
-  };
-  return <section aria-label="分日行程" className="mt-8">
-    <div className="mb-3 flex flex-wrap items-center justify-between gap-3">
-      <h3 className="flex items-center gap-2 text-base font-semibold"><Route size={19} className="text-pine" />分日安排</h3>
-      {days.length > 1 && <button onClick={() => setExpanded(allOpen ? [0] : days.map((_, i) => i))} className="min-h-10 text-xs font-semibold text-pine">{allOpen ? '收起其他天数' : '展开全部'}</button>}
-    </div>
-    {days.length > 1 && <nav aria-label="跳到指定天数" className="trip-day-jumps mb-4">
-      {days.map((day, index) => <button type="button" key={index} onClick={() => jumpToDay(index)} aria-label={`查看第 ${index + 1} 天 · ${day.title}`}>第 {index + 1} 天</button>)}
-    </nav>}
-    <div className="space-y-4">{days.map((day, index) => <details ref={element => { dayRefs.current[index] = element; }} key={day.title} open={expanded.includes(index)} className="itinerary-day group/day scroll-mt-24 overflow-hidden rounded-2xl border border-line bg-white">
-      <summary onClick={event => { event.preventDefault(); setExpanded(previous => previous.includes(index) ? previous.filter(item => item !== index) : [...previous, index]); }} className="flex cursor-pointer list-none items-center gap-3 bg-cream px-4 py-4 text-sm font-semibold sm:px-5"><span className="flex min-h-9 min-w-11 px-1.5 shrink-0 items-center justify-center rounded-xl bg-pine font-display text-xs text-white">第 {index + 1} 天</span><span className="flex-1 leading-6">{planDate(date, index) && <span className="mb-1 block text-xs font-normal text-terracotta">{planDate(date, index)}</span>}{day.title}</span><ChevronDown size={17} className="shrink-0 text-muted transition-transform group-open/day:rotate-180" /></summary>
-      <div className="p-4 sm:p-5"><ol className="space-y-6">{day.stops.map((stop, stopIndex) => <li key={stop.time} className="relative flex gap-4"><div className="relative flex w-4 shrink-0 justify-center"><span className="mt-1.5 h-2.5 w-2.5 rounded-full border-2 border-terracotta bg-white" />{stopIndex < day.stops.length - 1 && <span className="absolute bottom-[-24px] top-4 w-px bg-line" />}</div><div><p className="mb-1 font-display text-xs font-semibold text-terracotta">{stop.time}</p><h4 className="text-sm font-semibold">{stop.title}</h4><p className="mt-2 text-sm leading-7 text-muted">{stop.detail}</p></div></li>)}</ol>
-        <div className="mt-5 space-y-3 rounded-xl bg-sage/75 p-4 text-xs leading-7"><p className="flex items-start gap-2"><TrainFront size={15} className="mt-1 shrink-0 text-pine" /><span><strong className="font-semibold text-pine">怎么衔接 · </strong>{day.transport}</span></p><p className="flex items-start gap-2"><Utensils size={15} className="mt-1 shrink-0 text-pine" /><span className="whitespace-pre-line"><strong className="font-semibold text-pine">餐食安排 · </strong>{day.meal}</span></p>{day.overnight && <p className="flex items-start gap-2">{day.stayLabel ? <Route size={15} className="mt-1 shrink-0 text-pine" /> : <BedDouble size={15} className="mt-1 shrink-0 text-pine" />}<span><strong className="font-semibold text-pine">{day.stayLabel || '当晚住宿'} · </strong>{day.overnight}</span></p>}<p className="border-t border-pine/10 pt-3 text-muted">{day.tip}</p></div>
-      </div>
-    </details>)}</div>
-  </section>;
-}
+const tabs = [
+  { id: 'overview', label: '攻略' },
+  { id: 'route', label: '参考行程' },
+  { id: 'practical', label: '交通吃住' },
+  { id: 'sources', label: '出行资料' },
+] as const;
 
-export function TravelGuide({ city, place, days = city.days, date = '', travelers = '2', pace = 'classic', onCopy, saved, onSave, customSelection = false, onOpenPlace, onPlan }: { city: CityGuide; place?: Destination; days?: TripDay[]; date?: string; travelers?: string; pace?: Pace; onCopy: (text: string) => void; saved?: boolean; onSave?: () => void; customSelection?: boolean; onOpenPlace?: (place: Destination) => void; onPlan?: () => void }) {
+export function TravelGuide({ city, place, date, travelers, onCopy, saved, onSave, onOpenPlace, onPlan, onExplore }: {
+  city: CityGuide; place?: Destination; date: string; travelers: string; saved?: boolean;
+  onCopy: (text: string) => void; onSave?: () => void; onOpenPlace: (place: Destination) => void;
+  onPlan: (profile: Profile) => void; onExplore: () => void;
+}) {
   const id = useId();
-  const photo = place?.image ? { image: place.image, alt: place.imageAlt || place.title, caption: place.title } : !place && cityPhotos[city.id]?.filename ? { image: `/images/${cityPhotos[city.id].filename}`, alt: cityPhotos[city.id].alt || cityPhotos[city.id].subject, caption: cityPhotos[city.id].subject } : undefined;
-  const text = formatPlan(city, days, date, travelers, pace, customSelection);
-  const jumpTo = (section: string) => document.getElementById(`${id}-${section}`)?.scrollIntoView({ behavior: 'smooth', block: 'start' });
-  return <>
-    {photo && <figure className="relative"><img src={photo.image} alt={photo.alt} className="h-48 w-full object-cover sm:h-64" style={place?.imagePosition ? { objectPosition: place.imagePosition } : undefined} /><figcaption className="absolute bottom-0 inset-x-0 bg-gradient-to-t from-ink/80 to-transparent px-5 pb-3 pt-10 text-xs text-white">实景记录 · {photo.caption}</figcaption></figure>}
-    <div className="p-5 sm:p-8">
-      <div className="flex flex-wrap items-center gap-x-4 gap-y-2 text-xs text-muted"><span className="flex items-center gap-1"><MapPin size={14} />{city.name}</span><span className="flex items-center gap-1"><Clock3 size={14} />{place ? `景点建议 ${place.duration}` : `${days.length} 天城市路线`}</span><span className="rounded-full bg-sage px-2.5 py-1 text-xs text-pine">{place?.tag || city.area}</span></div>
-      {place && <section aria-label="景点攻略" className="mt-6"><h3 className="text-lg font-semibold">为什么值得来</h3><p className="mt-3 text-sm leading-8 text-muted">{place.overview}</p><div className="mt-5 grid gap-5 sm:grid-cols-2"><div className="rounded-2xl bg-cream p-4"><h4 className="text-xs font-semibold text-pine">慢看这几个细节</h4><ul className="mt-3 space-y-3 text-xs leading-6 text-ink/80">{place.highlights.map(item => <li key={item} className="flex gap-2"><span className="mt-2.5 h-1 w-1 shrink-0 rounded-full bg-terracotta" />{item}</li>)}</ul></div><div className="rounded-2xl bg-sage/70 p-4"><h4 className="text-xs font-semibold text-pine">去之前，把这些确认好</h4><ul className="mt-3 space-y-3 text-xs leading-6 text-muted">{place.tips.map(item => <li key={item}>{item}</li>)}</ul></div></div></section>}
-      <section aria-label="城市路线概览" className="mt-7 rounded-2xl border border-line bg-cream p-5"><p className="font-display text-xs font-bold tracking-wide text-terracotta">从城市背景，到具体路线</p><h3 className="mt-2 text-xl font-semibold">{city.shortName} · {days.length} 天{pace === 'relaxed' ? '轻松慢游' : '城市串游'}</h3><p className="mt-3 text-sm leading-7 text-muted">{city.intro}</p>{date && <p className="mt-3 text-xs font-medium text-pine">计划 {date} 出发 · {travelers} 位旅行者</p>}{place && <p className="mt-3 text-xs leading-6 text-muted">以下为本城市的推荐主线。不同景点分散在不同片区，支线可按兴趣替换，不保证每一处都包含在这条路线里。</p>}</section>
-      {customSelection && <p className="mt-4 rounded-xl bg-sand p-4 text-xs leading-7 text-muted">自选章节提醒：每日片区内建议保留；跨天接驳、抵达城市与住宿需重新确认，系统不自动计算车程。</p>}
-      <nav aria-label="攻略阅读导航" className="mt-5 grid grid-cols-3 gap-2">{[['route', '分日路线'], ['practical', '交通食宿'], ['sources', '官方资料']].map(([section, label]) => <button key={section} onClick={() => jumpTo(section)} className="min-h-11 rounded-xl border border-line bg-white text-xs font-semibold text-pine hover:bg-sage">{label}</button>)}</nav>
-      {onPlan && <Button className="mt-4 w-full" onClick={onPlan}>按{city.shortName}规划我的具体行程<ArrowUpRight size={16} /></Button>}
-      <div id={`${id}-route`} className="scroll-mt-24"><TripDays days={days.map((day, i) => ({ ...day, overnight: i < days.length - 1 ? practical[city.id].nights[i] : '返程日；若延住按片区选择' }))} date={date} /></div>
-      <section id={`${id}-practical`} aria-label="出行实用信息" className="mt-8 scroll-mt-24"><h3 className="mb-4 text-base font-semibold">住哪里、怎么到、吃什么</h3><div className="grid gap-3 sm:grid-cols-2">{[
-        { icon: TrainFront, title: '到达与接驳', body: city.arrival }, { icon: BedDouble, title: '住宿片区', body: city.stay }, { icon: Leaf, title: '季节与节奏', body: city.season }, { icon: Utensils, title: '地方餐桌', body: city.food.join(' · ') },
-      ].map(item => <div key={item.title} className="rounded-xl border border-line p-4"><h4 className="flex items-center gap-2 text-xs font-semibold text-pine"><item.icon size={16} />{item.title}</h4><p className="mt-3 text-xs leading-7 text-muted">{item.body}</p></div>)}</div><ul className="mt-5 space-y-2 text-xs leading-7 text-muted">{city.tips.map(tip => <li key={tip} className="flex gap-2"><span className="mt-3 h-1 w-1 shrink-0 rounded-full bg-terracotta" />{tip}</li>)}</ul></section>
-      <div className="mt-9 space-y-9"><StaySuggestions city={city} /><FoodSuggestions city={city} /></div>
-      {onOpenPlace && <section aria-label="同城市继续探索" className="mt-8"><h3 className="mb-4 text-base font-semibold">还想看看{city.shortName}的另一面？</h3><div className="grid gap-3 sm:grid-cols-3">{destinations.filter(item => item.cityId === city.id && item.id !== place?.id).slice(0, 3).map(item => <button key={item.id} onClick={() => onOpenPlace(item)} className="rounded-xl border border-line bg-cream p-4 text-left hover:border-pine/50"><span className="text-xs text-terracotta">{item.tag}</span><strong className="mt-2 block text-sm font-semibold">{item.title}</strong><span className="mt-2 block text-xs leading-6 text-muted">{item.highlights[0]}</span><span className="mt-3 block text-xs font-semibold text-pine">看具体攻略 ↗</span></button>)}</div></section>}
-      {place && onSave && <Button className="mt-6" onClick={onSave} variant="neutral"><Heart size={16} fill={saved ? 'currentColor' : 'none'} />{saved ? '已收藏 · 取消' : '收藏这个去处'}</Button>}
-      <section id={`${id}-sources`} aria-label="旅行资料来源" className="mt-8 scroll-mt-24 border-t border-line pt-5"><h3 className="mb-3 text-xs font-semibold text-ink">继续读 · 官方旅行资料</h3><div className="space-y-2">{city.sources.map(source => <a key={source.url} href={source.url} target="_blank" rel="noreferrer" className="flex items-start gap-1 text-xs leading-6 text-pine hover:underline">{source.title}<ArrowUpRight size={13} className="mt-1.5 shrink-0" /></a>)}</div><p className="mt-4 text-xs leading-6 text-muted">景点事实参考上述文旅及景区资料，路线、时段与餐食搭配为编辑建议。门票、车船、展馆预约和演出以当期官方公告为准；本站不提供实时库存与真实预订。</p></section>
+  const match = place && routeForPlace(place.id);
+  const [tab, setTab] = useState<(typeof tabs)[number]['id']>('overview');
+  const [chapter, setChapter] = useState(match?.chapter ?? 0);
+  const body = useRef<HTMLDivElement>(null);
+  const photo = cityPhotos[city.id];
+  const image = displayPhoto(place ? place.image : photo?.filename && `/images/${photo.filename}`, true);
+  const otherPlaces = placesByCity[city.id].filter(other => other.id !== place?.id);
+  const related = match ? otherPlaces.filter(other => routeForPlace(other.id)?.chapter === match.chapter) : [];
+  const morePlaces = [...related, ...otherPlaces.filter(other => !related.includes(other))].slice(0, 3);
+  const chapterProfile = (index: number) => ({ ...defaultProfile(city.id, date, Number(travelers)), indices: [index] });
+  const oneDay = chapterProfile(chapter);
+  const day = buildTrip(oneDay)[0];
+  const schedule = buildDaySchedule(day, oneDay, undefined, true);
+  const generalPlan = () => onPlan(defaultProfile(city.id, date, Number(travelers)));
+  const openPlan = () => onPlan(chapterProfile(match && tab !== 'route' ? match.chapter : chapter));
+  const text = () => formatPlan(city, city.days, date, travelers);
+  const showTab = (next: typeof tab, focus = false) => {
+    setTab(next);
+    window.requestAnimationFrame(() => {
+      body.current?.scrollIntoView({ behavior: 'instant', block: 'start' });
+      if (focus) document.getElementById(`${id}-${next}`)?.focus({ preventScroll: true });
+    });
+  };
+
+  return <div className="guide-content">
+    <div className={'guide-cover' + (image ? ' has-photo' : '')}>
+      {image && <figure className="guide-photo">
+        <img src={image} alt={place?.imageAlt || photo?.alt || place?.title || city.shortName} width="1040" height="520"
+          style={place?.imagePosition ? { objectPosition: place.imagePosition } : undefined} decoding="async" />
+        <figcaption><MapPin size={14} />{place?.title || photo?.subject}</figcaption>
+      </figure>}
+      <div className="guide-overview-card">
+        <p className="guide-location"><MapPin size={15} />{city.shortName}<span>{place?.tag || city.area}</span></p>
+        <h3>{place ? place.description.replace(/。$/, '') : city.tagline.replace(/。$/, '')}</h3>
+        <p className="guide-duration"><Clock3 size={16} />{place ? `建议游玩 ${place.duration}` : `${city.days.length} 天路线可选`}</p>
+        <button type="button" className="guide-share" onClick={() => onCopy(shareGuideUrl(city.id, place?.id))}><Share2 size={16} />分享攻略</button>
+      </div>
     </div>
-    <div aria-label="保存行程" className="sticky bottom-0 z-10 flex items-center justify-between gap-3 border-t border-line bg-white/95 px-4 py-3 backdrop-blur sm:px-6"><span className="hidden text-xs text-muted sm:block">{city.shortName} · {days.length} 天 · 随时带走</span><div className="grid flex-1 grid-cols-2 gap-2 sm:flex sm:flex-none"><Button onClick={() => onCopy(text)} variant="neutral" className="px-3 text-xs"><Copy size={15} />复制城市行程</Button><Button onClick={() => downloadPlan(text, city.shortName)} className="px-3 text-xs"><Download size={15} />下载行程清单</Button></div></div>
-  </>;
+    <div className="guide-tabs" role="tablist" aria-label="攻略内容">
+      {tabs.map((item, index) => <button key={item.id} type="button" id={`${id}-${item.id}`} role="tab" tabIndex={tab === item.id ? 0 : -1}
+        aria-controls={`${id}-panel`} aria-selected={tab === item.id} onClick={() => showTab(item.id)} onKeyDown={event => {
+          const target = event.key === 'ArrowRight' ? tabs[(index + 1) % tabs.length] : event.key === 'ArrowLeft'
+            ? tabs[(index + tabs.length - 1) % tabs.length] : event.key === 'Home' ? tabs[0] : event.key === 'End' ? tabs.at(-1) : undefined;
+          if (target) { event.preventDefault(); showTab(target.id, true); }
+        }}>{item.label}</button>)}
+    </div>
+    <div ref={body} id={`${id}-panel`} role="tabpanel" aria-labelledby={`${id}-${tab}`} className="guide-body">
+      {tab === 'overview' && <>
+        <div className="guide-read">
+          <section>
+            <h3>{place ? '这里看什么' : `认识${city.shortName}`}</h3>
+            <p>{place?.overview || city.intro}</p>
+            {place && <ul className="guide-text-list">{place.highlights.map(item => <li key={item}>{item}</li>)}</ul>}
+          </section>
+          <aside>
+            <h3>出发前核对</h3>
+            <ul className="guide-text-list">{(place?.tips || city.tips).map(item => <li key={item}>{item}</li>)}</ul>
+            <button className="text-link" type="button" onClick={() => showTab('sources', true)}>查看官方资料<ArrowUpRight size={15} /></button>
+          </aside>
+        </div>
+        <section className="guide-route-banner">
+          <span className="guide-route-icon"><Route size={22} strokeWidth={1.7} /></span>
+          <div><h3>{match ? city.days[match.chapter].title : place ? '同城路线参考' : `${city.shortName}逐日路线`}</h3>
+            <p>{match ? `这一日安排了「${match.visit}」。` : place ? '这处景点适合单独预留时间。可先看本站的同城行程。' : '按日查景点先后、接驳、餐食和住宿片区。'}</p></div>
+          <button type="button" onClick={() => { if (match) setChapter(match.chapter); showTab('route', true); }}>看时间表<ArrowRight size={16} /></button>
+        </section>
+        {morePlaces.length > 0 && <section className="guide-related">
+          <h3>同城去处</h3>
+          <ul>{morePlaces.map(other => <li key={other.id}><button type="button" onClick={() => onOpenPlace(other)}>
+            <strong>{other.title}</strong><span>{other.tag} · {other.duration}</span><ArrowUpRight size={16} />
+          </button></li>)}</ul>
+          <button type="button" className="text-link" onClick={onExplore}>浏览{city.shortName}全部景点<ArrowRight size={16} /></button>
+        </section>}
+      </>}
+      {tab === 'route' && <section aria-label="按日浏览参考路线" className="guide-route">
+        <h3>{city.shortName}的一日路线</h3>
+        <div className="guide-chapter-select"><SelectField aria-label="选择一日路线" value={chapter} onChange={event => setChapter(Number(event.target.value))}>
+          {city.days.map((item, index) => <option key={item.title} value={index}>{item.title}</option>)}
+        </SelectField></div>
+        <div className="guide-chapters" role="group" aria-label="选择一日路线">
+          {city.days.map((item, index) => <button type="button" key={item.title} aria-pressed={chapter === index} onClick={() => setChapter(index)}>{item.title}</button>)}
+        </div>
+        <TripSchedule days={[day]} profile={oneDay} />
+      </section>}
+      {tab === 'practical' && <section className="guide-practical" aria-label="交通吃住">
+        <div className="guide-practical-intro"><h3><TrainFront size={18} />怎么到{city.shortName}</h3><p>{city.arrival}</p><p>{city.season}</p></div>
+        <StaySuggestions city={city} />
+        <FoodSuggestions city={city} />
+        <p className="guide-note"><Utensils size={15} />地方风味与住宿片区按实际行程选择。可到规划里查看顺路餐食。</p>
+      </section>}
+      {tab === 'sources' && <section className="guide-sources" aria-label="出行资料">
+        <h3>官方出行资料</h3>
+        <ul>{[...new Map([...city.sources, ...(match && chapter === match.chapter ? schedule.sources : [])].map(source => [source.url, source])).values()].map(source =>
+          <li key={source.url}><a href={source.url} target="_blank" rel="noreferrer">{source.title}<ArrowUpRight size={16} /></a></li>)}</ul>
+        <p className="guide-note">预约、票种、开放和车船班次以当期官方公告为准。</p>
+        <div className="guide-export">
+          <Button variant="neutral" onClick={() => onCopy(text())}><Copy size={16} />复制城市攻略</Button>
+          <Button variant="neutral" onClick={() => downloadPlan(text(), city.shortName)}><Download size={16} />下载城市攻略</Button>
+        </div>
+      </section>}
+    </div>
+    <footer className="guide-actions">
+      {onSave ? <Button variant="neutral" aria-pressed={saved} onClick={onSave}><Heart size={17} fill={saved ? 'currentColor' : 'none'} />{saved ? '已收藏' : '收藏'}</Button>
+        : <Button variant="neutral" onClick={onExplore}><MapPin size={17} />看同城景点</Button>}
+      <Button className="guide-plan-action" onClick={tab === 'route' || match ? openPlan : generalPlan}>
+        {tab === 'route' ? '用这条一日路线' : match ? '打开含此景点的行程' : `打开${city.shortName}行程`}<ArrowRight size={17} />
+      </Button>
+    </footer>
+  </div>;
 }

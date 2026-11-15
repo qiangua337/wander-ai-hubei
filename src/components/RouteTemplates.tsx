@@ -3,6 +3,7 @@ import { ArrowRight, BedDouble, Clock3, MapPin } from 'lucide-react';
 import { buildTrip, defaultProfile, templates } from '../planning';
 import { buildDaySchedule, scheduleDuration } from '../day-schedule';
 import { cityById, cityPhotos } from '../data';
+import { displayPhoto } from '../data/photos';
 
 export function RouteTemplates({ onChoose }: { onChoose: (templateId: string, dayIndex: number) => void }) {
   const prefix = useId();
@@ -17,7 +18,7 @@ export function RouteTemplates({ onChoose }: { onChoose: (templateId: string, da
   const firstLeg = schedule.rows.find(row => row.kind === 'move');
   const preview = schedule.rows.filter(row => row === firstLeg || row.kind === 'visit' || row.meal === '午餐').slice(0, 4);
   const photo = cityPhotos[template.cityId];
-  const image = template.cityId === 'enshi' ? '/images/enshi-card.webp' : template.cityId === 'yichang' ? '/images/xiling-cover-768.webp' : template.image;
+  const image = displayPhoto(template.image);
 
   return <section id="routes" aria-labelledby="routes-title" className="route-editorial">
     <div className="page-width">
