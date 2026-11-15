@@ -1,7 +1,7 @@
 import type { ReturnSource } from './return-mornings';
 
 export type MinuteRange = readonly [min: number, max: number];
-type TravelLeg = { method: string; minutes?: MinuteRange; drive?: { method: string; minutes: MinuteRange } };
+export type TravelLeg = { method: string; minutes?: MinuteRange; drive?: { method: string; minutes: MinuteRange } };
 
 type Visit = { place: string; length: number; via: TravelLeg; note?: string };
 type Meal = { area: string; food: string; via?: TravelLeg; length?: number };
@@ -42,7 +42,7 @@ const xiangyang = '襄城古城周边';
 const jingzhou = '荆州古城周边';
 const huangshi = '黄石磁湖周边';
 const wuhanOldTown: ReturnSource = { title: '武汉市商务局 · 武昌老城步行与餐饮线索', url: 'https://sw.wuhan.gov.cn/xwdt/gzdt/202609/t20260928_2854371.shtml' };
-const wuhanLake: ReturnSource = { title: '武汉市政府 · 省博与东湖听涛交通指引', url: 'https://www.wuhan.gov.cn/ztzl/24zt/csrl/202604/t20260428_2758375.shtml' };
+const wuhanLake: ReturnSource = { title: '武汉市公安局 · 省博与东湖听涛交通', url: 'https://gaj.wuhan.gov.cn/jmzx/jfts/202504/t20250430_2576018.html' };
 const wuhanHankou: ReturnSource = { title: '武汉市政府 · 汉口老街与江滩游览线', url: 'https://www.wuhan.gov.cn/ztzl/25zt/zjwhxq/202505/t20250521_2584437.shtml' };
 const yichangRiver: ReturnSource = { title: '宜昌市交通运输局 · 滨江步道和二马路沿线', url: 'https://jtj.yichang.gov.cn/content-22553-963017-1.html' };
 const threeGorges: ReturnSource = { title: '宜昌市政府 · 三峡大坝与屈原故里主题游径', url: 'https://www.yichang.gov.cn/html/zhengwuyizhantong/zhengwuzixun/jinriyaowen/2024/0610/1061187.html' };
@@ -80,7 +80,9 @@ export const dayJourneys: Record<string, DayJourney[]> = {
       visit('宜昌博物馆', 135, ride('城区公交或出租到博物馆入口', 40, 65, [30, 50]), '提前核对预约，给基本陈列留足时间。'),
       meal('滨江城区', '在滨江步道入口附近吃一份家常午餐。', ride('公交或出租回西陵方向，按选定江岸入口下车', 35, 55, [25, 45])),
       visit('镇江阁附近滨江步道', 75, walk(10, 20, '从午餐片区步行到最近入口')),
-      yichang, '二马路到红星路一带吃家常饭，凉虾和萝卜饺子可作小吃。', walk(15, 30, '沿江或街区步行回西陵住宿片区'), { sources: [yichangRiver] }),
+      yichang, '二马路到红星路一带吃家常饭，凉虾和萝卜饺子可作小吃。', walk(15, 30, '沿江或街区步行回西陵住宿片区'), {
+        earlyReturn: ride('从宜昌博物馆乘公交或出租回西陵住宿片区', 35, 55, [25, 45]), sources: [yichangRiver],
+      }),
     journey('07:45', yichang, /西陵|夷陵广场|二马路/,
       visit('三峡大坝旅游区', 150, ride('乘已确认的旅游交通或约车到游客换乘中心', 65, 95, [60, 90]), '先按官方要求办理入园和景区换乘。'),
       meal('秭归 · 茅坪城区', '在屈原故里附近先吃合渣、炕土豆配正餐。', ride('从坝区换乘点按已确认路线去茅坪，优先同一辆正规车衔接', 35, 65, [30, 60])),

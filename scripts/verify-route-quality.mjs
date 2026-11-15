@@ -10,6 +10,7 @@ try {
   const { routeDetails } = await server.ssrLoadModule('/src/data/route-details.ts');
   const { dayJourneys } = await server.ssrLoadModule('/src/data/day-journeys.ts');
   const { buildDaySchedule, groupLodging } = await server.ssrLoadModule('/src/day-schedule.ts');
+  const { buildTripSchedules, visitChoices } = await server.ssrLoadModule('/src/visit-scheduling.ts');
   const { defaultProfile, buildTrip, recommendConstrainedDays, estimateBudget, normalizeProfile, sharePlanUrl, parsePlanUrl, formatDetailedPlan, getTripIssues, getTripTimingConflict } = await server.ssrLoadModule('/src/planning.ts');
   const sourceSnapshot = JSON.stringify({ cities, practical, routeDetails });
   let chapters = 0;
@@ -234,6 +235,58 @@ try {
   assert(!localAfternoon.rows.some(row => /大峡谷|七星寨|恩施城区 → 恩施城区/.test(row.title)));
   assert.equal(estimateBudget(lateGorge, 2).ticketDays, 1);
   assert(getTripIssues(lateGorge).some(issue => issue.includes('玩法偏好尚未充分满足')));
+
+  const moveLake = { from: 'wuhan:1', slot: 'afternoon', to: 'wuhan:0' };
+  const swapLake = { from: 'wuhan:1', slot: 'afternoon', alternative: 'doujiying' };
+  const eligible = visitChoices(weekend, relaxedMorning, 1)[0];
+  assert.equal(eligible.original, '东湖听涛 · 梨园');
+  assert.deepEqual(eligible.options.map(item => item.change), [moveLake, swapLake]);
+  const movedLake = normalizeProfile({ ...relaxedMorning, visitChanges: [moveLake] });
+  const moved = buildTripSchedules(weekend, movedLake);
+  assert.equal(moved.applied[0].start, '15:15');
+  assert(moved.schedules[0].rows.some(row => row.kind === 'move' && row.title.includes('中华路江边 → 东湖') && row.minutes[1] === 60));
+  assert(moved.schedules[0].rows.some(row => row.meal === '晚餐' && row.time === '17:45'));
+  assert(!moved.schedules[1].rows.some(row => row.title.includes('东湖')));
+  assert.deepEqual(parsePlanUrl(new URL(sharePlanUrl(movedLake)).search), movedLake);
+  assert.match(formatDetailedPlan(movedLake), /15:15｜东湖听涛/);
+  const swap = buildTripSchedules(weekend, { ...relaxedMorning, visitChanges: [swapLake] });
+  assert(swap.schedules[1].rows.some(row => row.kind === 'move' && /湖北省博物馆 → 斗级营/.test(row.title)));
+  assert.equal(swap.schedules[1].rows.find(row => row.title === '斗级营老街').time, '16:55');
+  assert.equal(swap.schedules[1].rows.find(row => row.meal === '午餐').time, '11:50');
+  const withReturnChoices = normalizeProfile({ ...wuchangReturn, visitChanges: [moveLake, { ...swapLake, slot: 'main' }] });
+  const returnDays = buildTrip(withReturnChoices);
+  const modifiedReturn = buildTripSchedules(returnDays, withReturnChoices);
+  assert.equal(modifiedReturn.applied.length, 2, 'Moving a missed afternoon stop and choosing a short return-morning walk can coexist.');
+  const returnRows = modifiedReturn.schedules[1].rows;
+  assert.deepEqual(returnRows.filter(row => row.deadline).map(row => row.time), ['13:45', '14:30']);
+  assert(returnRows.some(row => row.time === '09:35' && row.title === '斗级营老街'));
+  assert(returnRows.some(row => row.time === '12:00' && row.meal === '午餐'));
+  assert(returnRows.some(row => row.time === '13:25' && row.title === '取行李'));
+  assert(!returnRows.some(row => row.kind === 'visit' && /昙华林|省博/.test(row.title)));
+  assert.deepEqual(parsePlanUrl(new URL(sharePlanUrl(withReturnChoices)).search), withReturnChoices);
+  const shortConnect = { ...withReturnChoices, departureTime: '12:10', departureStation: '武汉站' };
+  const shortReturn = buildTripSchedules(buildTrip(shortConnect), shortConnect);
+  assert.equal(shortReturn.applied.length, 1);
+  assert(!shortReturn.schedules[1].rows.some(row => row.title === '斗级营老街'));
+  assert(shortReturn.schedules[1].rows.some(row => row.time === '11:10' && row.deadline));
+  assert(shortReturn.schedules[1].rows.some(row => row.meal === '午餐' && !row.time));
+  const snapshot = buildTripSchedules(weekend, { ...relaxedMorning, visitChanges: [{ ...moveLake, to: 'yichang:0' }] });
+  assert(!snapshot.applied.length);
+  assert.deepEqual(snapshot.schedules, buildTripSchedules(weekend, relaxedMorning).schedules);
+  const brokenShare = new URL(sharePlanUrl(movedLake));
+  brokenShare.searchParams.append('visit', 'wuhan:0@main@yichang:0@');
+  brokenShare.searchParams.append('visit', 'wuhan:3@main@@doujiying');
+  assert.deepEqual(parsePlanUrl(brokenShare.search).visitChanges, [moveLake]);
+  const fallbackGorge = { ...lateGorge, visitChanges: [{ from: 'enshi:1', slot: 'main', alternative: 'qingjiang-street' }] };
+  const adjustedGorge = buildTripSchedules(buildTrip(fallbackGorge), fallbackGorge);
+  assert(adjustedGorge.schedules[1].rows.some(row => row.title === '舞阳坝清江里街'));
+  assert.equal(adjustedGorge.schedules[1].rows.filter(row => row.meal === '午餐').length, 1);
+  assert.equal(estimateBudget(fallbackGorge, 2).ticketDays, 1);
+  assert(adjustedGorge.schedules[1].rows.find(row => row.meal === '晚餐').detail.includes('合渣'));
+  for (const schedule of [...moved.schedules, ...swap.schedules, ...modifiedReturn.schedules, ...shortReturn.schedules, ...adjustedGorge.schedules]) {
+    const clocks = schedule.rows.flatMap(row => row.time ? [row.time] : []);
+    assert.deepEqual(clocks, [...clocks].sort(), 'Edited routes must remain chronological.');
+  }
 
   const complete = normalizeProfile({ ...base, origin: '武汉', arrival: 'afternoon', mobility: 'gentle', budgetLimit: 2000, budgetScope: 'per-person', note: '不吃辣，需向餐馆确认' });
   const shared = sharePlanUrl(complete), restored = parsePlanUrl(new URL(shared).search);

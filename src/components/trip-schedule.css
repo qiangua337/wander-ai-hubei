@@ -44,6 +44,21 @@
 .trip-schedule-notes a { color:var(--color-pine); text-decoration:underline; text-underline-offset:3px; }
 .trip-schedule-foot { margin-top:8px; color:var(--color-muted); font-size:11px; line-height:1.65; }
 .trip-schedule-panel .return-day-editor { margin:10px 12px; }
+.visit-change-panel { display:grid; gap:8px; margin:10px 12px; padding:12px 13px; border:1px solid #ebd1d7; border-radius:8px; background:#fcf6f6; }
+.visit-change-panel:focus-visible,.trip-schedule-day:focus-visible { outline:2px solid var(--color-pine); outline-offset:-2px; }
+.visit-change-panel header { display:flex; align-items:center; gap:8px; color:var(--color-pine-deep); }
+.visit-change-panel header svg { flex-shrink:0; }
+.visit-change-panel h5 { font-size:14px; font-weight:650; line-height:1.5; }
+.visit-change-panel p { color:var(--color-muted); font-size:12px; }
+.visit-change-panel ul { display:grid; gap:6px; }
+.visit-change-panel li>button { display:grid; grid-template-columns:18px minmax(0,1fr) 15px; align-items:start; gap:8px; width:100%; padding:9px 10px; border:1px solid var(--color-line); border-radius:6px; background:#fff; color:var(--color-pine-deep); text-align:left; }
+.visit-change-panel li>button:is(:hover,:focus-visible) { border-color:var(--color-pine); }
+.visit-change-panel li>button>svg { margin-top:3px; }
+.visit-change-panel li strong { display:flex; flex-wrap:wrap; align-items:baseline; gap:2px 8px; color:var(--color-ink); font-size:13px; font-weight:650; }
+.visit-change-panel li small { color:var(--color-pine-deep); font-size:11px; font-variant-numeric:tabular-nums; }
+.visit-change-panel li>button span span { display:block; margin-top:2px; color:var(--color-muted); font-size:11px; line-height:1.6; }
+.visit-change-current { display:flex; flex-wrap:wrap; align-items:center; column-gap:10px; }
+.visit-change-current button { display:inline-flex; gap:4px; align-items:center; min-height:33px; margin-left:auto; color:var(--color-pine-deep); text-decoration:underline; text-underline-offset:3px; }
 @media(max-width:480px) {
   .trip-schedule-tabs button { padding-inline:9px; }
   .trip-schedule-rows { padding-inline:9px; }

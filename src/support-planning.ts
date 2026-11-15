@@ -2,6 +2,7 @@ import { cityById } from './data';
 import { buildTrip, defaultProfile, estimateBudget, normalizeProfile, recommendConstrainedDays, templates, validDate, groupLabels, interestLabels, budgetLabels, arrivalLabels, departureLabels, getDepartureLabel, getTripTimingConflict, type Profile } from './planning';
 import { returnWalks } from './data/return-mornings';
 import { normalizeDayStarts } from './day-starts';
+import { readVisitChanges } from './visit-changes';
 import { clockWindow, formatClock, normalizeReturnLogistics, normalizeStation, parseClock, readReturnMinutes, type ReturnLogistics } from './return-timing';
 import type { SupportAction, SupportContext, SupportReply } from './support';
 
@@ -12,6 +13,7 @@ export type SupportTripDraft = {
   origin?: string; arrival?: Profile['arrival']; departure?: Profile['departure']; mobility?: Profile['mobility']; budgetLimit?: number; budgetScope?: Profile['budgetScope'];
   departureTime?: string; departureStation?: string; returnLogistics?: ReturnLogistics;
   dayStarts?: Profile['dayStarts'];
+  visitChanges?: Profile['visitChanges'];
   awaiting?: 'city' | 'days' | 'party' | 'budget-scope' | 'mobility' | 'arrival' | 'departure';
 };
 
@@ -153,6 +155,8 @@ export function copyTripDraft(value?: SupportTripDraft): SupportTripDraft {
   if (typeof value.note === 'string') draft.note = value.note.trim().slice(0, 500);
   const dayStarts = normalizeDayStarts(value.dayStarts);
   if (dayStarts) draft.dayStarts = dayStarts;
+  const visitChanges = readVisitChanges(value.visitChanges);
+  if (visitChanges) draft.visitChanges = visitChanges;
   if (typeof value.origin === 'string') draft.origin = cleanOrigin(value.origin);
   const routeTemplate = templates.find(template => template.segments.length === draft.cityIds?.length && template.segments.every(segment => draft.cityIds?.includes(segment.cityId)));
   const lastCity = routeTemplate?.segments.at(-1)?.cityId || draft.cityIds?.at(-1);
@@ -248,7 +252,7 @@ export function planSupportTrip(input: SupportTripDraft): SupportReply {
     return refused;
   }
   if (!template && ['morning', 'afternoon', 'evening'].includes(draft.arrival || '')) indices = [0, ...indices.filter(index => index !== 0).slice(0, draft.days - 1)].sort((a, b) => a - b);
-  let profile = normalizeProfile({ ...base, template: template?.id || 'custom', indices, group, mode: draft.mode || 'public', interest, budget: draft.budget || 'comfort', pace, note: draft.note || '', origin: draft.origin, arrival: draft.arrival || 'full-day', departure: draft.departure, departureTime: draft.departureTime, departureStation: draft.departureStation, returnLogistics: draft.returnLogistics, dayStarts: draft.dayStarts, mobility: draft.mobility || 'standard', budgetLimit: draft.budgetLimit, budgetScope: draft.budgetScope });
+  let profile = normalizeProfile({ ...base, template: template?.id || 'custom', indices, group, mode: draft.mode || 'public', interest, budget: draft.budget || 'comfort', pace, note: draft.note || '', origin: draft.origin, arrival: draft.arrival || 'full-day', departure: draft.departure, departureTime: draft.departureTime, departureStation: draft.departureStation, returnLogistics: draft.returnLogistics, dayStarts: draft.dayStarts, visitChanges: draft.visitChanges, mobility: draft.mobility || 'standard', budgetLimit: draft.budgetLimit, budgetScope: draft.budgetScope });
   const timingConflict = getTripTimingConflict(profile);
   if (timingConflict) {
     const refused = tripReply(timingConflict, { ...draft, awaiting: undefined });
@@ -307,7 +311,7 @@ export function planSupportTrip(input: SupportTripDraft): SupportReply {
     template ? `跨城采用固定主线：${template.segments.map(segment => `${cityById[segment.cityId].shortName}${segment.indices.length}天`).join(' → ')}；玩法偏好不会改动经典模板的景点。跨城日上午留给交通，原上午景点移除。` : '',
     draft.note ? '补充想法已附入方案；饮食禁忌和特殊需求未自动核实或替换，请向餐馆、酒店和运营方确认。' : '',
   ].filter(Boolean);
-  return tripReply(notes.join('\n\n'), { ...draft, departure: profile.departure, departureTime: profile.departureTime, departureStation: profile.departureStation, returnLogistics: profile.returnLogistics, dayStarts: profile.dayStarts, awaiting: undefined }, [{ kind: 'plan', cityId: profile.cityId, label: '带入规划并继续调整', profile: { ...profile, indices: [...profile.indices] } }], profile);
+  return tripReply(notes.join('\n\n'), { ...draft, departure: profile.departure, departureTime: profile.departureTime, departureStation: profile.departureStation, returnLogistics: profile.returnLogistics, dayStarts: profile.dayStarts, visitChanges: profile.visitChanges, awaiting: undefined }, [{ kind: 'plan', cityId: profile.cityId, label: '带入规划并继续调整', profile: { ...profile, indices: [...profile.indices] } }], profile);
 }
 
 function readLogisticsUpdate(question: string): { remaining: string; patch?: ReturnLogistics; error?: string } {

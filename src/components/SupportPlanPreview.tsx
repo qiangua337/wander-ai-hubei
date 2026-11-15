@@ -4,11 +4,13 @@ import { practical } from '../data/practical';
 import { dayJourneys } from '../data/day-journeys';
 import { arrivalLabels, getDepartureLabel, buildTrip, estimateBudget, getTripIssues, groupLabels, interestLabels, mobilityLabels, type Profile } from '../planning';
 import { TripSchedule } from './TripSchedule';
+import type { VisitChange } from '../visit-changes';
 import './support-plan-preview.css';
 
-export function SupportPlanPreview({ profile, onUpdateReturn, onUpdateStart, dayIndex, onChooseDay }: {
+export function SupportPlanPreview({ profile, onUpdateReturn, onUpdateStart, onVisitChange, dayIndex, onChooseDay }: {
   profile: Profile; onUpdateReturn: (profile: Profile) => void; onUpdateStart: (profile: Profile, dayIndex: number) => void;
   dayIndex: number; onChooseDay: (dayIndex: number) => void;
+  onVisitChange: (change: VisitChange, dayIndex: number, undo?: boolean) => void;
 }) {
   const days = buildTrip(profile);
   if (!days.length) return null;
@@ -27,7 +29,7 @@ export function SupportPlanPreview({ profile, onUpdateReturn, onUpdateStart, day
       {target && <p className={'support-plan-budget-check' + (budget.total[1] > target ? ' needs-review' : '')}>{budget.total[0] > target ? '当前最低规划预留已超目标。' : budget.total[1] > target ? '规划预留有超出目标的区间，建议继续调整。' : '当前规划预留范围未超目标。'}此比较不含往返、跨城大交通与租车。</p>}
       <details className="support-plan-budget"><summary><Wallet size={15} /><span>全团预算预留<strong>¥{budget.total[0].toLocaleString()}–{budget.total[1].toLocaleString()}</strong></span><ChevronDown size={15} /></summary><div><p>{budget.nights ? `住宿按 ${budget.rooms} 间双人房、${budget.nights} 晚预留。` : '行程未计过夜住宿。'}{budget.ticketDays < days.length ? `景点项目按 ${budget.ticketDays} 天预留。` : ''}</p>{profile.budgetLimit && <p>目标预算为{profile.budgetScope === 'per-person' ? '每人' : '全团'} ¥{profile.budgetLimit.toLocaleString()}。</p>}</div></details>
     </header>
-    <TripSchedule days={days} profile={profile} onUpdateReturn={onUpdateReturn} onUpdateStart={onUpdateStart} dayIndex={dayIndex} onChooseDay={onChooseDay} />
+    <TripSchedule days={days} profile={profile} onUpdateReturn={onUpdateReturn} onUpdateStart={onUpdateStart} onVisitChange={onVisitChange} dayIndex={dayIndex} onChooseDay={onChooseDay} />
     {budget.arrivalNight && <p className="support-plan-arrival">预算包含抵达前夜。可住在{firstNight}，方便去第一站。</p>}
     <details className="support-plan-checks"><summary>旅行条件和行前核对</summary>
       <dl className="support-plan-constraints">

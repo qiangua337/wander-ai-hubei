@@ -2,16 +2,19 @@ import { useRef, useState } from 'react';
 import { ArrowRight, ArrowUpRight, BedDouble, Bookmark, ChevronDown, CircleCheck, Copy, Download, Pencil, Route, Share2, Utensils, Wallet } from 'lucide-react';
 import { cityById } from '../data';
 import { dayJourneys } from '../data/day-journeys';
-import { buildDaySchedule, groupLodging } from '../day-schedule';
+import { groupLodging } from '../day-schedule';
+import { buildTripSchedules } from '../visit-scheduling';
+import type { VisitChange } from '../visit-changes';
 import { arrivalLabels, getDepartureLabel, mobilityLabels, getTripIssues, buildTrip, budgetLabels, estimateBudget, formatDetailedPlan, groupLabels, sharePlanUrl, tripTitle, type Profile } from '../planning';
 import { downloadPlan } from '../travel';
 import { FoodSuggestions, StaySuggestions } from './PracticalDetails';
 import { TripSchedule } from './TripSchedule';
 import { Button } from './ui';
 
-export function PlannedTrip({ profile, onCopy, onSave, onEdit, onUpdateReturn, onUpdateStart, dayIndex, onChooseDay }: {
+export function PlannedTrip({ profile, onCopy, onSave, onEdit, onUpdateReturn, onUpdateStart, onVisitChange, dayIndex, onChooseDay }: {
   profile: Profile; onCopy: (text: string) => void; onSave: () => boolean; onEdit: () => void;
   onUpdateReturn: (profile: Profile) => void; onUpdateStart: (profile: Profile, dayIndex: number) => void;
+  onVisitChange: (change: VisitChange, dayIndex: number, undo?: boolean) => void;
   dayIndex: number; onChooseDay: (dayIndex: number) => void;
 }) {
   const [tab, setTab] = useState('route');
@@ -53,7 +56,7 @@ export function PlannedTrip({ profile, onCopy, onSave, onEdit, onUpdateReturn, o
     }} key={item.id} onClick={() => selectTab(item.id)}><item.icon size={16} /><span>{item.label}<small aria-hidden="true">{item.count}</small></span></button>)}</div>
     <div ref={panel} role="tabpanel" id={'plan-panel-' + tab} aria-labelledby={'plan-tab-' + tab} className="trip-tab-panel">
       {tab === 'route' && <>
-        <TripSchedule days={days} profile={profile} onUpdateReturn={onUpdateReturn} onUpdateStart={onUpdateStart} dayIndex={dayIndex} onChooseDay={onChooseDay} />
+        <TripSchedule days={days} profile={profile} onUpdateReturn={onUpdateReturn} onUpdateStart={onUpdateStart} onVisitChange={onVisitChange} dayIndex={dayIndex} onChooseDay={onChooseDay} />
         {issues.length > 0 && <details className="trip-reading-note trip-reading-details">
           <summary><strong>行前核对</strong><span>{issues.length} 项</span><ChevronDown size={16} /></summary>
           <ul className="mt-2 list-disc space-y-1 pl-4">{issues.map(issue => <li key={issue}>{issue}</li>)}</ul>
@@ -70,7 +73,7 @@ export function PlannedTrip({ profile, onCopy, onSave, onEdit, onUpdateReturn, o
       </div>}
       {tab === 'food' && <div className="space-y-8">
         <p className="trip-panel-description">按城市找地方风味，也按每天的路线安排一餐。营业与供应请在出发前核对。</p>
-        <details className="trip-meal-index"><summary><Utensils size={16} />查看每日餐食安排<span>{days.length} 天</span></summary><ol>{days.map((day, index) => <li key={day.title}><span>第 {index + 1} 天 · {cityById[day.cityId].shortName}</span>{buildDaySchedule(day, profile, days[index - 1], index === days.length - 1).rows.filter(row => row.kind === 'meal').map(row => <p key={row.title}><strong>{row.title}</strong>{row.detail && <><br />{row.detail}</>}</p>)}</li>)}</ol></details>
+        <details className="trip-meal-index"><summary><Utensils size={16} />查看每日餐食安排<span>{days.length} 天</span></summary><ol>{buildTripSchedules(days, profile).schedules.map((schedule, index) => <li key={index}><span>第 {index + 1} 天 · {cityById[days[index].cityId].shortName}</span>{schedule.rows.filter(row => row.kind === 'meal').map(row => <p key={row.title}><strong>{row.time && row.time + ' '}{row.title}</strong>{row.detail && <><br />{row.detail}</>}</p>)}</li>)}</ol></details>
         {cityIds.map(id => <section key={id}><p className="trip-city-label">{cityById[id].shortName}</p><FoodSuggestions city={cityById[id]} /></section>)}
       </div>}
       {tab === 'budget' && <section>

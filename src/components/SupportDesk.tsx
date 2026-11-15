@@ -1,8 +1,10 @@
 import { useEffect, useRef, useState } from 'react';
 import { ArrowLeft, ArrowRight, ArrowUpRight, Compass, MessageCircle, RotateCcw, Route, Send, X } from 'lucide-react';
 import { cities, cityById } from '../data';
-import { answerSupport, planSupportTrip, type SupportAction, type SupportContext, type SupportReply, type SupportTripDraft } from '../support';
+import { answerSupport, applySupportVisitChange, planSupportTrip, type SupportAction, type SupportContext, type SupportReply, type SupportTripDraft } from '../support';
 import { buildTrip, type Profile } from '../planning';
+import type { VisitChange } from '../visit-changes';
+import { buildTripSchedules } from '../visit-scheduling';
 import { supportTripDraftFromProfile } from '../support-review';
 import { Modal } from './Modal';
 import { SupportTripForm } from './SupportTripForm';
@@ -35,7 +37,7 @@ export function SupportDesk({ open, openForm = false, initialCity, initialDays, 
   const serial = useRef(0);
   const log = useRef<HTMLDivElement>(null);
   const detail = useRef<HTMLDivElement>(null);
-  const editorToFocus = useRef<'return' | 'start' | undefined>(undefined);
+  const focusAfterEdit = useRef<string | undefined>(undefined);
   const selected = messages.find(message => message.id === selectedId);
   const profile = selected?.reply.plan;
   const previous = selected?.baseProfile;
@@ -66,9 +68,9 @@ export function SupportDesk({ open, openForm = false, initialCity, initialDays, 
   }, [messages, open, formVisible]);
   useEffect(() => {
     if (!detailOpen) return;
-    const editor = editorToFocus.current;
-    const trigger = editor && detail.current?.querySelector<HTMLButtonElement>(editor === 'return' ? '.return-day-trigger' : '.day-start-trigger');
-    editorToFocus.current = undefined;
+    const selector = focusAfterEdit.current;
+    const trigger = selector && detail.current?.querySelector<HTMLElement>(selector);
+    focusAfterEdit.current = undefined;
     if (trigger) {
       trigger.scrollIntoView({ block: 'nearest', behavior: 'instant' });
       trigger.focus({ preventScroll: true });
@@ -113,7 +115,7 @@ export function SupportDesk({ open, openForm = false, initialCity, initialDays, 
     const reply = planSupportTrip({
       ...requested,
       departure: next.departure, departureTime: next.departureTime, departureStation: next.departureStation,
-      returnLogistics: next.returnLogistics, dayStarts: next.dayStarts,
+      returnLogistics: next.returnLogistics, dayStarts: next.dayStarts, visitChanges: next.visitChanges,
     });
     if (!reply.plan) {
       addReply(question, { ...reply, context, actions: [] });
@@ -121,8 +123,23 @@ export function SupportDesk({ open, openForm = false, initialCity, initialDays, 
       returnToChat();
       return;
     }
-    editorToFocus.current = editor;
-    addReply(question, { ...reply, dayIndex }, profile);
+    focusAfterEdit.current = editor === 'return' ? '.return-day-trigger' : '.day-start-trigger';
+    const recomputed = reply.plan.visitChanges && buildTripSchedules(buildTrip(reply.plan), reply.plan);
+    const note = recomputed && recomputed.applied.length < reply.plan.visitChanges!.length ? '\n有景点在新时段排不开，可在对应日期重新选择。' : '';
+    addReply(question, { ...reply, text: reply.text + note, dayIndex, context: { ...reply.context, visitDay: dayIndex } }, profile);
+  };
+  const updateVisit = (change: VisitChange, dayIndex: number, undo?: boolean) => {
+    if (!profile || !selected) return;
+    const reply = applySupportVisitChange(selected.reply.context, change, dayIndex, undo);
+    if (!reply.plan) {
+      addReply('调整景点', { ...reply, context: selected.reply.context, actions: [] });
+      setSelectedId(selected.id);
+      returnToChat();
+      return;
+    }
+    focusAfterEdit.current = '.trip-schedule-day';
+    const label = undo ? '撤销景点调整' : change.to ? `挪到第 ${dayIndex + 1} 天` : '换个顺路景点';
+    addReply(label, reply, profile);
   };
   const chooseCity = (cityId?: string) => {
     setContext({ cityId });
@@ -186,7 +203,8 @@ export function SupportDesk({ open, openForm = false, initialCity, initialDays, 
         <div ref={detail} tabIndex={-1} role="region" aria-label="具体行程内容" className="support-detail-scroll">
           <SupportPlanPreview key={`preview-${selectedId}`} profile={profile}
             onUpdateReturn={next => updateDay(next, buildTrip(next).length - 1, 'return')}
-            onUpdateStart={(next, index) => updateDay(next, index, 'start')} dayIndex={activeDay} onChooseDay={setActiveDay} />
+            onUpdateStart={(next, index) => updateDay(next, index, 'start')} onVisitChange={updateVisit} dayIndex={activeDay}
+            onChooseDay={index => { setActiveDay(index); setContext(before => ({ ...before, visitDay: index })); }} />
           <SupportPlanTools key={selectedId} profile={profile} previous={previous} onEdit={editPlan} />
           <button className="support-open-full" onClick={() => onAction({ kind: 'plan', cityId: profile.cityId, profile, dayIndex: activeDay, label: '保存与调整完整行程' })}>保存与调整完整行程<ArrowUpRight size={16} /></button>
           <p className="support-detail-footnote">这份预览在当前页面保留。进入完整行程后，可保存到本浏览器。</p>

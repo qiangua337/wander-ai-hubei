@@ -641,6 +641,28 @@ try {
   assert.equal(crossTransfer.plan?.template, 'west-five');
   assert.match(ask('第三天10:30出发', crossTransfer.context).text, /车船或返程接驳/);
 
+  const lateForLake = ask('第二天12:30出门', flexibleWeekend.context);
+  assert(lateForLake.suggestions.includes('把东湖听涛 · 梨园挪到第 1 天'));
+  const moveOrSwap = ask('来不及去的景点能不能挪到另一天，或者换成顺路的景点？', lateForLake.context);
+  assert(!moveOrSwap.plan.visitChanges);
+  assert.match(moveOrSwap.text, /可挪到第 1 天[\s\S]*可换成第 2 天/);
+  const newDayAtLake = ask('把第二天的东湖挪到第一天', lateForLake.context);
+  assert.equal(newDayAtLake.dayIndex, 0);
+  assert.match(newDayAtLake.text, /15:15–16:00[\s\S]*45–60 分钟[\s\S]*11:45.*午餐/);
+  assert.match(ask('第一天的时间表', newDayAtLake.context).text, /15:15｜东湖听涛/);
+  const parkedLake = ask('换个顺路景点', lateForLake.context);
+  assert.match(parkedLake.text, /斗级营.*[\s\S]*11:50.*早午餐/);
+  assert(!ask('撤销第二天的景点调整', parkedLake.context).plan?.visitChanges);
+  const lakeAndRail = ask('把东湖挪到第一天', confirmedReturn.context);
+  assert.match(lakeAndRail.text, /13:25.*13:45.*14:30/);
+  const newMorning = ask('最后一天换个顺路景点', lakeAndRail.context);
+  assert.equal(newMorning.plan?.visitChanges?.length, 2);
+  assert.match(newMorning.text, /斗级营[\s\S]*12:00[\s\S]*13:45[\s\S]*7 号线/);
+  const viewAfter = ask('最后一天时间表', newMorning.context);
+  assert.match(viewAfter.text, /13:45 前｜出发去车站/);
+  assert.match(viewAfter.text, /09:35｜斗级营/);
+  assert.match(ask('把东湖挪到第三天', lateForLake.context).text, /共 2 天/);
+
   assert.equal(JSON.stringify({ cities, destinations, practical, templates }), before, 'Question answering must not mutate source travel content.');
   console.log(JSON.stringify({ result: 'passed', questions: checked, cities: cities.length, checks: '17-city stay/food/follow-up and structured plans, conversational edits, Chinese party/day parsing, arrival and return scheduling, preferences, cross-city transfers, budgeting, references, live data boundaries, immutability' }, null, 2));
 } finally {

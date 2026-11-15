@@ -2,11 +2,14 @@ import { useId, useState } from 'react';
 import { Clock3, Footprints, TrainFront } from 'lucide-react';
 import { returnWalks } from '../data/return-mornings';
 import { buildTrip, getTripTimingConflict, type PlannedDay, type Profile } from '../planning';
+import { buildTripSchedules } from '../visit-scheduling';
 import { clockWindow, manualTravelBuffer, normalizeClockInput, normalizeReturnLogistics, normalizeStation, parseClock, readReturnMinutes } from '../return-timing';
 import { Button, InputField, SelectField } from './ui';
 import './return-day-editor.css';
 
-export function ReturnDayEditor({ day, profile, onApply }: { day: PlannedDay; profile: Profile; onApply: (profile: Profile) => void }) {
+export function ReturnDayEditor({ day, profile, onApply, adjustedVisit }: {
+  day: PlannedDay; profile: Profile; onApply: (profile: Profile) => void; adjustedVisit?: { title: string; minutes: number };
+}) {
   const headingId = useId();
   const timing = day.afternoonReturn;
   const [editing, setEditing] = useState(false);
@@ -37,8 +40,13 @@ export function ReturnDayEditor({ day, profile, onApply }: { day: PlannedDay; pr
   else if (travel.trim() && travelMinutes === undefined) problem = '去站车程请填 1–360 分钟。';
   else if (luggage.trim() && luggageMinutes === undefined) problem = '取行李时间请填 0–120 分钟。';
   else problem = getTripTimingConflict(updated) || '';
-  const preview = editing && !problem ? buildTrip(updated).at(-1) : undefined;
+  const previewDays = editing && !problem ? buildTrip(updated) : undefined;
+  const preview = previewDays?.at(-1);
   const previewSchedule = preview?.stationSchedule;
+  const plannedVisit = previewDays && updated.visitChanges ? buildTripSchedules(previewDays, updated).schedules.at(-1)?.rows.find(row => row.kind === 'visit') : undefined;
+  const previewVisit = plannedVisit ? `可安排「${plannedVisit.title}」，约 ${plannedVisit.duration} 分钟。`
+    : preview?.returnMorning ? `可逛约 ${preview.returnMorning.minutes} 分钟。` : preview?.tip;
+  const kept = adjustedVisit || (day.returnMorning && { title: day.returnMorning.sight, minutes: day.returnMorning.minutes });
 
   const reset = () => {
     setArea(profile.returnLogistics?.area || '');
@@ -61,7 +69,7 @@ export function ReturnDayEditor({ day, profile, onApply }: { day: PlannedDay; pr
       <div><dt>到站候车</dt><dd>{savedSchedule.arriveBy} 前</dd></div>
     </dl> : <p className="return-day-hint">填上发车时间、车站和地图车程，就能倒推结束游览和去站时间。</p>}
     {savedSchedule && <p className="return-day-hint">预留 {timing?.travelAllowance} 分钟去站，{timing?.stationMinutes} 分钟进站候车。</p>}
-    {day.returnMorning && <p className="return-day-walk"><Footprints size={15} />{day.returnMorning.sight} · {day.returnMorning.conditional ? '可选约' : '约'} {day.returnMorning.minutes} 分钟</p>}
+    {kept && <p className="return-day-walk"><Footprints size={15} />{kept.title} · {!adjustedVisit && day.returnMorning?.conditional ? '可选约' : '约'} {kept.minutes} 分钟</p>}
     {day.breakfast && <p className="return-day-breakfast">{day.breakfast}</p>}
     {editing && <form className="return-day-form" onSubmit={event => {
       event.preventDefault();
@@ -80,7 +88,7 @@ export function ReturnDayEditor({ day, profile, onApply }: { day: PlannedDay; pr
       <label>地图车程（分钟）<InputField value={travel} inputMode="numeric" maxLength={3} placeholder="如 75" onChange={event => { setTravel(event.target.value); setError(''); }} /></label>
       <label>取行李（分钟）<InputField value={luggage} inputMode="numeric" maxLength={3} placeholder={`默认 ${timing?.luggageMinutes ?? 20}`} onChange={event => { setLuggage(event.target.value); setError(''); }} /></label>
       <p className="return-day-hint">地图车程另加 {manualTravelBuffer} 分钟等车或换乘余量。随身携带行李可填 0。</p>
-      {previewSchedule && <p className="return-day-live" role="status"><Clock3 size={15} />{previewSchedule.finishBy} 结束上午安排 · {previewSchedule.leaveForStationBy} 前去站 · {previewSchedule.arriveBy} 前到站。{preview.returnMorning ? `可逛约 ${preview.returnMorning.minutes} 分钟。` : preview.tip}</p>}
+      {previewSchedule && <p className="return-day-live" role="status"><Clock3 size={15} />{previewSchedule.finishBy} 结束上午安排 · {previewSchedule.leaveForStationBy} 前去站 · {previewSchedule.arriveBy} 前到站。{previewVisit}</p>}
       {error && <p className="return-day-error" role="alert">{error}</p>}
       <div className="return-day-action"><Button type="submit" className="px-4 text-xs">更新返程安排</Button></div>
     </form>}

@@ -2,6 +2,8 @@ import { cityById } from './data';
 import { arrivalLabels, getDepartureLabel, mobilityLabels, buildTrip, estimateBudget, groupLabels, interestLabels, budgetLabels, templates, type PlannedDay, type Profile } from './planning';
 import { returnAreaLabel } from './return-timing';
 import { chapterKey } from './day-starts';
+import { adjustmentSummary, buildTripSchedules } from './visit-scheduling';
+import { visitChangeKey } from './visit-changes';
 import type { SupportTripDraft } from './support';
 
 export type SupportPlanComparison = {
@@ -32,6 +34,8 @@ function minutesLabel(minutes: number | undefined): string {
 /** Compare actual route days and settings without changing either plan or editorial data. */
 export function compareSupportPlans(previous: Profile, current: Profile): SupportPlanComparison {
   const beforeDays = buildTrip(previous), afterDays = buildTrip(current);
+  const beforeVisits = previous.visitChanges ? buildTripSchedules(beforeDays, previous).applied : [];
+  const afterVisits = current.visitChanges ? buildTripSchedules(afterDays, current).applied : [];
   const beforeLogistics = previous.returnLogistics, afterLogistics = current.returnLogistics;
   const keyFor = (day: PlannedDay) => `${day.cityId}:${day.originalIndex}`;
   const beforeKeys = new Set(beforeDays.map(keyFor)), afterKeys = new Set(afterDays.map(keyFor));
@@ -58,6 +62,10 @@ export function compareSupportPlans(previous: Profile, current: Profile): Suppor
     ['返程落脚片区', returnAreaLabel(beforeLogistics?.area, beforeDays.at(-1)?.cityId || previous.cityId) || '随行程安排', returnAreaLabel(afterLogistics?.area, afterDays.at(-1)?.cityId || current.cityId) || '随行程安排'],
     ['地图车程', minutesLabel(beforeLogistics?.travelMinutes), minutesLabel(afterLogistics?.travelMinutes)],
     ['取行李时间', minutesLabel(beforeLogistics?.luggageMinutes), minutesLabel(afterLogistics?.luggageMinutes)],
+    ...[...new Set([...beforeVisits, ...afterVisits].map(item => visitChangeKey(item.change)))].map(key => {
+      const before = beforeVisits.find(item => visitChangeKey(item.change) === key), after = afterVisits.find(item => visitChangeKey(item.change) === key);
+      return [`${(after || before)!.original}安排`, before ? adjustmentSummary(before) : '按当日时间表', after ? adjustmentSummary(after) : '按当日时间表'];
+    }),
     ...afterDays.flatMap((day, index) => {
       const key = chapterKey(day.cityId, day.originalIndex);
       const before = previous.dayStarts?.[key], after = current.dayStarts?.[key];
@@ -91,6 +99,7 @@ export function supportTripDraftFromProfile(profile: Profile): SupportTripDraft 
     ...(profile.departureStation ? { departureStation: profile.departureStation } : {}),
     ...(profile.returnLogistics ? { returnLogistics: { ...profile.returnLogistics } } : {}),
     ...(profile.dayStarts ? { dayStarts: { ...profile.dayStarts } } : {}),
+    ...(profile.visitChanges ? { visitChanges: profile.visitChanges.map(change => ({ ...change })) } : {}),
     ...(profile.mobility ? { mobility: profile.mobility } : {}),
     ...(profile.budgetLimit !== undefined ? { budgetLimit: profile.budgetLimit, budgetScope: profile.budgetScope } : {}),
   };

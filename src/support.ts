@@ -4,11 +4,13 @@ import { travelFaq } from './data/help';
 import { buildTrip, templates, type Profile } from './planning';
 import { buildDaySchedule, describePlanDay } from './day-schedule';
 import { chapterKey, dayStartWindow, readDayStart, setDayStart } from './day-starts';
+import { changeVisit, visitChangeKey, type VisitChange } from './visit-changes';
+import { adjustmentSummary, buildTripSchedules, preservesVisitChanges, visitChoices } from './visit-scheduling';
 import { findDestinations } from './travel';
 import { answerTripQuestion, copyTripDraft, extractTripOrigin, localClockPattern, planSupportTrip, readLocalDayClock, readReturnTiming, type SupportTripDraft } from './support-planning';
 export { planSupportTrip, type SupportTripDraft } from './support-planning';
 
-export type SupportContext = { cityId?: string; trip?: SupportTripDraft };
+export type SupportContext = { cityId?: string; trip?: SupportTripDraft; visitDay?: number };
 export type SupportAction = { kind: 'city' | 'place' | 'plan' | 'template' | 'wishlist' | 'explore'; label: string; cityId?: string; placeId?: string; templateId?: string; profile?: Profile; dayIndex?: number };
 export type SupportReply = { text: string; sources: { title: string; url: string }[]; actions: SupportAction[]; suggestions: string[]; context: SupportContext; plan?: Profile; dayIndex?: number };
 
@@ -221,14 +223,98 @@ function answerGuide(question: string, context: SupportContext = {}): SupportRep
 }
 
 const numberedTravelDay = /第([一二三四五六七1-7])天/;
+const travelDayLabel = '第[一二三四五六七1-7]天|最后一天|首日';
 const startChange = new RegExp(
-  `^(?:把|想让|我想)?\\s*(第[一二三四五六七1-7]天|最后一天|首日)\\s*[，,]?\\s*(?:改成|改为|改到|想|可以|要|就)?\\s*` +
+  `^(?:把|想让|我想)?\\s*(${travelDayLabel})\\s*[，,]?\\s*(?:改成|改为|改到|想|可以|要|就)?\\s*` +
   `(?:(${localClockPattern})\\s*(?:再|才)?(?:出门|出发)|(?:出门|出发)(?:时间)?\\s*(?:改到|改成|改为)\\s*(${localClockPattern}))\\s*(?:吗|行吗|可以吗)?[。！!？?]?$`,
 );
 function requestedDayIndex(label: string, length: number): number {
   if (label.startsWith('最后')) return length - 1;
   const day = label.match(numberedTravelDay)?.[1] || '1';
   return '一二三四五六七'.includes(day) ? '一二三四五六七'.indexOf(day) : Number(day) - 1;
+}
+
+function adjustmentReply(reply: SupportReply, dayIndex: number, text: string, suggestions = reply.suggestions): SupportReply {
+  return { ...reply, dayIndex, text, suggestions, context: { ...reply.context, visitDay: dayIndex } };
+}
+
+export function applySupportVisitChange(context: SupportContext, change: VisitChange, dayIndex: number, undo = false): SupportReply {
+  if (!context.trip) return planSupportTrip({});
+  const previous = planSupportTrip(context.trip);
+  if (!previous.plan) return previous;
+  const reply = planSupportTrip({ ...context.trip, visitChanges: changeVisit(context.trip.visitChanges, change, undo) });
+  if (!reply.plan) return reply;
+  const days = buildTrip(reply.plan);
+  const { applied, schedules } = buildTripSchedules(days, reply.plan);
+  const oldApplied = buildTripSchedules(buildTrip(previous.plan), previous.plan).applied;
+  if (!preservesVisitChanges(oldApplied, applied, change)) {
+    return { ...previous, plan: undefined, text: '这次操作会影响另一项已确认的调整。可先撤销相依的景点，再重新选择。' };
+  }
+  if (undo) return adjustmentReply(reply, dayIndex, '已撤销这处景点调整。逐日时间表已重新计算。');
+  const item = applied.find(item => visitChangeKey(item.change) === visitChangeKey(change));
+  if (!item) return { ...previous, plan: undefined, context, text: '按这版时间和接驳条件，暂时排不下这项调整。请选择另一个时间或顺路短游。' };
+  const range = item.transportMinutes && (item.transportMinutes[0] === item.transportMinutes[1] ? item.transportMinutes[0] : item.transportMinutes.join('–'));
+  const lunch = schedules[item.dayIndex].rows.find(row => row.meal === '午餐');
+  const dinner = schedules[item.dayIndex].rows.find(row => row.meal === '晚餐');
+  const returnTime = item.returnTime;
+  const text = [
+    change.to ? `「${item.original}」已从第 ${item.fromDay + 1} 天挪到第 ${item.dayIndex + 1} 天 ${item.start}–${item.end}。` : `已换成${adjustmentSummary(item)}。`,
+    `交通：${item.transport}${range ? `预留 ${range} 分钟。` : ''}`,
+    lunch && `午餐：${lunch.time ? lunch.time + ' ' : ''}${lunch.title}。${lunch.detail || ''}`,
+    dinner && `晚餐：${dinner.time ? dinner.time + ' ' : ''}${dinner.title}。${dinner.detail || ''}`,
+    item.displaced && `第 ${item.dayIndex + 1} 天原定的「${item.displaced}」让出这段时间。`,
+    returnTime && `返程日 ${returnTime.finishBy} 前结束游览和用餐，${returnTime.leaveBy} 前去站，${returnTime.arriveBy} 前到站。`,
+    item.returnTransport && `去站：${item.returnTransport}`,
+  ].filter(Boolean).join('\n');
+  return adjustmentReply(reply, item.dayIndex, text);
+}
+
+const moveRequest = new RegExp(`^(?:请|可以|能不能|帮我|我想)?(?:把)?(?:(${travelDayLabel})的?)?(.{0,42}?)(?:挪到|移到|换到|改到|放到|安排到)(?:了)?(${travelDayLabel}|另一天|别的一天)(?:去|吗|可以吗|行吗)?[。！!？?]?$`);
+const genericMove = /^(?:帮我|可以|能不能)?(?:(?:把)?(?:来不及去的|没排上的|排不下的)(?:景点)?|这个景点|这个|把它|它)?(?:挪|移)(?:到|去)?(?:另一天|别的一天|其他天|一天)?(?:吗|可以吗|行吗)?[。！!？?]?$/;
+const replacementRequest = /^(?:可以|能不能|帮我|我想)?(?:把)?(?:(第[一二三四五六七1-7]天|最后一天|首日)(?:的)?[，,]?)?(.{0,38}?)(?:换成|换个|换一个|改成|改为|换)(?:同片区|顺路|附近)(?:的)?(?:景点|短游|散步|一个景点)?(?:吧|吗|好吗|行吗|可以吗)?[。！!？?]?$/;
+const undoVisitRequest = /^(?:请|帮我)?(?:撤销|取消)(?:(第[一二三四五六七1-7]天|最后一天|首日)的?)?(?:刚才的?|这次的?)?(?:景点调整|景点调换|这次换地点|换景点|换景点调整)(?:吧|吗)?[。！!？?]?$/;
+
+function answerVisitChange(question: string, context: SupportContext): SupportReply | undefined {
+  if (!context.trip) return;
+  const q = question.trim().replace(/\s/g, '');
+  const move = q.match(moveRequest), replacement = q.match(replacementRequest);
+  const general = genericMove.test(q);
+  const undo = q.match(undoVisitRequest);
+  const askOptions = /^(?:看看|查看|有没有|还有)?(?:景点)?(?:调换|调整|换景点)?(?:有什么)?(?:选项|备选|替代方案|顺路景点)(?:吗|呢)?[？?。]?$/.test(q)
+    || /(?:来不及|没排上|排不下).{0,20}景点.{0,16}(?:挪|换).{0,20}(?:另一天|顺路|附近)/.test(q);
+  if (!move && !replacement && !general && !askOptions && !undo) return;
+  const current = planSupportTrip(context.trip);
+  if (!current.plan) return current;
+  const days = buildTrip(current.plan);
+  if (undo) {
+    const { applied } = buildTripSchedules(days, current.plan);
+    const sourceDay = undo[1] ? requestedDayIndex(undo[1], days.length) : undefined;
+    const item = sourceDay === undefined ? applied.at(-1) : applied.filter(candidate => candidate.fromDay === sourceDay).at(-1);
+    return item ? applySupportVisitChange(current.context, item.change, item.fromDay, true)
+      : { ...current, plan: undefined, text: '这份行程目前没有需要撤销的景点调整。' };
+  }
+  const target = move && /^(?:第|最后|首)/.test(move[3]) ? requestedDayIndex(move[3], days.length) : undefined;
+  const named = askOptions ? undefined : (move?.[2] || replacement?.[2] || '').replace(/(?:来不及(?:去)?的?(?:景点)?|没排上的?(?:景点)?|那个景点|这个景点|原景点|这里|它|吧)$/g, '').replace(/[，,]$/, '') || undefined;
+  const source = askOptions ? undefined : move?.[1] || replacement?.[1];
+  const from = source ? requestedDayIndex(source, days.length) : named ? undefined : context.visitDay;
+  if (target !== undefined && !days[target] || from !== undefined && !days[from]) {
+    return { ...current, plan: undefined, text: `这份行程共 ${days.length} 天。请用行程中的天数指定日期。` };
+  }
+  const choices = visitChoices(days, current.plan, from, named);
+  const choice = choices.find(item => item.options.some(option => replacement ? !option.change.to : move || general
+    ? Boolean(option.change.to && (target === undefined || option.dayIndex === target)) : true))
+    || choices.find(item => item.options.length || item.current) || choices[0];
+  const options = choice?.options || [];
+  const moveChoice = options.find(item => item.change.to && (target === undefined || item.dayIndex === target));
+  const swapChoice = options.find(item => !item.change.to);
+  const selected = askOptions ? undefined : replacement ? swapChoice : (move || general) && moveChoice;
+  if (selected) return applySupportVisitChange(current.context, selected.change, selected.dayIndex);
+  const next = choice?.dayIndex ?? from ?? 0;
+  const offerings = options.map(item => item.change.to ? `把${item.original}挪到第 ${item.dayIndex + 1} 天` : '换个顺路景点');
+  const explanation = options.length ? options.map(item => `${item.change.to ? '可挪到' : '可换成'}${adjustmentSummary(item)}`).join('\n')
+    : '这份行程暂时没有合适的同城空档。可以提早出门，或查看当天的就近休整安排。';
+  return adjustmentReply(current, next, `${choice ? `「${choice.original}」\n` : named ? `「${named}」暂时排不开。\n` : ''}${target !== undefined && !moveChoice ? `第 ${target + 1} 天的时间或接驳暂时排不开。\n` : ''}${explanation}`,
+    [...new Set([...offerings, ...current.suggestions])].slice(0, 4));
 }
 
 function answerDayStartChange(question: string, context: SupportContext): SupportReply | undefined {
@@ -252,14 +338,24 @@ function answerDayStartChange(question: string, context: SupportContext): Suppor
   const reply = planSupportTrip({ ...context.trip, dayStarts: setDayStart(profile.dayStarts, chapterKey(day.cityId, day.originalIndex), time === suggested ? undefined : time) });
   if (!reply.plan) return reply;
   const revisedDays = buildTrip(reply.plan);
-  const revised = buildDaySchedule(revisedDays[dayIndex], reply.plan, revisedDays[dayIndex - 1], dayIndex === revisedDays.length - 1);
-  return { ...reply, dayIndex, text: `第 ${dayIndex + 1} 天已按 ${time} 出门重排。\n${revised.headline}` };
+  const { schedules, applied } = buildTripSchedules(revisedDays, reply.plan);
+  const revised = schedules[dayIndex];
+  const choices = visitChoices(revisedDays, reply.plan, dayIndex)[0];
+  const omitted = applied.length < (reply.plan.visitChanges?.length || 0);
+  const suffix = [
+    choices?.options.length ? `「${choices.original}」可在这天的时间表里调换，也可以直接告诉我要挪到哪一天。` : '',
+    omitted ? '有一项之前选的景点调整在新时间表里排不开，可以重新选择。' : '',
+  ].filter(Boolean).map(line => '\n' + line).join('');
+  const prompts = choices?.options.map(item => item.change.to ? `把${item.original}挪到第 ${item.dayIndex + 1} 天` : '换个顺路景点') || [];
+  return adjustmentReply(reply, dayIndex, `第 ${dayIndex + 1} 天已按 ${time} 出门重排。\n${revised.headline}${suffix}`, [...new Set([...prompts, ...reply.suggestions])]);
 }
 
 export function answerSupport(question: string, context: SupportContext = {}): SupportReply {
   if (typeof question === 'string' && context.trip) {
     const timingChange = answerDayStartChange(question, context);
     if (timingChange) return timingChange;
+    const visitChange = answerVisitChange(question, context);
+    if (visitChange) return visitChange;
   }
   if (typeof question === 'string' && context.trip && /几点出门|几点出发|时间表|详细时间|景点之间怎么走/.test(question)
     && /^(?:(?:看看|展开|想看|看)?\s*(?:第[一二三四五六七1-7]天|最后一天|每天))[^，,。；;]*[？?。！!\s]*$/.test(question.trim())) {
@@ -267,13 +363,14 @@ export function answerSupport(question: string, context: SupportContext = {}): S
     const profile = current.plan;
     if (profile) {
       const days = buildTrip(profile);
+      const { schedules } = buildTripSchedules(days, profile);
       const index = question.includes('每天') ? undefined : requestedDayIndex(question.replace(/^(?:看看|展开|想看|看)\s*/, ''), days.length);
       const text = index === undefined
         ? days.map((item, i) => {
-          const schedule = buildDaySchedule(item, profile, days[i - 1], i === days.length - 1);
+          const schedule = schedules[i];
           return `第 ${i + 1} 天 · ${schedule.start}\n${schedule.title || item.title}`;
         }).join('\n\n') + '\n\n可以继续问“第二天几点出发？”，或打开行程查看每一段交通和餐食。'
-        : describePlanDay(days, index, profile);
+        : describePlanDay(days, index, profile, schedules[index]);
       const actions = current.actions.map(action => index !== undefined && days[index] && action.profile ? { ...action, dayIndex: index } : action);
       return { text, actions, sources: current.sources, suggestions: current.suggestions, context: current.context };
     }

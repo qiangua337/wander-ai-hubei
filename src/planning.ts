@@ -4,8 +4,10 @@ import { railwayEntrySource, returnWalks, type ReturnSource } from './data/retur
 import { routeDetails, type RouteEffort } from './data/route-details';
 import { dayJourneys } from './data/day-journeys';
 import { clockWindow, formatClock, manualTravelBuffer, normalizeClockInput, normalizeReturnLogistics, normalizeStation, parseClock, returnAreaLabel, returnBreakfastMinutes, returnBreakfastStart, type DepartureWindow, type ReturnLogistics, type StationSchedule } from './return-timing';
-import { buildDaySchedule, renderScheduleText } from './day-schedule';
+import { renderScheduleText } from './day-schedule';
 import { chapterKey, normalizeDayStarts, type DayStarts } from './day-starts';
+import { readVisitChanges, visitChangeLimit, type VisitChange } from './visit-changes';
+import { buildTripSchedules } from './visit-scheduling';
 import { planDate, selectPlanDays, validDate, type Pace } from './travel';
 export { validDate } from './travel';
 
@@ -17,6 +19,7 @@ export type Profile = {
   origin?: string; arrival?: 'full-day' | 'morning' | 'afternoon' | 'evening' | 'previous-night';
   departure?: DepartureWindow; departureTime?: string; departureStation?: string; returnLogistics?: ReturnLogistics;
   dayStarts?: DayStarts;
+  visitChanges?: VisitChange[];
   mobility?: 'standard' | 'gentle'; budgetLimit?: number; budgetScope?: 'total' | 'per-person';
 };
 export type PlannedDay = TripDay & {
@@ -78,6 +81,8 @@ export function normalizeProfile(value: unknown, fallback = defaultProfile()): P
   const chapters = new Set(segments.flatMap(segment => segment.indices.map(index => chapterKey(segment.cityId, index))));
   const dayStarts = normalizeDayStarts(v.dayStarts === undefined ? fallback.dayStarts : v.dayStarts, chapters);
   if (dayStarts) optional.dayStarts = dayStarts;
+  const visitChanges = readVisitChanges(v.visitChanges === undefined ? fallback.visitChanges : v.visitChanges, chapters);
+  if (visitChanges) optional.visitChanges = visitChanges;
   const mobility = v.mobility === undefined ? fallback.mobility : v.mobility;
   if (mobility === 'standard' || mobility === 'gentle') optional.mobility = mobility;
   const budgetLimit = v.budgetLimit === undefined ? fallback.budgetLimit : v.budgetLimit;
@@ -370,13 +375,15 @@ export function buildTrip(profile: Profile): PlannedDay[] {
 
 export function getTripIssues(profile: Profile): string[] {
   const days = buildTrip(profile), issues: string[] = [];
+  const updated = profile.dayStarts || profile.visitChanges ? buildTripSchedules(days, profile) : undefined;
   const timingConflict = getTripTimingConflict(profile);
   if (timingConflict) issues.push(timingConflict);
   const high = days.filter(day => day.effort === 'high');
   if (profile.mobility === 'gentle' && high.length) issues.push(`这份路线仍包含高强度山地章节：${high.map(day => day.title).join('、')}；不满足减少高强度山地的条件，请换章节或改用单城路线。`);
   if (profile.mobility === 'gentle') issues.push('低强度与常规步行是编辑分类，仍可能有台阶、坡道和长距离步行；不代表已核实无障碍或全程可用推车。');
-  if (profile.interest === 'nature' && days.length && !days.some((day, index) => !day.sightseeingRemoved &&
-    ['nature', 'water'].includes(practical[day.cityId].kinds[day.originalIndex]) && !wasVisitSkipped(days, index, profile))) {
+  const natureChapter = (day: PlannedDay) => ['nature', 'water'].includes(practical[day.cityId].kinds[day.originalIndex]);
+  if (profile.interest === 'nature' && days.length && !days.some((day, index) => !day.sightseeingRemoved && natureChapter(day) &&
+    !updated?.schedules[index].mainVisitSkipped) && !updated?.applied.some(item => item.change.to && natureChapter(days[item.fromDay]))) {
     issues.push('现有已选章节没有对应的山水自然主线，玩法偏好尚未充分满足；可换城市或调整章节，不把文化或温泉章节当成已安排的山地游。');
   }
   if (!timingConflict && profile.departure && profile.departure !== 'flexible') {
@@ -392,6 +399,9 @@ export function getTripIssues(profile: Profile): string[] {
   const transfers = days.filter((day, index) => index > 0 && (day.cityId !== days[index - 1].cityId || day.region !== days[index - 1].region));
   if (transfers.length) issues.push(`跨日片区有变化：${transfers.slice(0, 3).map(day => day.region).join('、')}；住宿与次日出发入口须一起核对，不能按同一景区步行衔接。`);
   if (profile.mode === 'public') issues.push('公共交通方案未查询实际班次；山区、船游和跨县线路须先落实到达与返程接驳，再订不可退的后续行程。');
+  if (profile.visitChanges && updated && updated.applied.length < profile.visitChanges.length) {
+    issues.push('部分景点调整在当前时间或交通条件下排不开，已按这版时间表恢复可用的原安排。可到相应日期重新选择。');
+  }
   if (profile.budgetLimit) {
     const totalLimit = profile.budgetLimit * (profile.budgetScope === 'per-person' ? profile.party : 1), minimum = estimateBudget(profile, days.length).total[0];
     if (totalLimit < minimum) issues.push(`填写的${profile.budgetScope === 'per-person' ? '每人' : '全团'}预算上限折合全团 ¥${totalLimit}，低于这份方案的基础预留 ¥${minimum}；尚未满足预算，需减少天数、调整条件或另核实实际费用。`);
@@ -401,11 +411,6 @@ export function getTripIssues(profile: Profile): string[] {
 export function tripTitle(profile: Profile): string {
   return templates.find(t => t.id === profile.template)?.title || `${cityById[profile.cityId].shortName} · 我的 ${profile.indices.length} 天旅行`;
 }
-function wasVisitSkipped(days: PlannedDay[], index: number, profile: Profile): boolean {
-  const day = days[index];
-  return Boolean(profile.dayStarts?.[chapterKey(day.cityId, day.originalIndex)])
-    && Boolean(buildDaySchedule(day, profile, days[index - 1], index === days.length - 1).mainVisitSkipped);
-}
 export function estimateBudget(profile: Profile, dayCount: number) {
   const rates = { value: { room: [180, 320], meal: [60, 100] }, comfort: { room: [320, 550], meal: [100, 160] }, boutique: { room: [550, 900], meal: [160, 240] } }[profile.budget];
   const arrivalNight = includesArrivalNight(profile);
@@ -414,15 +419,18 @@ export function estimateBudget(profile: Profile, dayCount: number) {
   const meals = rates.meal.map(rate => rate * profile.party * dayCount);
   const transport = (profile.mode === 'drive' ? [160, 260].map(rate => rate * vehicles) : [40, 90].map(rate => rate * profile.party)).map(rate => rate * dayCount);
   const scheduledReturn = profile.departure && profile.departure !== 'flexible';
-  const days = scheduledReturn || profile.dayStarts ? buildTrip(profile) : [];
-  const noTicketDays = days.filter((day, index) => (scheduledReturn && index === days.length - 1 && day.sightseeingRemoved)
-    || wasVisitSkipped(days, index, profile)).length;
+  const days = scheduledReturn || profile.dayStarts || profile.visitChanges ? buildTrip(profile) : [];
+  const updated = profile.dayStarts || profile.visitChanges ? buildTripSchedules(days, profile) : undefined;
+  const stillTicketed = new Set(updated?.applied.filter(item => item.ticketed).map(item => item.dayIndex));
+  const noTicketDays = days.filter((day, index) => !stillTicketed.has(index) && ((scheduledReturn && index === days.length - 1 && day.sightseeingRemoved)
+    || updated?.schedules[index].mainVisitSkipped)).length;
   const ticketDays = Math.max(0, dayCount - noTicketDays);
   const tickets = [100, 250].map(rate => rate * profile.party * ticketDays);
   return { nights, rooms, arrivalNight, ticketDays, roomRange: rates.room, stay, meals, transport, tickets, total: [0, 1].map(i => stay[i] + meals[i] + transport[i] + tickets[i]) };
 }
 export function formatDetailedPlan(profile: Profile): string {
   const days = buildTrip(profile), budget = estimateBudget(profile, days.length);
+  const { schedules } = buildTripSchedules(days, profile);
   const cityIds = [...new Set(days.map(day => day.cityId))];
   const lines = ['Wander AI · 寻游湖北', tripTitle(profile), `${profile.date || '日期待定'} · ${profile.party} 人 · ${groupLabels[profile.group]} · ${profile.mode === 'drive' ? '自驾' : '公共交通＋接驳'} · ${budgetLabels[profile.budget]}`, '时间为路线规划预留。车船班次、景区开放与实际路况请以票面及出发当天的官方信息为准。', ''];
   if (profile.origin) lines.push(`出发地：${profile.origin}`);
@@ -435,7 +443,7 @@ export function formatDetailedPlan(profile: Profile): string {
   if (budget.arrivalNight) lines.push('抵达安排：所选路线从完整游玩日开始，建议提前一晚抵达；住宿预算已加这一晚。若当天抵达，请将首日上午改为交通并减少景点。', '');
   days.forEach((day, index) => {
     const isLast = index === days.length - 1;
-    const schedule = buildDaySchedule(day, profile, days[index - 1], isLast);
+    const schedule = schedules[index];
     const lodging = isLast && profile.departure && profile.departure !== 'flexible'
       ? `返程安排：${getDepartureLabel(profile)}，当晚无住宿预留。`
       : `当晚住宿：${isLast ? '返程日。如延住可参考 ' : ''}${day.overnight}`;
@@ -460,6 +468,7 @@ export function sharePlanUrl(profile: Profile): string {
   if (profile.departureTime) query.set('departureTime', profile.departureTime);
   if (profile.departureStation) query.set('departureStation', profile.departureStation);
   for (const [key, time] of Object.entries(normalizeDayStarts(profile.dayStarts) || {})) query.append('start', `${key}@${time}`);
+  for (const { from, slot, to, alternative } of readVisitChanges(profile.visitChanges) || []) query.append('visit', [from, slot, to || '', alternative || ''].join('@'));
   const logistics = profile.returnLogistics;
   if (logistics?.area) query.set('returnArea', logistics.area);
   if (logistics?.travelMinutes !== undefined) query.set('returnTravel', String(logistics.travelMinutes));
@@ -473,5 +482,10 @@ export function parsePlanUrl(search: string): Profile | undefined {
   const query = new URLSearchParams(search);
   if (!query.has('plan')) return undefined;
   const dayStarts = Object.fromEntries(query.getAll('start').map(value => value.split('@', 2)).filter(parts => parts.length === 2));
-  return normalizeProfile({ template: query.get('plan'), cityId: query.get('city'), indices: query.get('days')?.split(',').filter(Boolean).map(Number), date: query.get('date'), party: Number(query.get('people')), group: query.get('group'), mode: query.get('mode'), budget: query.get('budget'), interest: query.get('interest'), pace: query.get('pace'), ...(query.has('origin') ? { origin: query.get('origin') } : {}), ...(query.has('arrival') ? { arrival: query.get('arrival') } : {}), ...(query.has('departure') ? { departure: query.get('departure') } : {}), departureTime: query.get('departureTime'), departureStation: query.get('departureStation'), dayStarts, returnLogistics: { area: query.get('returnArea'), travelMinutes: query.get('returnTravel'), luggageMinutes: query.get('returnLuggage') }, ...(query.has('mobility') ? { mobility: query.get('mobility') } : {}), ...(query.has('budgetLimit') ? { budgetLimit: Number(query.get('budgetLimit')) } : {}), ...(query.has('budgetScope') ? { budgetScope: query.get('budgetScope') } : {}) });
+  const visitChanges = query.getAll('visit').slice(0, visitChangeLimit).flatMap(value => {
+    if (value.split('@').length !== 4) return [];
+    const [from, slot, to, alternative] = value.split('@');
+    return [{ from, slot, to: to || undefined, alternative: alternative || undefined }];
+  });
+  return normalizeProfile({ template: query.get('plan'), cityId: query.get('city'), indices: query.get('days')?.split(',').filter(Boolean).map(Number), date: query.get('date'), party: Number(query.get('people')), group: query.get('group'), mode: query.get('mode'), budget: query.get('budget'), interest: query.get('interest'), pace: query.get('pace'), ...(query.has('origin') ? { origin: query.get('origin') } : {}), ...(query.has('arrival') ? { arrival: query.get('arrival') } : {}), ...(query.has('departure') ? { departure: query.get('departure') } : {}), departureTime: query.get('departureTime'), departureStation: query.get('departureStation'), dayStarts, visitChanges, returnLogistics: { area: query.get('returnArea'), travelMinutes: query.get('returnTravel'), luggageMinutes: query.get('returnLuggage') }, ...(query.has('mobility') ? { mobility: query.get('mobility') } : {}), ...(query.has('budgetLimit') ? { budgetLimit: Number(query.get('budgetLimit')) } : {}), ...(query.has('budgetScope') ? { budgetScope: query.get('budgetScope') } : {}) });
 }

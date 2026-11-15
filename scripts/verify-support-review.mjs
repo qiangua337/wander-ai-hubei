@@ -111,6 +111,11 @@ try {
   const startDraft = supportTripDraftFromProfile(late);
   assert.deepEqual(startDraft.dayStarts, dayStarts);
   assert.notEqual(startDraft.dayStarts, dayStarts);
+  const moved = { ...late, visitChanges: [{ from: 'wuhan:1', slot: 'afternoon', to: 'wuhan:0' }] };
+  assert.deepEqual(compare(late, moved).changes, [{ label: '东湖听涛 · 梨园安排', before: '按当日时间表', after: '第 1 天 15:15–16:00 · 东湖听涛 · 梨园' }]);
+  const moveDraft = supportTripDraftFromProfile(moved);
+  assert.deepEqual(moveDraft.visitChanges, moved.visitChanges);
+  assert.notEqual(moveDraft.visitChanges[0], moved.visitChanges[0]);
   draft.cityIds.push('enshi');
   assert.deepEqual(supportTripDraftFromProfile(frozen).cityIds, ['wuhan'], 'Draft arrays are independent copies.');
   assert.equal(JSON.stringify(base), snapshot);
