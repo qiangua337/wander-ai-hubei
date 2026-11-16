@@ -161,7 +161,7 @@ export function Planner({ initialCity, initialDate, travelers, initialProfile, i
     setFeedback(success ? '已保存到这个浏览器的「我的行程」，最多保留 5 份。' : '当前浏览器无法持久保存，可下载完整行程清单。');
     return success;
   };
-  return <Modal title="旅行规划室" onClose={onClose} wide>
+  return <Modal title="旅行规划室" onClose={onClose} wide sheet dialogClassName="planner-dialog">
     <div className="planner-flow" aria-label="规划流程">
       <span className={!ready ? 'is-current' : ''}><i>1</i> 选择路线</span><span><i>2</i> 调整偏好</span><span className={ready ? 'is-current' : ''}><i>3</i> 带走清单</span>
     </div>

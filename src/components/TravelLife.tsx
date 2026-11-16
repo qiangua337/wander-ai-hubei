@@ -1,15 +1,16 @@
 import { useState } from 'react';
 import { ArrowUpRight, BedDouble, MapPin, TrainFront, Utensils } from 'lucide-react';
-import { cities, cityById, cityPhotos } from '../data';
+import { cityById, cityPhotos } from '../data';
 import { practical } from '../data/practical';
-import { displayPhoto } from '../data/photos';
+import { displayPhoto, editorialPhotos } from '../data/photos';
 import { Button, SelectField } from './ui';
+import { CityOptions } from './CityPicker';
 
 export function TravelLife({ fallbackCity, onExplore, onPlan }: { fallbackCity: string; onExplore: (cityId: string) => void; onPlan: (cityId: string) => void }) {
   const [chosenCity, setChosenCity] = useState('');
   const cityId = chosenCity || (Object.hasOwn(cityById, fallbackCity) ? fallbackCity : 'wuhan');
   const city = cityById[cityId];
-  const photo = cityPhotos[cityId];
+  const photo = cityId === 'wuhan' ? editorialPhotos.noodles : cityPhotos[cityId];
   const stay = practical[cityId].stays[0];
   const food = practical[cityId].food[0];
 
@@ -17,25 +18,25 @@ export function TravelLife({ fallbackCity, onExplore, onPlan }: { fallbackCity: 
     <div className="page-width">
       <div className="section-heading">
         <div><h2 id="life-title" className="section-title">湖北吃住交通指南</h2><p className="section-detail">住宿片区、地方味道和到达方式，按城市查。</p></div>
-        <label className="life-city-select"><span><MapPin size={15} />切换城市</span><SelectField aria-label="吃住指南城市" value={cityId} onChange={event => setChosenCity(event.target.value)}>{cities.map(item => <option value={item.id} key={item.id}>{item.shortName}</option>)}</SelectField></label>
+        <label className="life-city-select"><span><MapPin size={15} />切换城市</span><SelectField aria-label="吃住指南城市" value={cityId} onChange={event => setChosenCity(event.target.value)}><CityOptions /></SelectField></label>
       </div>
 
       <div role="region" aria-label={`${city.shortName}吃住交通`} className={'life-panel' + (photo?.filename ? ' has-photo' : '')}>
-        {photo?.filename && <figure className="life-photo"><img key={cityId} src={displayPhoto(`/images/${photo.filename}`)} alt={photo.alt || photo.subject} width="800" height="1000" loading="lazy" decoding="async" /><figcaption><MapPin size={14} />{city.shortName} · {photo.subject}</figcaption></figure>}
+        {photo?.filename && <figure className="life-photo"><img key={cityId} src={displayPhoto(`/images/${photo.filename}`)} alt={photo.alt || photo.subject} width="800" height="900" loading="lazy" decoding="async" /><figcaption><MapPin size={14} />{cityId === 'wuhan' ? photo.subject : `${city.shortName} · ${photo.subject}`}</figcaption></figure>}
         <div className="life-content">
           <div className="life-notes">
             <article className="life-note">
-              <p className="life-note-label"><BedDouble size={18} />今晚住哪里</p>
+              <p className="life-note-label"><BedDouble size={18} />住宿片区</p>
               <h3>{stay.area}</h3>
-              <p className="life-best-for">适合：{stay.bestFor}</p>
+              <p className="life-best-for">{stay.bestFor}</p>
               <p>{stay.reason}</p>
-              <p className="life-timing">订前看一眼：{stay.check}</p>
+              <p className="life-timing">{stay.check}</p>
             </article>
             <article className="life-note">
-              <p className="life-note-label"><Utensils size={18} />这一餐吃什么</p>
+              <p className="life-note-label"><Utensils size={18} />地方味道</p>
               <h3>{food.area}</h3>
               <p>{food.order}</p>
-              <p className="life-timing">顺路安排：{food.timing}</p>
+              <p className="life-timing">{food.timing}</p>
             </article>
           </div>
           <div className="life-arrival"><TrainFront size={18} /><p><strong>怎么到、怎么走</strong>{city.arrival}</p></div>

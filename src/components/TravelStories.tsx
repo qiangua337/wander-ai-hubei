@@ -1,5 +1,6 @@
 import { ArrowUpRight } from 'lucide-react';
 import { stories } from '../data';
+import { displayPhoto } from '../data/photos';
 import { Button } from './ui';
 
 export function TravelStories() {
@@ -11,7 +12,14 @@ export function TravelStories() {
 
 export function JourneyInvitation({ onPlan }: { onPlan: () => void }) {
   return <section aria-labelledby="cta-title" className="journey-invitation">
-    <img src="/images/shennongjia.jpg" alt="神农架大九湖湿地公园的森林与木栈道" width="1600" height="1067" loading="lazy" className="invitation-image" /><div className="invitation-shade" aria-hidden="true" />
-    <div className="page-width invitation-inner"><div><h2 id="cta-title" className="section-title text-white">规划你的湖北行程</h2><p className="mt-3 text-sm leading-7 text-white/90">选城市和天数，把景点、美食、住宿和返程排进每天。</p><p className="mt-4 text-xs text-white/75">神农架 · 大九湖</p></div><div className="invitation-action"><Button variant="white" onClick={onPlan} className="min-h-14 px-7">开始规划<ArrowUpRight size={18} strokeWidth={1.5} /></Button></div></div>
+    <img src={displayPhoto('/images/shennongjia.jpg', true)} alt="神农架大九湖湿地公园的森林与木栈道" width="1280" height="960" loading="lazy" decoding="async" className="invitation-image" />
+    <div className="invitation-shade" aria-hidden="true" />
+    <div className="page-width invitation-inner">
+      <div><h2 id="cta-title" className="section-title text-white">规划你的湖北行程</h2>
+        <p className="mt-3 text-sm leading-7 text-white/90">选城市和天数，把景点、住宿、用餐和返程排进每天。</p>
+        <p className="mt-4 text-xs text-white/80">神农架 · 大九湖</p>
+      </div>
+      <div className="invitation-action"><Button variant="white" onClick={onPlan} className="min-h-12 px-6">开始规划<ArrowUpRight size={17} strokeWidth={1.6} /></Button></div>
+    </div>
   </section>;
 }

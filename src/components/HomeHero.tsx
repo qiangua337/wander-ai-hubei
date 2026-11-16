@@ -1,6 +1,7 @@
 import { useState, type FormEvent } from 'react';
 import { ArrowRight, ArrowUpRight, CalendarDays, Landmark, MapPin, MessageCircle, Mountain, Route, Search, UsersRound, Utensils } from 'lucide-react';
-import { cityById, cityPhotos, destinationById } from '../data';
+import { cityById, destinationById } from '../data';
+import { editorialPhotos } from '../data/photos';
 import { placesByCity } from '../discovery';
 import { CityOptions } from './CityPicker';
 import { InputField, SelectField } from './ui';
@@ -26,7 +27,7 @@ const travelStyles = [
 const hotSearches = ['wuhan', 'east-lake', 'wudang'].map(id => destinationById[id]);
 
 export function HomeHero({ selection, travelers, onCity, onTravelers, onSearch, onPlan, onAsk, onCoverPlace, onExplore }: HeroProps) {
-  const photo = cityPhotos.yichang;
+  const photo = editorialPhotos.xiling;
   const [mode, setMode] = useState<'plan' | 'search'>('search');
   const [days, setDays] = useState(2);
   const [keyword, setKeyword] = useState('');
@@ -44,18 +45,24 @@ export function HomeHero({ selection, travelers, onCity, onTravelers, onSearch, 
   return <section className="home-cover" aria-labelledby="hero-title">
     <div className="journey-cover">
       <figure className="journey-landscape">
-        <img src="/images/xiling-cover-1600.webp" srcSet="/images/xiling-cover-768.webp 768w, /images/xiling-cover-1600.webp 1600w"
-          sizes="100vw" alt={photo.alt || photo.subject} fetchPriority="high" width="1600" height="1060" />
+        <picture>
+          <source media="(max-width: 767px)" srcSet="/images/xiling-river-phone.webp" />
+          <img src={`/images/${photo.filename}`} srcSet="/images/xiling-river-1280.webp 1280w, /images/xiling-river-1920.webp 1920w"
+            sizes="100vw" alt={photo.alt} fetchPriority="high" width="1920" height="684" />
+        </picture>
       </figure>
       <div className="journey-cover-content page-width">
         <div className="journey-intro">
-          <p className="journey-kicker">寻游湖北</p>
-          <h1 id="hero-title">沿着长江，<br />走进湖北</h1>
-          <p className="journey-description">从江城过早，到峡江行舟。<br className="hero-mobile-break" /> 找景点、看攻略、排好每天的吃住行。</p>
-          <a href="#routes" className="journey-routes">看经典路线<ArrowUpRight size={16} /></a>
+          <p className="journey-kicker">湖北旅行指南</p>
+          <h1 id="hero-title">沿江入楚，<br />漫游湖北</h1>
+          <p className="journey-description">从武汉的长江岸边，到宜昌的峡谷与恩施的群山。查景点攻略，排好每天的吃住行。</p>
+          <div className="journey-cover-actions">
+            <button type="button" className="journey-start" onClick={() => onPlan(dayCount)}>开始规划<ArrowRight size={17} /></button>
+            <a href="#routes" className="journey-routes">看经典路线<ArrowUpRight size={16} /></a>
+          </div>
         </div>
         <button className="journey-location" type="button" onClick={onCoverPlace} aria-label="查看宜昌西陵峡攻略">
-          <MapPin size={16} />宜昌 · {photo.subject}<ArrowUpRight size={14} />
+          <MapPin size={16} /><span>宜昌 · {photo.subject}</span><ArrowUpRight size={14} />
         </button>
       </div>
     </div>
@@ -73,7 +80,7 @@ export function HomeHero({ selection, travelers, onCity, onTravelers, onSearch, 
         {searchMode && <label className="journey-field journey-keyword">
           <span><Search size={15} />景点或主题</span>
           <InputField name="place" type="search" aria-label="首页搜索景点或主题" value={keyword} onChange={event => setKeyword(event.target.value)}
-            maxLength={100} placeholder="试试搜索省博、古城或湿地" autoComplete="off" />
+            maxLength={100} placeholder="搜省博、古城或湿地" autoComplete="off" />
         </label>}
         <label className="journey-field journey-city">
           <span><MapPin size={15} />目的地</span>

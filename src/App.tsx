@@ -25,7 +25,7 @@ const Wishlist = lazy(() => import('./components/Wishlist').then(module => ({ de
 const SupportDesk = lazy(() => import('./components/SupportDesk').then(module => ({ default: module.SupportDesk })));
 
 type ModalState = { type: 'guide'; cityId: string; placeId?: string } | { type: 'planner'; profile?: Profile; dayIndex?: number } | { type: 'wishlist' } | { type: 'support'; openForm?: boolean; days?: number } | { type: 'credits' } | { type: 'info'; title: string; body: string } | null;
-const mainNav = [['popular', '热门去处'], ['destinations', '目的地'], ['routes', '经典路线'], ['culture', '荆楚文化'], ['travel-life', '吃住指南']] as const;
+const mainNav = [['popular', '热门去处'], ['routes', '经典路线'], ['destinations', '目的地'], ['culture', '荆楚文化'], ['travel-life', '吃住指南']] as const;
 const filters: { key: Filter; label: string }[] = [{ key: 'all', label: '全部' }, { key: 'nature', label: '山水自然' }, { key: 'city', label: '古城文博' }, { key: 'family', label: '亲子研学' }, { key: 'saved', label: '已收藏' }];
 const blankBrowse = { city: 'all', selection: 'all', filter: 'all' as Filter, keyword: '', limit: 12, duration: 'any' as DurationFilter, date: '', travelers: '2', order: 'recommended' as DestinationSort, view: 'places' as 'places' | 'cities' };
 function loadBrowse() {
@@ -188,10 +188,12 @@ export default function App() {
 
       <section id="popular" aria-labelledby="popular-title" className="popular-section section-space">
         <div className="page-width">
-          <div className="section-heading"><div><h2 id="popular-title" className="section-title">湖北人气去处</h2><p className="section-detail">看江城夜景，访武当宫观，走进恩施峡谷。</p></div><button type="button" className="text-link" onClick={() => revealDestinations('all')}>看全部目的地<ArrowUpRight size={17} /></button></div>
-          <div className="featured-grid">{featuredDestinations.map(place => <DestinationCard key={place.id} place={place} featured saved={saved.includes(place.id)} onSave={() => toggleSave(place)} onOpen={() => openPlace(place)} />)}</div>
+          <div className="section-heading"><div><h2 id="popular-title" className="section-title">湖北人气去处</h2><p className="section-detail">登楼望江，进山访古，沿峡谷走一段。</p></div><button type="button" className="text-link section-link" onClick={() => revealDestinations('all')}>看全部目的地<ArrowUpRight size={17} /></button></div>
+          <div className="featured-grid">{featuredDestinations.map((place, index) => <DestinationCard key={place.id} place={place} featured={index < 3 ? 'portrait' : 'compact'} saved={saved.includes(place.id)} onSave={() => toggleSave(place)} onOpen={() => openPlace(place)} />)}</div>
         </div>
       </section>
+
+      <RouteTemplates onChoose={showTemplate} />
 
       <section id="destinations" aria-labelledby="destinations-title" className="city-section section-space">
         <div className="page-width">
@@ -202,33 +204,34 @@ export default function App() {
               <button type="button" aria-pressed={catalogueView === 'cities'} onClick={() => setCatalogueView('cities')}><LayoutGrid size={15} />城市索引</button>
             </div>
           </div>
-          {catalogueView === 'cities' ? <CityDirectory onChoose={id => revealDestinations(id)} /> : <>
-          <div className="catalogue-filters" ref={catalogueFilters} tabIndex={-1}>
-            <div className="catalogue-tools">
-              <label className="catalogue-search-field"><span><Search size={15} />景点或主题</span><InputField type="search" aria-label="搜索景点或主题" maxLength={100} value={keyword} onChange={event => { setKeyword(event.target.value); setLimit(12); }} placeholder="例如：古城、博物馆、湿地" /></label>
-              <label className="catalogue-duration-field"><span><Clock3 size={15} />游玩时长</span><SelectField aria-label="游玩时长筛选" value={duration} onChange={event => { setDuration(event.target.value as DurationFilter); setLimit(12); }}><option value="any">不限时长</option><option value="half">半天以内</option><option value="day">一天及以上</option></SelectField></label>
+          {catalogueView === 'cities' ? <CityDirectory onChoose={id => revealDestinations(id)} /> : <div className="catalogue-layout">
+            <div className="catalogue-filters" ref={catalogueFilters} tabIndex={-1}>
+              <div className="catalogue-tools">
+                <label className="catalogue-search-field"><span><Search size={15} />景点或主题</span><InputField type="search" aria-label="搜索景点或主题" maxLength={100} value={keyword} onChange={event => { setKeyword(event.target.value); setLimit(12); }} placeholder="搜古城、东湖、湿地" /></label>
+                <label className="catalogue-duration-field"><span><Clock3 size={15} />游玩时长</span><SelectField aria-label="游玩时长筛选" value={duration} onChange={event => { setDuration(event.target.value as DurationFilter); setLimit(12); }}><option value="any">不限时长</option><option value="half">半天以内</option><option value="day">一天及以上</option></SelectField></label>
+              </div>
+              <div role="group" aria-label="目的地分类" className="catalogue-tabs">{filters.map(item => <button key={item.key} type="button" onClick={() => { setFilter(item.key); setLimit(12); }} aria-pressed={filter === item.key} className={filter === item.key ? 'is-active' : ''}>{item.key === 'saved' && <Heart size={14} />}{item.label}</button>)}{(activeGuide || filter !== 'all' || duration !== 'any' || keyword.trim()) && <button type="button" className="catalogue-reset" onClick={reset}>清空筛选</button>}</div>
             </div>
-            <div role="group" aria-label="目的地分类" className="catalogue-tabs">{filters.map(item => <button key={item.key} type="button" onClick={() => { setFilter(item.key); setLimit(12); }} aria-pressed={filter === item.key} className={filter === item.key ? 'is-active' : ''}>{item.key === 'saved' && <Heart size={14} />}{item.label}</button>)}{(activeGuide || filter !== 'all' || duration !== 'any' || keyword.trim()) && <button type="button" className="catalogue-reset" onClick={reset}>清空筛选</button>}</div>
-          </div>
-          {activeGuide && <div className="catalogue-city-guide"><div><strong>{activeGuide.shortName}</strong><span>{activeGuide.area}</span></div><div><button type="button" onClick={() => setModal({ type: 'guide', cityId: activeCity })}>城市攻略<ArrowUpRight size={15} /></button><button type="button" onClick={() => planCity(activeCity)}>规划{activeGuide.shortName}行程<ArrowUpRight size={15} /></button></div></div>}
-          <div ref={listingStart} className="catalogue-results-start" aria-hidden="true" />
-          <ExploreSummary cityId={activeCity} count={visible.length} order={order} onOrder={value => { setOrder(value); setLimit(12); }} onChangeCity={id => {
-            chooseCity(id);
-            window.requestAnimationFrame(() => listingStart.current?.scrollIntoView({ block: 'start' }));
-          }} onFilters={scrollToFilters} onReset={reset} selections={[
-            ...(activeGuide ? [{ id: 'city', label: activeGuide.shortName, onRemove: () => chooseCity('all') }] : []),
-            ...(filter !== 'all' ? [{ id: 'type', label: filters.find(item => item.key === filter)!.label, onRemove: () => { setFilter('all'); setLimit(12); } }] : []),
-            ...(duration !== 'any' ? [{ id: 'duration', label: duration === 'half' ? '半天以内' : '一天及以上', onRemove: () => { setDuration('any'); setLimit(12); } }] : []),
-            ...(keyword.trim() ? [{ id: 'keyword', label: keyword.trim(), onRemove: () => { setKeyword(''); setLimit(12); } }] : []),
-          ]} />
-          <div className="catalogue-grid">{visible.slice(0, limit).map(place => <DestinationCard key={place.id} place={place} saved={saved.includes(place.id)} onSave={() => toggleSave(place)} onOpen={() => openPlace(place)} />)}</div>
-          {visible.length === 0 && <div className="catalogue-empty"><Search size={27} /><h3>{filter === 'saved' && saved.length === 0 ? '还没有收藏的去处' : '没有找到符合条件的去处'}</h3><p>{filter === 'saved' && saved.length === 0 ? '点击景点卡片的爱心，就能在这里找到。' : '可以扩大城市范围，或试试更短的关键词。'}</p><Button variant="neutral" onClick={reset}>查看全部去处<ArrowRight size={16} /></Button></div>}
-          {visible.length > limit && <div className="catalogue-more"><p role="status">已显示 {limit} / {visible.length} 处</p><Button variant="neutral" onClick={() => setLimit(value => value + 12)}>加载更多去处<ChevronDown size={16} /></Button></div>}
-          </>}
+            <div className="catalogue-main-column">
+              {activeGuide && <div className="catalogue-city-guide"><div><strong>{activeGuide.shortName}</strong><span>{activeGuide.area}</span></div><div><button type="button" onClick={() => setModal({ type: 'guide', cityId: activeCity })}>城市攻略<ArrowUpRight size={15} /></button><button type="button" onClick={() => planCity(activeCity)}>规划{activeGuide.shortName}行程<ArrowUpRight size={15} /></button></div></div>}
+              <div ref={listingStart} className="catalogue-results-start" aria-hidden="true" />
+              <ExploreSummary cityId={activeCity} count={visible.length} order={order} onOrder={value => { setOrder(value); setLimit(12); }} onChangeCity={id => {
+                chooseCity(id);
+                window.requestAnimationFrame(() => listingStart.current?.scrollIntoView({ block: 'start' }));
+              }} onFilters={scrollToFilters} onReset={reset} selections={[
+                ...(activeGuide ? [{ id: 'city', label: activeGuide.shortName, onRemove: () => chooseCity('all') }] : []),
+                ...(filter !== 'all' ? [{ id: 'type', label: filters.find(item => item.key === filter)!.label, onRemove: () => { setFilter('all'); setLimit(12); } }] : []),
+                ...(duration !== 'any' ? [{ id: 'duration', label: duration === 'half' ? '半天以内' : '一天及以上', onRemove: () => { setDuration('any'); setLimit(12); } }] : []),
+                ...(keyword.trim() ? [{ id: 'keyword', label: keyword.trim(), onRemove: () => { setKeyword(''); setLimit(12); } }] : []),
+              ]} />
+              <div className="catalogue-grid">{visible.slice(0, limit).map(place => <DestinationCard key={place.id} place={place} saved={saved.includes(place.id)} onSave={() => toggleSave(place)} onOpen={() => openPlace(place)} />)}</div>
+              {visible.length === 0 && <div className="catalogue-empty"><Search size={27} /><h3>{filter === 'saved' && saved.length === 0 ? '还没有收藏的去处' : '没有找到符合条件的去处'}</h3><p>{filter === 'saved' && saved.length === 0 ? '点击景点卡片的爱心，就能在这里找到。' : '可以扩大城市范围，或试试更短的关键词。'}</p><Button variant="neutral" onClick={reset}>查看全部去处<ArrowRight size={16} /></Button></div>}
+              {visible.length > limit && <div className="catalogue-more"><p role="status">已显示 {limit} / {visible.length} 处</p><Button variant="neutral" onClick={() => setLimit(value => value + 12)}>加载更多去处<ChevronDown size={16} /></Button></div>}
+            </div>
+          </div>}
         </div>
       </section>
 
-      <RouteTemplates onChoose={showTemplate} />
       <CultureAtlas onOpenPlace={id => openPlace(destinationById[id])} />
       <TravelLife fallbackCity={selection} onExplore={revealDestinations} onPlan={planCity} />
       <TravelFaq onAsk={() => showSupport()} />
@@ -237,8 +240,8 @@ export default function App() {
 
     <footer className="site-footer"><div className="page-width">
       <div className="footer-columns">
-        <div><Brand inverse /><p className="mt-4 max-w-xs text-sm leading-7 text-muted">湖北的景点、传统与地方风味。按城市浏览攻略，也可以直接规划路线。</p></div>
-        <FooterColumn title="发现湖北" items={[['热门去处', () => document.getElementById('popular')?.scrollIntoView()], ['目的地', scrollToCities], ['吃住指南', () => document.getElementById('travel-life')?.scrollIntoView()]]} />
+        <div><Brand inverse /><p className="mt-4 max-w-xs text-sm leading-7 text-muted">湖北旅行指南与行程规划</p></div>
+        <FooterColumn title="发现湖北" items={[['热门去处', () => document.getElementById('popular')?.scrollIntoView()], ['经典路线', () => document.getElementById('routes')?.scrollIntoView()], ['目的地', scrollToCities], ['吃住指南', () => document.getElementById('travel-life')?.scrollIntoView()]]} />
         <FooterColumn title="出行工具" items={[['我的行程', showPlanner], ['我的收藏', showSaved], ['问小游', () => showSupport()]]} />
         <FooterColumn title="关于本站" items={[['图片与来源', () => setModal({ type: 'credits' })], ['行前问答', () => document.getElementById('faq')?.scrollIntoView()], ['预订说明', () => showInfo('预订说明', '本站提供旅行攻略与规划建议。参观预约、开放时间、车船班次和天气请在出发前通过运营方的官方渠道确认。')]]} />
       </div>

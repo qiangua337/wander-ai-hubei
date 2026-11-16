@@ -44,7 +44,7 @@
 .trip-schedule-notes a { color:var(--color-pine); text-decoration:underline; text-underline-offset:3px; }
 .trip-schedule-foot { margin-top:8px; color:var(--color-muted); font-size:11px; line-height:1.65; }
 .trip-schedule-panel .return-day-editor { margin:10px 12px; }
-.visit-change-panel { display:grid; gap:8px; margin:10px 12px; padding:12px 13px; border:1px solid #ebd1d7; border-radius:8px; background:#fcf6f6; }
+.visit-change-panel { display:grid; gap:8px; margin:10px 12px; padding:12px 13px; border:1px solid var(--color-line); border-radius:8px; background:var(--color-cream); }
 .visit-change-panel:focus-visible,.trip-schedule-day:focus-visible { outline:2px solid var(--color-pine); outline-offset:-2px; }
 .visit-change-panel header { display:flex; align-items:center; gap:8px; color:var(--color-pine-deep); }
 .visit-change-panel header svg { flex-shrink:0; }

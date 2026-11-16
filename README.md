@@ -52,7 +52,7 @@ npm run build
 npm run preview
 ```
 
-开发地址为 `http://127.0.0.1:5173/`；生产构建输出 `dist/`。页面字体统一使用本地打包的 Noto Sans SC 可变字体，无需访问外部字体 CDN；旧版 Noto Serif SC 的 OFL 记录保留于 public/fonts/OFL-NotoSerifSC.txt。
+开发地址为 `http://127.0.0.1:5173/`，生产构建输出 `dist/`。正文和交互使用本地 Noto Sans SC，首页主要标题加载本地 Noto Serif SC 字形子集。字体许可见 `public/fonts/OFL-NotoSerifSC.txt`。
 
 ## Cloudflare Pages
 
