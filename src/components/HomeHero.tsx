@@ -1,5 +1,5 @@
 import { useState, type FormEvent } from 'react';
-import { ArrowRight, ArrowUpRight, CalendarDays, Landmark, MapPin, MessageCircle, Mountain, Route, Search, UsersRound, Utensils } from 'lucide-react';
+import { ArrowRight, ArrowUpRight, CalendarDays, MapPin, MessageCircle, Route, Search, UsersRound } from 'lucide-react';
 import { cityById, destinationById } from '../data';
 import { editorialPhotos } from '../data/photos';
 import { placesByCity } from '../discovery';
@@ -19,10 +19,10 @@ type HeroProps = {
 };
 
 const travelStyles = [
-  { icon: Mountain, title: '山水自然', detail: '峡谷、森林与湖泊', filter: 'nature' },
-  { icon: Landmark, title: '古城文博', detail: '城墙、名楼与博物馆', filter: 'city' },
-  { icon: UsersRound, title: '亲子研学', detail: '轻松步道与研学去处', filter: 'family' },
-  { icon: Utensils, title: '吃住指南', detail: '地方风味与落脚片区', filter: 'food' },
+  { title: '山水自然', detail: '峡谷、森林与湖泊', image: editorialPhotos.enshi.filename, filter: 'nature' },
+  { title: '古城文博', detail: '城墙、名楼与博物馆', image: 'jingzhou.jpg', filter: 'city' },
+  { title: '亲子研学', detail: '轻松步道与研学去处', image: editorialPhotos.eastLake.filename, filter: 'family' },
+  { title: '吃住指南', detail: '地方风味与落脚片区', image: editorialPhotos.noodles.filename, filter: 'food' },
 ] as const;
 const hotSearches = ['wuhan', 'east-lake', 'wudang'].map(id => destinationById[id]);
 
@@ -62,7 +62,7 @@ export function HomeHero({ selection, travelers, onCity, onTravelers, onSearch, 
           </div>
         </div>
         <button className="journey-location" type="button" onClick={onCoverPlace} aria-label="查看宜昌西陵峡攻略">
-          <MapPin size={16} /><span>宜昌 · {photo.subject}</span><ArrowUpRight size={14} />
+          <MapPin size={17} aria-hidden="true" /><span><strong>宜昌 · {photo.subject}</strong><small>看峡江游览攻略</small></span><ArrowUpRight size={15} aria-hidden="true" />
         </button>
       </div>
     </div>
@@ -111,11 +111,14 @@ export function HomeHero({ selection, travelers, onCity, onTravelers, onSearch, 
       </div>}
     </div>
 
-    <nav className="discovery-paths page-width" aria-label="按旅行方式探索">
-      {travelStyles.map(({ icon: Icon, title, detail, filter }) => <button key={filter} type="button" onClick={() => onExplore(filter)}>
-        <span className="path-mark"><Icon size={21} strokeWidth={1.6} aria-hidden="true" /></span>
-        <span><strong>{title}</strong><small>{detail}</small></span><ArrowUpRight size={16} aria-hidden="true" />
-      </button>)}
+    <nav className="discovery-paths page-width" aria-labelledby="discovery-title">
+      <h2 id="discovery-title">按玩法探索</h2>
+      <div className="discovery-grid">
+        {travelStyles.map(({ image, title, detail, filter }) => <button key={filter} type="button" onClick={() => onExplore(filter)}>
+          <img src={'/images/' + image} width="144" height="100" loading="lazy" decoding="async" alt="" />
+          <span><strong>{title}</strong><small>{detail}</small></span><ArrowUpRight size={15} aria-hidden="true" />
+        </button>)}
+      </div>
     </nav>
   </section>;
 }

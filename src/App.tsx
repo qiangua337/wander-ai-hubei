@@ -151,6 +151,9 @@ export default function App() {
     try { await navigator.clipboard.writeText(text); setToast('已复制，可粘贴到聊天或备忘录中使用'); }
     catch { setToast('暂时无法复制，请重试或使用下载按钮。'); }
   };
+  const featuredCards = featuredDestinations.map((place, index) => <DestinationCard key={place.id} place={place}
+    featured={index < 3 ? 'portrait' : 'compact'} saved={saved.includes(place.id)}
+    onSave={() => toggleSave(place)} onOpen={() => openPlace(place)} />);
 
   useEffect(() => { try { sessionStorage.setItem('wander-browse-v2', JSON.stringify({ city: activeCity, selection, filter, keyword, limit, duration, date: validDate(date) ? date : '', travelers, order, view: catalogueView })); } catch { /* Session memory is optional. */ } }, [activeCity, selection, filter, keyword, limit, duration, date, travelers, order, catalogueView]);
   useEffect(() => {
@@ -189,7 +192,8 @@ export default function App() {
       <section id="popular" aria-labelledby="popular-title" className="popular-section section-space">
         <div className="page-width">
           <div className="section-heading"><div><h2 id="popular-title" className="section-title">湖北人气去处</h2><p className="section-detail">登楼望江，进山访古，沿峡谷走一段。</p></div><button type="button" className="text-link section-link" onClick={() => revealDestinations('all')}>看全部目的地<ArrowUpRight size={17} /></button></div>
-          <div className="featured-grid">{featuredDestinations.map((place, index) => <DestinationCard key={place.id} place={place} featured={index < 3 ? 'portrait' : 'compact'} saved={saved.includes(place.id)} onSave={() => toggleSave(place)} onOpen={() => openPlace(place)} />)}</div>
+          <div className="featured-leads">{featuredCards.slice(0, 3)}</div>
+          <div className="featured-grid">{featuredCards.slice(3)}</div>
         </div>
       </section>
 

@@ -13,6 +13,8 @@ try {
   const { buildDaySchedule } = await server.ssrLoadModule('/src/day-schedule.ts');
   const { attractionRoutes, availableTripDays } = await server.ssrLoadModule('/src/data/attraction-routes.ts');
   const { practical } = await server.ssrLoadModule('/src/data/practical.ts');
+  const { practicalMapUrl } = await server.ssrLoadModule('/src/data/practical-maps.ts');
+  const { localFoodShops } = await server.ssrLoadModule('/src/data/food-shops.ts');
   const { defaultProfile, normalizeProfile, validDate, recommendDays, buildTrip, estimateBudget, formatDetailedPlan, sharePlanUrl, parsePlanUrl, templates } = await server.ssrLoadModule('/src/planning.ts');
   const expectedCities = ['wuhan', 'yichang', 'enshi', 'shiyan', 'xiangyang', 'jingzhou', 'jingmen', 'huangshi', 'ezhou', 'huanggang', 'xianning', 'xiaogan', 'suizhou', 'xiantao', 'qianjiang', 'tianmen', 'shennongjia'];
   assert.deepEqual(cities.map(city => city.id).sort(), expectedCities.sort());
@@ -134,6 +136,43 @@ try {
   const text = formatPlan(cityById.wuhan, cityById.wuhan.days, '2026-10-31', '4');
   assert(text.includes('11月1日') && text.includes('4 位旅行者') && text.includes('交通：') && text.includes('资料来源'));
   assert.deepEqual(Object.keys(practical).sort(), cities.map(city => city.id).sort());
+  function verifyMapLink(link) {
+    const rawUrl = practicalMapUrl(link);
+    const url = new URL(rawUrl);
+    assert(link.label);
+    assert.equal(url.protocol, 'https:');
+    if ('poiId' in link) {
+      assert.equal(url.origin, 'https://www.amap.com');
+      assert.match(url.pathname, /^\/place\/[A-Z0-9]+$/);
+      return;
+    }
+    assert.equal(url.origin + url.pathname, 'https://uri.amap.com/search');
+    assert.equal(url.searchParams.get('keyword'), link.keyword);
+    assert.equal(url.searchParams.get('city'), link.cityCode);
+    assert.match(link.cityCode, /^42\d{4}$/);
+    assert(link.keyword.length <= 22 && !/[＋+，。；、]/u.test(link.keyword));
+    assert(!rawUrl.includes('+'));
+    assert.equal(url.searchParams.get('center'), link.center?.join(',') ?? null);
+  }
+
+  for (const info of Object.values(practical)) {
+    for (const entry of [...info.stays, ...info.food]) {
+      assert(entry.mapLinks.length, entry.area);
+      entry.mapLinks.forEach(verifyMapLink);
+    }
+  }
+  const oldTownLinks = practical.jingzhou.food[0].mapLinks;
+  assert(oldTownLinks.some(link => link.keyword === '早堂面' && link.cityCode === '421003'));
+  assert(oldTownLinks.some(link => link.keyword === '张居正街 餐厅' && link.cityCode === '421003'));
+  assert(oldTownLinks.some(link => link.poiId === 'B02CC01RTZ'));
+  for (const [cityId, shops] of Object.entries(localFoodShops)) {
+    assert(cityById[cityId]);
+    for (const shop of shops) {
+      assert(shop.address && shop.dish && shop.routeFit && shop.evidence);
+      assert(new Set(shop.sources.map(source => new URL(source.url).origin)).size >= 2);
+      verifyMapLink(shop.map);
+    }
+  }
   for (const city of cities) {
     const info = practical[city.id];
     assert.equal(info.nights.length, city.days.length, `${city.id} overnight coverage`);
