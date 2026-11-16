@@ -1,8 +1,7 @@
 import { useRef, useState } from 'react';
 import { ArrowRight, ArrowUpRight, BedDouble, Bookmark, ChevronDown, CircleCheck, Copy, Download, Pencil, Route, Share2, Utensils, Wallet } from 'lucide-react';
 import { cityById } from '../data';
-import { dayJourneys } from '../data/day-journeys';
-import { groupLodging } from '../day-schedule';
+import { groupLodging, journeyForDay } from '../day-schedule';
 import { buildTripSchedules } from '../visit-scheduling';
 import type { VisitChange } from '../visit-changes';
 import { arrivalLabels, getDepartureLabel, mobilityLabels, getTripIssues, buildTrip, budgetLabels, estimateBudget, formatDetailedPlan, groupLabels, sharePlanUrl, tripTitle, type Profile } from '../planning';
@@ -25,7 +24,13 @@ export function PlannedTrip({ profile, onCopy, onSave, onEdit, onUpdateReturn, o
   const returnLabel = getDepartureLabel(profile);
   const issues = getTripIssues(profile);
   const lodging = groupLodging(days);
-  const firstBase = days[0] && dayJourneys[days[0].cityId][days[0].originalIndex].base;
+  const journeys = days.map(journeyForDay);
+  const firstBase = journeys[0]?.base;
+  const last = days.at(-1);
+  const finalJourney = journeys.at(-1);
+  const optionalLodging = (!profile.departure || profile.departure === 'flexible') && last?.overnight === finalJourney?.night && finalJourney?.lodgingNote;
+  const sources = [...new Map([...journeys.flatMap(journey => journey.sources ?? []), ...cityIds.flatMap(id => cityById[id].sources)]
+    .map(source => [source.url, source])).values()];
   const tabs = [{ id: 'route', label: '每日行程', count: days.length + ' 天', icon: Route }, { id: 'stay', label: '住在哪里', count: budget.nights + ' 晚', icon: BedDouble }, { id: 'food', label: '当地美食', count: cityIds.length + ' 城', icon: Utensils }, { id: 'budget', label: '预算预留', count: profile.party + ' 人', icon: Wallet }];
   const selectTab = (id: string) => {
     setTab(id);
@@ -69,6 +74,7 @@ export function PlannedTrip({ profile, onCopy, onSave, onEdit, onUpdateReturn, o
           {budget.arrivalNight && <li><span>抵达前夜</span><div><strong>{firstBase}</strong><p>从第一站入园位置倒推住宿和接驳。</p></div></li>}
           {lodging.map(block => <li key={block.firstNight}><span>{block.firstNight === block.lastNight ? `第 ${block.firstNight} 晚` : `第 ${block.firstNight}–${block.lastNight} 晚`}</span><div><strong>{block.area}</strong><p>{block.firstNight !== block.lastNight ? '这几晚可连住同一家，再按每天第一站安排出门。' : '订房前核对次日第一站与车站接驳。'}</p></div></li>)}
         </ol></section>}
+        {optionalLodging && <div className="trip-reading-note"><strong>延住片区 · {last?.overnight}</strong><p>{optionalLodging}</p></div>}
         {cityIds.map(id => <section key={id}><p className="trip-city-label">{cityById[id].shortName}</p><StaySuggestions city={cityById[id]} /></section>)}
       </div>}
       {tab === 'food' && <div className="space-y-8">
@@ -85,7 +91,7 @@ export function PlannedTrip({ profile, onCopy, onSave, onEdit, onUpdateReturn, o
       </section>}
     </div>
     <section aria-label="出发前核对清单" className="trip-departure-checks"><div><CircleCheck size={19} /><h4>出发前，再确认这几件事</h4><span>{checked.length} / {checks.length}</span></div><p>把预订和接驳核对好，路上更从容。</p><ul>{checks.map(item => <li key={item.id}><label><input type="checkbox" checked={checked.includes(item.id)} onChange={() => setChecked(previous => previous.includes(item.id) ? previous.filter(id => id !== item.id) : [...previous, item.id])} /><span><strong>{item.title}</strong><small>{item.detail}</small></span></label></li>)}</ul><small>勾选仅作本次检查，不写入保存、分享或下载清单。</small></section>
-    <details className="trip-source-links"><summary>路线资料与预订前核对</summary><p>景点事实参考官方资料；片区选择、餐食组合、时间与预算为编辑规划建议，未查询实时库存或车程。</p><div>{cityIds.flatMap(id => cityById[id].sources).map(source => <a key={source.url} href={source.url} target="_blank" rel="noreferrer">{source.title}<ArrowUpRight size={12} /></a>)}</div></details>
+    <details className="trip-source-links"><summary>路线资料与预订前核对</summary><p>景点事实参考官方资料；片区选择、餐食组合、时间与预算为编辑规划建议，未查询实时库存或车程。</p><div>{sources.map(source => <a key={source.url} href={source.url} target="_blank" rel="noreferrer">{source.title}<ArrowUpRight size={12} /></a>)}</div></details>
     <div className="trip-takeaway"><Button aria-label="复制清单" onClick={() => onCopy(formatDetailedPlan(profile))} variant="neutral" className="whitespace-nowrap px-2 text-xs"><Copy size={15} /><span>复制<span className="hidden sm:inline">清单</span></span></Button><Button aria-label="下载行程" onClick={() => downloadPlan(formatDetailedPlan(profile), '湖北具体')} className="whitespace-nowrap px-2 text-xs"><Download size={15} /><span>下载<span className="hidden sm:inline">行程</span></span></Button><Button aria-label="分享链接" onClick={() => onCopy(sharePlanUrl(profile))} variant="neutral" className="whitespace-nowrap px-2 text-xs"><Share2 size={15} /><span>分享<span className="hidden sm:inline">链接</span></span></Button></div>
   </div>;
 }

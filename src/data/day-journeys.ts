@@ -3,7 +3,7 @@ import type { ReturnSource } from './return-mornings';
 export type MinuteRange = readonly [min: number, max: number];
 export type TravelLeg = { method: string; minutes?: MinuteRange; drive?: { method: string; minutes: MinuteRange } };
 
-type Visit = { place: string; length: number; via: TravelLeg; note?: string };
+type Visit = { place: string; length: number; via: TravelLeg; note?: string; optional?: boolean };
 type Meal = { area: string; food: string; via?: TravelLeg; length?: number };
 export type DayJourney = {
   start: string;
@@ -15,20 +15,22 @@ export type DayJourney = {
   night: string;
   home?: TravelLeg;
   dinner: string;
+  lodgingNote?: string;
   note?: string;
   earlyReturn?: TravelLeg;
+  afterLunchReturn?: TravelLeg;
   nightMoves?: Record<string, TravelLeg>;
   sources?: ReturnSource[];
 };
 
-const walk = (min: number, max: number, method = '步行'): TravelLeg => ({ method, minutes: [min, max] });
-const ride = (method: string, min: number, max: number, drive?: MinuteRange): TravelLeg => ({
+export const walk = (min: number, max: number, method = '步行'): TravelLeg => ({ method, minutes: [min, max] });
+export const ride = (method: string, min: number, max: number, drive?: MinuteRange): TravelLeg => ({
   method, minutes: [min, max],
   ...(drive ? { drive: { method: '自驾至可停车处，再步行', minutes: drive } } : {}),
 });
 const connect = (method: string): TravelLeg => ({ method });
-const visit = (place: string, length: number, via: TravelLeg, note?: string): Visit => ({ place, length, via, note });
-const meal = (area: string, food: string, via?: TravelLeg, length?: number): Meal => ({ area, food, via, length });
+export const visit = (place: string, length: number, via: TravelLeg, note?: string): Visit => ({ place, length, via, note });
+export const meal = (area: string, food: string, via?: TravelLeg, length?: number): Meal => ({ area, food, via, length });
 const journey = (
   start: string, base: string, baseMatch: RegExp, morning: Visit, lunch: Meal, afternoon: Visit | undefined,
   night: string, dinner: string, home?: TravelLeg, extras?: Pick<DayJourney, 'note' | 'sources' | 'nightMoves' | 'earlyReturn'>,

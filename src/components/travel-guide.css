@@ -32,6 +32,7 @@
 .guide-route-icon { display:grid; place-items:center; width:42px; height:42px; background:#f0dddf; border-radius:6px; color:var(--color-pine-deep); }
 .guide-route-banner h3 { font-size:15px; }
 .guide-route-banner p { margin-top:3px; color:var(--color-muted); font-size:13px; }
+.guide-route-banner .guide-route-start { color:var(--color-pine-deep); font-weight:600; }
 .guide-route-banner button { display:flex; align-items:center; gap:6px; min-height:42px; padding-inline:6px; color:var(--color-pine-deep); text-align:left; font-size:13px; font-weight:600; }
 .guide-related { margin-top:22px; }
 .guide-related ul { display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); gap:7px; margin-top:9px; }
@@ -43,6 +44,8 @@
 .guide-related>.text-link { margin-top:5px; font-size:13px; }
 .guide-chapters { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:6px; margin:10px 0 17px; }
 .guide-chapter-select { display:none; }
+.guide-route.has-many-chapters .guide-chapter-select { display:block; margin-block:10px 17px; max-width:540px; }
+.guide-route.has-many-chapters .guide-chapters { display:none; }
 .guide-chapters>button { min-height:46px; padding:6px 9px; border:1px solid var(--color-line); border-radius:6px; background:white; color:var(--color-muted); font-size:13px; text-align:left; }
 .guide-chapters>button[aria-pressed="true"] { border-color:#e5bdc7; background:var(--color-sage); color:var(--color-pine-deep); font-weight:650; }
 .guide-chapters>button:hover { color:var(--color-pine-deep); }
@@ -50,6 +53,10 @@
 .guide-practical { display:grid; gap:20px; }
 .guide-practical-intro { padding:13px; border:1px solid var(--color-line); border-radius:8px; background:var(--color-sand); }
 .guide-practical-intro h3 { display:flex; align-items:center; gap:7px; }
+.guide-route-practical dl { margin-top:9px; }
+.guide-route-practical dl>div { display:grid; grid-template-columns:2.7em minmax(0,1fr); gap:8px; padding-block:8px; border-top:1px solid var(--color-line); font-size:13px; line-height:1.7; }
+.guide-route-practical dt { color:var(--color-pine-deep); font-weight:650; }
+.guide-route-practical dd { color:var(--color-muted); }
 .guide-practical svg { flex-shrink:0; color:var(--color-pine); }
 .guide-note { display:flex; align-items:start; gap:6px; margin-top:9px; color:var(--color-muted); font-size:12px; }
 .guide-sources ul { margin-top:10px; }

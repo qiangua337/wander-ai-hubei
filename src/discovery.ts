@@ -1,4 +1,5 @@
 import { cities, cityById, destinations, destinationById, type Destination } from './data';
+import { attractionRoutes } from './data/attraction-routes';
 
 export type DestinationSort = 'recommended' | 'duration' | 'city';
 export const cityGroups = Array.from(new Set(cities.map(city => city.area)), area => ({
@@ -68,7 +69,12 @@ const placeChapters: Readonly<Partial<Record<string, { chapter: number; visit: s
 };
 
 export function routeForPlace(placeId: string) {
-  return Object.hasOwn(placeChapters, placeId) ? placeChapters[placeId] : undefined;
+  if (Object.hasOwn(placeChapters, placeId)) return placeChapters[placeId];
+  if (!Object.hasOwn(destinationById, placeId)) return;
+  const city = cityById[destinationById[placeId].cityId];
+  const extra = attractionRoutes[city.id] ?? [];
+  const index = extra.findIndex(route => route.placeId === placeId);
+  if (index >= 0) return { chapter: city.days.length + index, visit: extra[index].visitTitle };
 }
 
 export function guideFromSearch(search: string): { cityId: string; placeId?: string } | undefined {

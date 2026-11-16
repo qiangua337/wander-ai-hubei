@@ -1,4 +1,6 @@
 import { dayJourneys, hankouFromWuchang, type DayJourney, type MinuteRange, type TravelLeg } from './data/day-journeys';
+import { cityById } from './data/cities';
+import { attractionRouteAt } from './data/attraction-routes';
 import { returnWalks, type ReturnSource } from './data/return-mornings';
 import type { PlannedDay, Profile } from './planning';
 import { formatClock, parseClock, returnBreakfastMinutes, returnBreakfastStart } from './return-timing';
@@ -57,16 +59,17 @@ function availableLodging(overnight: string) {
   return overnight.split(/[；（]/, 1)[0];
 }
 
-function stayRow(day: PlannedDay, isLast: boolean): ScheduleRow {
+function stayRow(day: PlannedDay, isLast: boolean, note?: string): ScheduleRow {
   return {
     kind: 'stay',
     phase: isLast ? '延住可选' : '夜宿',
     title: availableLodging(day.overnight),
-    detail: isLast ? '当天返程时，按票面安排取行李与接驳。' : '住宿按片区挑选，先确认入住、停车或行李寄存。',
+    detail: note ?? (isLast ? '当天返程时，按票面安排取行李与接驳。' : '住宿按片区挑选，先确认入住、停车或行李寄存。'),
   };
 }
 
 function visitDetail(title: string, fallback: string | undefined, note?: string) {
+  if (note && note === fallback) return note;
   return [fallback, note].filter(Boolean).join(' ') || `从${title}的开放入口按现场指引游览。`;
 }
 
@@ -89,8 +92,8 @@ export function localTransfer(leg: TravelLeg, profile: Profile) {
 }
 
 export function journeyForDay(day: PlannedDay): DayJourney {
-  return day.cityId === 'wuhan' && day.originalIndex === 2 && day.region === '汉口 · 江汉路与沿江'
-    ? hankouFromWuchang : dayJourneys[day.cityId][day.originalIndex];
+  if (day.cityId === 'wuhan' && day.originalIndex === 2 && day.region === '汉口 · 江汉路与沿江') return hankouFromWuchang;
+  return attractionRouteAt(cityById[day.cityId], day.originalIndex)?.journey ?? dayJourneys[day.cityId][day.originalIndex];
 }
 
 function afternoonReturnSchedule(day: PlannedDay, profile: Profile): DaySchedule {
@@ -191,7 +194,7 @@ function timingChanges(day: PlannedDay, journey: DayJourney, profile: Profile, p
     rows.push({ kind: 'move', time: profile.departureTime, phase: '以票面为准', title: profile.departureStation ? `从${profile.departureStation}返程` : '按已确认的交通方式返程', detail: day.stops[2].detail });
     rows.push({ kind: 'meal', meal: '晚餐', phase: '返程途中或抵达后', title: '就近安排晚餐', detail: day.dinner });
   } else {
-    rows.push(stayRow(day, isLast));
+    rows.push(stayRow(day, isLast, availableLodging(day.overnight) === journey.night ? journey.lodgingNote : undefined));
   }
   return { start, from, headline, rows, sources: journey.sources || [], note: journey.note };
 }
@@ -211,6 +214,7 @@ export function buildDaySchedule(day: PlannedDay, profile: Profile, previous: Pl
   const lodging = availableLodging(day.overnight);
   const nightMatches = lodging === destination.night || lodging.split('或').some(area => area.includes(destination.night));
   const overnight = nightMatches ? destination.night : lodging;
+  const dinnerArea = /(?:周边|附近|一带)$/.test(overnight) ? overnight : `${overnight}附近`;
   const slower = profile.pace === 'relaxed';
   const extraTransfer = profile.group === 'senior' || profile.group === 'family' || profile.party >= 5;
   const morning = destination.morning;
@@ -265,7 +269,7 @@ export function buildDaySchedule(day: PlannedDay, profile: Profile, previous: Pl
     if (packLunch) rows.push({ kind: 'meal', meal: '午餐', title: '提前备好便携午餐', phase: '途中', detail: '按接驳安排，在允许就餐的停留点补给。' });
     if (lunchAtEntrance) activity('meal', '第一站入口附近先吃午餐', 40, '抵达后', '有供餐就近用餐，也可自备午餐后再进景区。', 11 * 60 + 30, '午餐');
     const mainLength = customStart && minute !== undefined ? Math.min(morning.length, visitCutoff - Math.max(minute, 9 * 60)) : morning.length;
-    activity('visit', morning.place, mainLength, '到达后', visitDetail(morning.place, day.stops[0].detail, morning.note), 9 * 60, undefined, false, 'main');
+    activity('visit', morning.place, mainLength, '到达后', visitDetail(morning.place, day.stops[0].detail, morning.note), 9 * 60, undefined, morning.optional, 'main');
   } else {
     if (fallbackWalk && omit !== 'main') {
       activity('visit', fallbackWalk.sight, fallbackWalk.minutes, '住处附近', fallbackWalk.detail, 0, undefined, true);
@@ -283,10 +287,11 @@ export function buildDaySchedule(day: PlannedDay, profile: Profile, previous: Pl
   const secondStart = eatEarlier && minute !== undefined ? minute + (onTheWayToLunch || 0) : earliestLunchEnd;
   const hasAfternoon = omit !== 'afternoon' && !!afternoon && enoughForMain && (!customStart || (secondStart !== undefined && onTheWayToLunch !== undefined
     && afternoonTravel !== undefined && secondStart + afternoonTravel + 45 <= visitCutoff));
-  if (enoughForMain && lunchMove && (!eatEarlier || hasAfternoon)) move(`${morning.place} → ${destination.lunch.area}`, lunchMove);
+  const movedToLunch = enoughForMain && lunchMove && (!eatEarlier || hasAfternoon);
+  if (movedToLunch) move(`${morning.place} → ${destination.lunch.area}`, lunchMove);
   if (enoughForMain && !eatEarlier) activity('meal', `在${destination.lunch.area}吃午餐`, lunchLength, '午间', destination.lunch.food, 11 * 60 + 45, '午餐');
   if (afternoon && hasAfternoon) {
-    const optional = slower && overnight === destination.base && destination.home?.minutes !== undefined;
+    const optional = afternoon.optional || (slower && overnight === destination.base && destination.home?.minutes !== undefined);
     move(`前往${afternoon.place}`, afternoon.via, optional);
     const sameStop = !slower && afternoon.place === day.stops[1].title;
     const afternoonLength = Math.min(afternoon.length, slower ? 75 : Infinity, customStart && minute !== undefined ? Math.max(45, visitCutoff - minute) : Infinity);
@@ -297,11 +302,11 @@ export function buildDaySchedule(day: PlannedDay, profile: Profile, previous: Pl
   let tail: DaySchedule['tail'];
   if (!isLast || !/返程/.test(day.stops[2].title)) {
     const isStandardNight = overnight === destination.night;
-    const home = shortened ? destination.earlyReturn : destination.home;
+    const home = shortened ? (movedToLunch && destination.afterLunchReturn) || destination.earlyReturn : destination.home;
     const last = rows.at(-1);
     const afterVisit = minute !== undefined && last?.kind === 'visit' && last.visitSlot
       ? { title: last.title, at: minute, rowIndex: rows.length } : undefined;
-    if (enoughForMain && isStandardNight && home) move(`返回${overnight}`, home);
+    if (enoughForMain && isStandardNight && home) move(`${overnightHere ? '返回' : '前往'}${overnight}`, home);
     else if (enoughForMain && shortened) move(`从实际结束点去${overnight}`, {
       method: profile.mode === 'drive' ? '结束游览后按实际停车点和住处查车程。' : '结束游览后就近乘公交或短途车，按实际出口核对车程。',
     });
@@ -312,12 +317,12 @@ export function buildDaySchedule(day: PlannedDay, profile: Profile, previous: Pl
     if (atLodging || afterVisit) {
       tail = { area: overnight, afterVisit, ready: atLodging ? { at: minute!, dinnerIndex: rows.length } : undefined };
     }
-    activity('meal', `在${overnight}附近吃晚餐`, 55, '傍晚', isStandardNight && (!customStart || (enoughForMain && (!shortened || home)))
+    activity('meal', `在${dinnerArea}吃晚餐`, 55, '傍晚', isStandardNight && (!customStart || (enoughForMain && (!shortened || home)))
       ? destination.dinner : '先到住处，再就近找一份家常晚餐。', 17 * 60 + 45, '晚餐');
   } else {
     rows.push({ kind: 'move', phase: '收尾', title: '按票面预留取行李与返程', detail: day.transport });
   }
-  rows.push(stayRow(day, isLast));
+  rows.push(stayRow(day, isLast, nightMatches ? destination.lodgingNote : undefined));
   const cityName = day.title.split(' · ')[0];
   return {
     start: start ? `${start} ${customStart ? '出门' : '建议出门'}` : !fromPresetBase ? '按实际住处与首站倒推出门时间' : '按已确认的接驳倒推出门时间',
@@ -330,7 +335,7 @@ export function buildDaySchedule(day: PlannedDay, profile: Profile, previous: Pl
     mainVisitSkipped: !enoughForMain || undefined,
     tail,
     note: [
-      enoughForMain && !shortened ? destination.note : undefined,
+      enoughForMain && (!shortened || destination.lodgingNote) ? destination.note : undefined,
       !omit && enoughForMain && shortened ? `按 ${customStart} 出门，时间表暂缓安排「${afternoon.place}」。` : undefined,
       !omit && !enoughForMain ? `按 ${customStart} 出门，留给「${morning.place}」的时间太短。当天优先安排住宿片区。` : undefined,
       customStart && enoughForMain ? '游览计划预留到 16:30 左右，预约、开放和末班接驳请按当天核对。' : undefined,

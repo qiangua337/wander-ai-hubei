@@ -11,6 +11,7 @@ try {
   const { findDestinations, planDays, selectPlanDays, planDate, formatPlan } = await server.ssrLoadModule('/src/travel.ts');
   const { cityGroups, guideFromSearch, placesByCity, routeForPlace, shareGuideUrl, sortDestinations } = await server.ssrLoadModule('/src/discovery.ts');
   const { buildDaySchedule } = await server.ssrLoadModule('/src/day-schedule.ts');
+  const { attractionRoutes, availableTripDays } = await server.ssrLoadModule('/src/data/attraction-routes.ts');
   const { practical } = await server.ssrLoadModule('/src/data/practical.ts');
   const { defaultProfile, normalizeProfile, validDate, recommendDays, buildTrip, estimateBudget, formatDetailedPlan, sharePlanUrl, parsePlanUrl, templates } = await server.ssrLoadModule('/src/planning.ts');
   const expectedCities = ['wuhan', 'yichang', 'enshi', 'shiyan', 'xiangyang', 'jingzhou', 'jingmen', 'huangshi', 'ezhou', 'huanggang', 'xianning', 'xiaogan', 'suizhou', 'xiantao', 'qianjiang', 'tianmen', 'shennongjia'];
@@ -51,20 +52,53 @@ try {
   assert.equal(findDestinations('all', '武汉 东湖', 'all', [])[0]?.id, 'east-lake');
   assert.deepEqual(cityGroups.flatMap(group => group.cities.map(city => city.id)).sort(), expectedCities);
   assert.deepEqual(Object.values(placesByCity).flat().map(place => place.id).sort(), destinations.map(place => place.id).sort());
-  let linkedGuides = 0;
   for (const place of destinations) {
     assert.deepEqual(guideFromSearch(new URL(shareGuideUrl(place.cityId, place.id)).search), { cityId: place.cityId, placeId: place.id });
     const match = routeForPlace(place.id);
-    if (!match) continue;
-    linkedGuides++;
+    assert(match, `Missing route for ${place.title}`);
     const profile = { ...defaultProfile(place.cityId), indices: [match.chapter] };
     const day = buildTrip(profile)[0];
     assert(day, `Missing route for ${place.title}`);
     assert(buildDaySchedule(day, profile, undefined, true).rows.some(row => row.kind === 'visit' && row.title === match.visit),
       `${place.title} must open an itinerary that actually visits it`);
   }
-  assert.equal(routeForPlace('mulan'), undefined, 'A standalone attraction must not point to an unrelated city chapter.');
-  assert(linkedGuides >= 50);
+  const added = Object.entries(attractionRoutes).flatMap(([cityId, routes]) => routes.map(route => ({ cityId, ...route })));
+  assert.deepEqual(added.map(route => route.placeId).sort(),
+    ['mulan', 'xiling-gorge', 'three-gorges-waterfall', 'geocentric', 'tangya', 'shangjin', 'tiantang', 'jiugong', 'yinshui', 'tangchi', 'dahong', 'shahu', 'crayfish'].sort());
+  for (const addition of added) {
+    const { cityId, placeId, journey } = addition;
+    const city = cityById[cityId], { chapter } = routeForPlace(placeId);
+    assert(chapter >= city.days.length && availableTripDays(city)[chapter] === addition.day, placeId);
+    for (const mode of ['public', 'drive']) {
+      const profile = { ...defaultProfile(cityId, '2026-12-08', 3), indices: [chapter], mode };
+      const restored = parsePlanUrl(new URL(sharePlanUrl(profile)).search);
+      assert.deepEqual(restored.indices, [chapter], `Share must keep the selected one-day route for ${placeId}`);
+      const [trip] = buildTrip(restored);
+      const schedule = buildDaySchedule(trip, restored, undefined, true);
+      assert.equal(schedule.from, journey.base);
+      assert.equal(schedule.start, journey.start + ' 建议出门');
+      const visits = schedule.rows.filter(row => row.kind === 'visit');
+      assert.equal(visits.length, 2, placeId);
+      assert(visits.every(row => row.time && row.duration > 0), placeId);
+      const moves = schedule.rows.filter(row => row.kind === 'move');
+      assert(moves.length >= 3 && moves.every(row => row.time && row.minutes[0] > 0 && row.minutes[1] >= row.minutes[0] && row.detail), placeId);
+      for (const meal of ['早餐', '午餐', '晚餐']) assert(schedule.rows.some(row => row.meal === meal && row.time && row.detail), placeId);
+      assert(schedule.rows.some(row => row.meal === '午餐' && row.title.includes(journey.lunch.area)), placeId);
+      assert.equal(schedule.rows.at(-1).title, journey.night);
+      assert.equal(schedule.rows.at(-1).detail, journey.lodgingNote);
+      const clocks = schedule.rows.flatMap(row => row.time ? [row.time] : []);
+      assert.deepEqual(clocks, [...clocks].sort(), placeId);
+      const exported = formatDetailedPlan(restored);
+      assert(schedule.sources.every(source => source.url.startsWith('https://') && exported.includes(source.url)), placeId);
+      assert(exported.includes(journey.night) && exported.includes(journey.start), placeId);
+    }
+  }
+  const wetland = added.find(route => route.placeId === 'shahu');
+  assert(wetland.journey.morning.optional && wetland.journey.note.includes('梦里水乡'));
+  const gorge = { ...defaultProfile('yichang'), indices: [routeForPlace('xiling-gorge').chapter], dayStarts: { 'yichang:4': '12:30' } };
+  const lateGorge = buildDaySchedule(buildTrip(gorge)[0], gorge, undefined, true);
+  assert(lateGorge.rows.some(row => row.kind === 'move' && row.detail.includes('从三游洞出口打车回西陵老城住处')),
+    'A late walk that skips the planned lunch and second attraction must return from the actual first stop.');
   assert.deepEqual(guideFromSearch(new URL(shareGuideUrl('yichang')).search), { cityId: 'yichang' });
   assert.equal(guideFromSearch('?place=__proto__&guide=constructor'), undefined);
   const sortIds = ['wudang', 'hubei-museum', 'enshi', 'wuhan'];
@@ -157,7 +191,7 @@ try {
   assert.equal(estimateBudget({ ...skipped, arrival: 'afternoon' }, 2).nights, 1, 'An afternoon arrival is inside the trip, not an extra prior night.');
   assert.equal(estimateBudget({ ...skipped, arrival: 'previous-night' }, 2).nights, 2, 'A requested prior-night arrival reserves the extra night.');
   assert(formatDetailedPlan(skipped).includes('提前一晚抵达'));
-  console.log(JSON.stringify({ result: 'passed', cities: cities.length, destinations: destinations.length, featured: featuredDestinations.length, routeDays: dayCount, photos: imageCredits.length, checks: 'coverage, references, route depth, search, saved filters, custom days, family/duration filters, 17-city practical coverage, cross-city transfers, budget arithmetic, safe sharing roundtrip, invalid dates/inputs, immutability, photos' }, null, 2));
+  console.log(JSON.stringify({ result: 'passed', cities: cities.length, destinations: destinations.length, featured: featuredDestinations.length, routeDays: dayCount, attractionRoutes: added.length, photos: imageCredits.length, checks: 'coverage, references, timed attraction routes, search, saved filters, custom days, family/duration filters, 17-city practical coverage, cross-city transfers, budget arithmetic, safe sharing roundtrip, invalid dates/inputs, immutability, photos' }, null, 2));
 } finally {
   await server.close();
 }

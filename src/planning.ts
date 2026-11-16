@@ -3,6 +3,7 @@ import { practical } from './data/practical';
 import { railwayEntrySource, returnWalks, type ReturnSource } from './data/return-mornings';
 import { routeDetails, type RouteEffort } from './data/route-details';
 import { dayJourneys } from './data/day-journeys';
+import { attractionRouteAt, availableTripDays } from './data/attraction-routes';
 import { clockWindow, formatClock, manualTravelBuffer, normalizeClockInput, normalizeReturnLogistics, normalizeStation, parseClock, returnAreaLabel, returnBreakfastMinutes, returnBreakfastStart, type DepartureWindow, type ReturnLogistics, type StationSchedule } from './return-timing';
 import { renderScheduleText } from './day-schedule';
 import { chapterKey, normalizeDayStarts, type DayStarts } from './day-starts';
@@ -55,7 +56,8 @@ export function normalizeProfile(value: unknown, fallback = defaultProfile()): P
   const v = value as Partial<Profile>;
   const cityId = typeof v.cityId === 'string' && Object.hasOwn(cityById, v.cityId) ? v.cityId : fallback.cityId;
   const template = templates.find(t => t.id === v.template);
-  const indices = Array.isArray(v.indices) ? [...new Set(v.indices.filter(index => Number.isInteger(index) && index >= 0 && index < cityById[cityId].days.length))].sort((a, b) => a - b) : fallback.indices;
+  const chapterCount = availableTripDays(cityById[cityId]).length;
+  const indices = Array.isArray(v.indices) ? [...new Set(v.indices.filter(index => Number.isInteger(index) && index >= 0 && index < chapterCount))].sort((a, b) => a - b) : fallback.indices;
   const party = Number.isInteger(v.party) && v.party! >= 1 && v.party! <= 6 ? v.party! : fallback.party;
   const group = v.group && Object.hasOwn(groupLabels, v.group) ? v.group : fallback.group;
   const optional: Partial<Profile> = {};
@@ -111,6 +113,12 @@ export function recommendConstrainedDays(cityId: string, count: number, interest
 }
 
 function addMeals(day: PlannedDay, profile: Profile) {
+  const attraction = attractionRouteAt(cityById[day.cityId], day.originalIndex);
+  if (attraction) {
+    const { breakfast, lunch, dinner } = attraction.detail;
+    Object.assign(day, { breakfast, lunch, dinner });
+    return;
+  }
   const meta = routeDetails[day.cityId][day.originalIndex];
   const fragments = day.meal.split(/[，；。]/).map(text => text.trim()).filter(Boolean);
   const forMeal = (pattern: RegExp) => fragments.filter(text => pattern.test(text) && !/港饼|麻糖|桂花糕|锅盔|茶点|小吃|伴手礼|米酒/.test(text)).join('；');
@@ -302,12 +310,14 @@ export function buildTrip(profile: Profile): PlannedDay[] {
   const result: PlannedDay[] = [];
   segments.forEach((segment, segmentIndex) => {
     const city = cityById[segment.cityId];
-    const indices = [...new Set(segment.indices)].filter(index => index >= 0 && index < city.days.length).sort((a, b) => a - b);
-    const days = selectPlanDays(city, indices, profile.pace);
+    const chapters = availableTripDays(city);
+    const indices = [...new Set(segment.indices)].filter(index => Number.isInteger(index) && index >= 0 && index < chapters.length).sort((a, b) => a - b);
+    const days = selectPlanDays({ ...city, days: chapters }, indices, profile.pace);
     days.forEach((day, localIndex) => {
       const originalIndex = indices[localIndex];
-      const meta = routeDetails[city.id][originalIndex];
-      const journey = dayJourneys[city.id][originalIndex];
+      const attraction = attractionRouteAt(city, originalIndex);
+      const meta = attraction?.detail ?? routeDetails[city.id][originalIndex];
+      const journey = attraction?.journey ?? dayJourneys[city.id][originalIndex];
       const current: PlannedDay = { ...day, cityId: city.id, originalIndex, overnight: journey.night, region: meta.region, effort: meta.effort, title: `${city.shortName} · ${day.title}` };
       if (segmentIndex > 0 && localIndex === 0) {
         const from = cityById[segments[segmentIndex - 1].cityId].shortName;
@@ -324,7 +334,7 @@ export function buildTrip(profile: Profile): PlannedDay[] {
   result.forEach((day, index) => {
     const next = result[index + 1];
     const returnNext = next && index === result.length - 2 && profile.departure && profile.departure !== 'flexible';
-    if (day.cityId === 'xianning') {
+    if (day.cityId === 'xianning' && day.originalIndex < cityById.xianning.days.length) {
       day.overnight = day.originalIndex === 0 || (day.originalIndex === 1 && (next?.originalIndex !== 2 || returnNext)) ? '赤壁城区' : '咸宁温泉城区';
       if (day.originalIndex === 1 && !returnNext && next?.cityId === day.cityId && next.originalIndex === 2) day.stops[2] = { ...day.stops[2], title: '按已确认交通移宿咸宁温泉片区', detail: '次日在咸宁城区安排温泉与休息，今晚从赤壁按已确认交通前往咸宁住宿，避免次日再往返；先落实车辆、入住和晚间供餐。' };
     }
@@ -381,7 +391,9 @@ export function getTripIssues(profile: Profile): string[] {
   const high = days.filter(day => day.effort === 'high');
   if (profile.mobility === 'gentle' && high.length) issues.push(`这份路线仍包含高强度山地章节：${high.map(day => day.title).join('、')}；不满足减少高强度山地的条件，请换章节或改用单城路线。`);
   if (profile.mobility === 'gentle') issues.push('低强度与常规步行是编辑分类，仍可能有台阶、坡道和长距离步行；不代表已核实无障碍或全程可用推车。');
-  const natureChapter = (day: PlannedDay) => ['nature', 'water'].includes(practical[day.cityId].kinds[day.originalIndex]);
+  const natureChapter = (day: PlannedDay) => ['nature', 'water'].includes(
+    attractionRouteAt(cityById[day.cityId], day.originalIndex)?.kind ?? practical[day.cityId].kinds[day.originalIndex],
+  );
   if (profile.interest === 'nature' && days.length && !days.some((day, index) => !day.sightseeingRemoved && natureChapter(day) &&
     !updated?.schedules[index].mainVisitSkipped) && !updated?.applied.some(item => item.change.to && natureChapter(days[item.fromDay]))) {
     issues.push('现有已选章节没有对应的山水自然主线，玩法偏好尚未充分满足；可换城市或调整章节，不把文化或温泉章节当成已安排的山地游。');

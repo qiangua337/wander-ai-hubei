@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { ArrowRight, Bookmark, Check, MapPin, Route, Sparkles, Trash2 } from 'lucide-react';
 import { cities, cityById, cityPhotos } from '../data';
+import { availableTripDays } from '../data/attraction-routes';
 import { displayPhoto } from '../data/photos';
 import { arrivalLabels, departureLabels, getTripTimingConflict, mobilityLabels, budgetLabels, buildTrip, defaultProfile, estimateBudget, groupLabels, interestLabels, normalizeProfile, recommendDays, recommendConstrainedDays, templates, tripTitle, validDate, type Profile } from '../planning';
 import { clockWindow, normalizeClockInput, normalizeStation, parseClock } from '../return-timing';
@@ -57,6 +58,8 @@ export function Planner({ initialCity, initialDate, travelers, initialProfile, i
   const result = useRef<HTMLDivElement>(null);
   const settings = useRef<HTMLDivElement>(null);
   const city = cityById[profile.cityId], selectedTemplate = templates.find(template => template.id === profile.template);
+  const chapters = availableTripDays(city);
+  const supplemental = profile.indices.filter(index => index >= city.days.length && index < chapters.length);
   const days = buildTrip(profile), budget = estimateBudget(profile, days.length);
   const routeCities = [...new Set(days.map(day => day.cityId))];
   const timingConflict = getTripTimingConflict(profile);
@@ -108,7 +111,9 @@ export function Planner({ initialCity, initialDate, travelers, initialProfile, i
   };
   const updateChapters = (patch: Partial<Profile>, count = profile.indices.length || 2) => {
     const next = { ...profile, ...patch };
-    const indices = recommendConstrainedDays(next.cityId, count, next.interest, next.mobility);
+    const retained = next.cityId === city.id ? supplemental.slice(0, count) : [];
+    const remaining = count - retained.length;
+    const indices = [...(remaining > 0 ? recommendConstrainedDays(next.cityId, remaining, next.interest, next.mobility) : []), ...retained];
     update({ ...patch, indices });
     if (indices.length < count) setFeedback(`现有符合体力条件的章节只有 ${indices.length} 天，原 ${count} 天条件未满足。请确认天数或换一座城市。`);
   };
@@ -188,7 +193,7 @@ export function Planner({ initialCity, initialDate, travelers, initialProfile, i
             <label className="planner-field">路线方式<SelectField aria-label="路线模板" value={profile.template} onChange={event => update({ template: event.target.value })}><option value="custom">自选一座城市</option>{templates.map(template => <option value={template.id} key={template.id}>{template.label} · {template.title}</option>)}</SelectField></label>
             {!selectedTemplate && <div className="planner-field-pair">
               <label className="planner-field">目的地<SelectField aria-label="行程城市" value={profile.cityId} onChange={event => { const id = event.target.value; updateChapters({ cityId: id }, Math.min(profile.indices.length || 2, cityById[id].days.length)); }}>{cities.map(item => <option value={item.id} key={item.id}>{item.shortName}</option>)}</SelectField></label>
-              <label className="planner-field">计划天数<SelectField aria-label="计划天数" value={profile.indices.length} onChange={event => updateChapters({}, Number(event.target.value))}>{!profile.indices.length && <option value={0}>先选一天</option>}{city.days.map((_, i) => <option key={i} value={i + 1}>{i + 1} 天</option>)}</SelectField></label>
+              <label className="planner-field">计划天数<SelectField aria-label="计划天数" value={profile.indices.length} onChange={event => updateChapters({}, Number(event.target.value))}>{!profile.indices.length && <option value={0}>先选一天</option>}{chapters.slice(0, city.days.length + supplemental.length).map((_, i) => <option key={i} value={i + 1}>{i + 1} 天</option>)}</SelectField></label>
             </div>}
             <label className="planner-field">出发日期<span className="planner-field-hint">还没确定，可以先留空</span><InputField aria-label="行程出发日期" value={profile.date} placeholder="年-月-日" pattern="[0-9]{4}-[0-9]{2}-[0-9]{2}" maxLength={10} onChange={event => update({ date: event.target.value })} /></label>
             <label className="planner-field">出发城市<InputField aria-label="规划出发城市" value={profile.origin || ''} maxLength={24} onChange={event => update({ origin: event.target.value })} placeholder="出发地与游玩城市分别填写" /></label>
@@ -228,7 +233,7 @@ export function Planner({ initialCity, initialDate, travelers, initialProfile, i
             <label className="planner-field">旅行节奏<SelectField aria-label="旅行节奏" value={profile.pace} onChange={event => update({ pace: event.target.value as Profile['pace'] })}><option value="classic">经典串游 · 保留上午和下午</option><option value="relaxed">轻松慢游 · 下午活动可选</option></SelectField></label>
             <div className="planner-field-pair"><label className="planner-field">目标预算（元，可留空）<InputField aria-label="规划目标预算" inputMode="numeric" value={profile.budgetLimit || ''} onChange={event => { const value = event.target.value; if (!value || /^\d{1,7}$/.test(value)) update({ budgetLimit: value ? Number(value) : undefined, budgetScope: value ? profile.budgetScope || 'total' : undefined }); }} placeholder="用于与规划预留比较" /></label><label className="planner-field">预算口径<SelectField aria-label="规划预算口径" value={profile.budgetScope || 'total'} onChange={event => update({ budgetScope: event.target.value as Profile['budgetScope'] })}><option value="total">全团合计</option><option value="per-person">每人</option></SelectField></label></div>
             <details className="planner-fine-tune"><summary>自选章节与补充想法</summary><div>
-              {!selectedTemplate && <fieldset><legend>自选想走的章节</legend>{city.days.map((day, index) => <label key={day.title} className="planner-chapter"><input type="checkbox" checked={profile.indices.includes(index)} onChange={() => update({ indices: profile.indices.includes(index) ? profile.indices.filter(i => i !== index) : [...profile.indices, index].sort((a, b) => a - b) })} /><span>{day.title}</span></label>)}</fieldset>}
+              {!selectedTemplate && <fieldset><legend>自选想走的章节</legend>{chapters.map((day, index) => <label key={day.title} className="planner-chapter"><input type="checkbox" checked={profile.indices.includes(index)} onChange={() => update({ indices: profile.indices.includes(index) ? profile.indices.filter(i => i !== index) : [...profile.indices, index].sort((a, b) => a - b) })} /><span>{day.title}</span></label>)}</fieldset>}
               <label className="planner-field">我的补充想法<textarea aria-label="行程备注" maxLength={500} value={profile.note} onChange={event => update({ note: event.target.value })} placeholder="例如：午后休息、不吃辣、希望听讲解…" /><span className="planner-small-note">备注随清单保留，当前不自动识别或预约。</span></label>
             </div></details>
           </fieldset>
