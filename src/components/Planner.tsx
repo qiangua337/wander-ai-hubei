@@ -1,5 +1,5 @@
-import { useEffect, useRef, useState } from 'react';
-import { ArrowRight, Bookmark, Check, MapPin, Route, Sparkles, Trash2 } from 'lucide-react';
+import { useEffect, useId, useRef, useState } from 'react';
+import { ArrowRight, Bookmark, Check, ChevronDown, MapPin, Route, Sparkles, Trash2 } from 'lucide-react';
 import { cities, cityById, cityPhotos } from '../data';
 import { availableTripDays } from '../data/attraction-routes';
 import { displayPhoto } from '../data/photos';
@@ -7,12 +7,12 @@ import { arrivalLabels, departureLabels, getTripTimingConflict, mobilityLabels, 
 import { clockWindow, normalizeClockInput, normalizeStation, parseClock } from '../return-timing';
 import { changeVisit, type VisitChange } from '../visit-changes';
 import { buildTripSchedules, preservesVisitChanges } from '../visit-scheduling';
-import { Modal } from './Modal';
+import { Modal, type ModalBack } from './Modal';
 import { PlannedTrip } from './PlannedTrip';
 import { Button, SelectField, InputField } from './ui';
 import './planning-ui.css';
 
-type SavedPlan = { id: string; profile: Profile };
+type SavedPlan = { id: string; profile: Profile; activeDay: number };
 const draftKey = 'wander-draft-v2';
 
 function readDraft(fallback: Profile) {
@@ -30,15 +30,19 @@ function readDraft(fallback: Profile) {
 function readPlans(): SavedPlan[] {
   try {
     const value = JSON.parse(localStorage.getItem('wander-plans-v2') || '[]');
-    return Array.isArray(value) ? value.filter(item => item && typeof item.id === 'string' && item.profile).slice(0, 5).map(item => ({ id: item.id, profile: normalizeProfile(item.profile) })) : [];
+    return Array.isArray(value) ? value.filter(item => item && typeof item.id === 'string' && item.profile).slice(0, 5).map(item => {
+      const profile = normalizeProfile(item.profile);
+      const activeDay = Number.isInteger(item.activeDay) ? Math.max(0, Math.min(item.activeDay, buildTrip(profile).length - 1)) : 0;
+      return { id: item.id, profile, activeDay };
+    }) : [];
   } catch { return []; }
 }
 function StepHeading({ number, title }: { number: string; title: string }) {
   return <div className="planner-step-heading"><span>{number}</span><h4>{title}</h4></div>;
 }
-export function Planner({ initialCity, initialDate, travelers, initialProfile, initialDayIndex = 0, onClose, onCopy }: {
+export function Planner({ initialCity, initialDate, travelers, initialProfile, initialDayIndex = 0, onClose, onCopy, back }: {
   initialCity: string; initialDate: string; travelers: string; initialProfile?: Profile; initialDayIndex?: number;
-  onClose: () => void; onCopy: (text: string) => void;
+  onClose: () => void; onCopy: (text: string) => void; back?: ModalBack;
 }) {
   const [opening] = useState(() => {
     const fallback = defaultProfile(initialCity, initialDate, Number(travelers));
@@ -57,6 +61,8 @@ export function Planner({ initialCity, initialDate, travelers, initialProfile, i
   const [feedback, setFeedback] = useState(opening.conflict || '');
   const result = useRef<HTMLDivElement>(null);
   const settings = useRef<HTMLDivElement>(null);
+  const savedPanel = useRef<HTMLDetailsElement>(null);
+  const savedId = useId();
   const city = cityById[profile.cityId], selectedTemplate = templates.find(template => template.id === profile.template);
   const chapters = availableTripDays(city);
   const supplemental = profile.indices.filter(index => index >= city.days.length && index < chapters.length);
@@ -118,13 +124,14 @@ export function Planner({ initialCity, initialDate, travelers, initialProfile, i
     if (indices.length < count) setFeedback(`现有符合体力条件的章节只有 ${indices.length} 天，原 ${count} 天条件未满足。请确认天数或换一座城市。`);
   };
   const storePlans = (next: SavedPlan[]) => { setSavedPlans(next); try { localStorage.setItem('wander-plans-v2', JSON.stringify(next)); return true; } catch { return false; } };
-  const restorePlan = (saved: Profile) => {
-    const conflict = getTripTimingConflict(saved);
+  const restorePlan = (saved: SavedPlan) => {
+    const conflict = getTripTimingConflict(saved.profile);
     setWriteDraft(true);
-    setProfile(saved);
-    setActiveDay(0);
-    setReady(!conflict && buildTrip(saved).length > 0);
+    setProfile(saved.profile);
+    setActiveDay(saved.activeDay);
+    setReady(!conflict && buildTrip(saved.profile).length > 0);
     setFeedback(conflict || '已恢复保存的旅行方案。');
+    if (savedPanel.current) savedPanel.current.open = false;
     if (!conflict) focusResult();
   };
   const updateDay = (next: Profile, dayIndex: number, kind: 'return' | 'start' | 'visit') => {
@@ -156,19 +163,36 @@ export function Planner({ initialCity, initialDate, travelers, initialProfile, i
     updateDay(next, dayIndex, 'visit');
   };
   const savePlan = () => {
-    const success = storePlans([{ id: String(Date.now()), profile }, ...savedPlans.filter(plan => JSON.stringify(plan.profile) !== JSON.stringify(profile))].slice(0, 5));
+    const success = storePlans([{ id: String(Date.now()), profile, activeDay }, ...savedPlans.filter(plan => JSON.stringify(plan.profile) !== JSON.stringify(profile))].slice(0, 5));
     if (success) setWriteDraft(true);
     setFeedback(success ? '已保存到这个浏览器的「我的行程」，最多保留 5 份。' : '当前浏览器无法持久保存，可下载完整行程清单。');
     return success;
   };
-  return <Modal title="旅行规划室" onClose={onClose} wide sheet dialogClassName="planner-dialog">
-    <div className="planner-flow" aria-label="规划流程">
-      <span className={!ready ? 'is-current' : ''}><i>1</i> 选择路线</span><span><i>2</i> 调整偏好</span><span className={ready ? 'is-current' : ''}><i>3</i> 带走清单</span>
-    </div>
+  const openSaved = () => {
+    const panel = savedPanel.current;
+    if (!panel) return;
+    panel.open = true;
+    panel.scrollIntoView({ block: 'start', behavior: 'instant' });
+    panel.querySelector('summary')?.focus({ preventScroll: true });
+  };
+  return <Modal title="旅行规划室" onClose={onClose} back={back} wide sheet dialogClassName="planner-dialog"
+    headerAction={<button type="button" className="planner-open-saved" aria-controls={savedId} onClick={openSaved}><Bookmark size={15} aria-hidden="true" />已保存 {savedPlans.length}</button>}>
+    <details ref={savedPanel} id={savedId} className="planner-saved">
+      <summary><Bookmark size={16} aria-hidden="true" />已保存的行程<span>{savedPlans.length} / 5</span><ChevronDown size={16} aria-hidden="true" /></summary>
+      <div>{savedPlans.map(plan => <article key={plan.id}>
+        <button type="button" onClick={() => restorePlan(plan)}><strong>{tripTitle(plan.profile)}</strong><span>{plan.profile.date || '日期待定'} · {plan.profile.party} 人 · 从第 {plan.activeDay + 1} 天继续</span></button>
+        <button type="button" aria-label={'删除' + tripTitle(plan.profile)} onClick={() => {
+          const ok = storePlans(savedPlans.filter(item => item.id !== plan.id));
+          setFeedback(ok ? '已从本浏览器移除这份行程。' : '已在本次会话移除，浏览器存储未更新。');
+          savedPanel.current?.querySelector('summary')?.focus({ preventScroll: true });
+        }}><Trash2 size={16} aria-hidden="true" /></button>
+      </article>)}
+      {!savedPlans.length && <p>保存一份方案，下次可以从正在看的那一天继续。</p>}</div>
+    </details>
     {feedback && <p role="status" className="planner-feedback">{feedback}</p>}
     <div className={'planner-workspace ' + (ready ? 'is-ready' : '')}>
       <div ref={settings} tabIndex={-1} className="planner-settings">
-        <div className="planner-setting-intro"><p>旅程，从你的想法开始</p><h3>几步，安排一段湖北时光。</h3><span>选路线、定节奏，把每天的吃住行连起来。</span></div>
+        <div className="planner-setting-intro"><h3>旅行条件</h3><span>调整天数、抵达和返程，再查看每天的具体安排。</span></div>
         <form className="planner-form" onSubmit={event => {
           event.preventDefault();
           if (!days.length) return;
@@ -239,7 +263,6 @@ export function Planner({ initialCity, initialDate, travelers, initialProfile, i
           </fieldset>
           <div className="planner-submit"><p><strong>{days.length} 天 · {profile.party} 人</strong><span>{budgetLabels[profile.budget]} · {profile.pace === 'relaxed' ? '轻松慢游' : '经典串游'}</span></p><Button type="submit" className="w-full" disabled={!days.length}><Sparkles size={16} />{ready ? '重新整理行程' : '整理 ' + days.length + ' 天完整方案'}<ArrowRight size={16} /></Button><span>依据编辑路线组合，无需注册。预约、车船与房价请另核对。</span></div>
         </form>
-        <details className="planner-saved"><summary><Bookmark size={15} />我的行程 <span>{savedPlans.length} / 5</span></summary><p>保存在当前浏览器。分享链接不包含自由备注。</p><div>{savedPlans.map(plan => <article key={plan.id}><button onClick={() => restorePlan(plan.profile)}><strong>{tripTitle(plan.profile)}</strong><span>{plan.profile.date || '日期待定'} · {plan.profile.party} 人</span></button><button aria-label={'删除' + tripTitle(plan.profile)} onClick={() => { const ok = storePlans(savedPlans.filter(item => item.id !== plan.id)); setFeedback(ok ? '已从本浏览器移除这份行程。' : '已在本次会话移除，浏览器存储未更新。'); }}><Trash2 size={15} /></button></article>)}{!savedPlans.length && <p>喜欢的方案可以存下来，下次接着安排。</p>}</div></details>
       </div>
       <div ref={result} tabIndex={-1} aria-label="整理好的行程" className="planner-result">
         {ready ? <PlannedTrip key={JSON.stringify(profile)} profile={profile} onCopy={onCopy} onSave={savePlan} onEdit={edit}

@@ -1,9 +1,4 @@
 /* The planning workspace uses the site's existing color and type tokens. */
-.planner-flow { display: flex; justify-content: center; gap: 20px; padding: 14px 20px; border-bottom: 1px solid var(--color-line); background: var(--color-sand); }
-.planner-flow > span { display: flex; align-items: center; gap: 8px; color: var(--color-muted); font-size: 12px; }
-.planner-flow i { display: inline-flex; width: 22px; height: 22px; align-items: center; justify-content: center; border: 1px solid var(--color-line); border-radius: 50%; font-style: normal; font-size: 11px; background: white; }
-.planner-flow > .is-current { color: var(--color-pine); font-weight: 600; }
-.planner-flow > .is-current i { border-color: var(--color-pine); color: white; background: var(--color-pine); }
 .planner-feedback { margin: 0; padding: 12px 24px; background: var(--color-sage); color: var(--color-pine); font-size: 13px; line-height: 1.8; }
 .planner-dialog { background: var(--surface); }
 .planner-workspace { display: grid; grid-template-columns: 360px minmax(0,1fr); align-items: start; background: var(--surface); }
@@ -46,15 +41,19 @@
 .planner-submit > p > span, .planner-submit > span { color: var(--color-muted); }
 .planner-submit > button { min-height: 48px; }
 .planner-submit > span { display: block; margin-top: 10px; font-size: 12px; line-height: 1.8; }
-.planner-saved { margin-top: 26px; padding-top: 20px; border-top: 1px solid var(--color-line); }
-.planner-saved > summary { display: flex; align-items: center; gap: 8px; cursor: pointer; color: var(--color-pine); font-size: 13px; font-weight: 500; }
-.planner-saved > summary > span { margin-left: auto; color: var(--color-muted); font-size: 12px; }
-.planner-saved > p, .planner-saved > div > p { margin-top: 12px; color: var(--color-muted); font-size: 12px; line-height: 1.8; }
-.planner-saved article { display: flex; align-items: start; gap: 6px; margin-top: 12px; border: 1px solid var(--color-line); border-radius: 8px; padding: 10px; background: white; }
-.planner-saved article > button:first-child { flex: 1; min-width: 0; text-align: left; font-size: 12px; line-height: 1.8; }
-.planner-saved article strong { display: block; font-weight: 500; }
-.planner-saved article span { display: block; margin-top: 4px; color: var(--color-muted); }
-.planner-saved article > button:last-child { display: flex; min-width: 36px; min-height: 36px; align-items: center; justify-content: center; color: var(--color-muted); }
+.planner-saved { scroll-margin-top:80px; border-bottom:1px solid var(--color-line); background:#f9ede3; }
+.planner-saved > summary { display:flex; align-items:center; gap:8px; min-height:44px; padding:7px clamp(14px,3vw,26px); cursor:pointer; color:var(--color-pine-deep); font-size:14px; font-weight:620; }
+.planner-saved > summary:focus-visible { outline-offset:-3px; }
+.planner-saved > summary > span { margin-left:auto; color:var(--color-muted); font-size:12px; }
+.planner-saved[open] > summary > svg:last-child { transform:rotate(180deg); }
+.planner-saved > div { display:grid; grid-template-columns:repeat(auto-fit,minmax(min(100%,223px),1fr)); gap:8px; padding:0 clamp(14px,3vw,26px) 13px; }
+.planner-saved > div > p { color:var(--color-muted); font-size:14px; }
+.planner-saved article { display:flex; align-items:center; gap:4px; min-width:0; border:1px solid #e3cabe; border-radius:6px; padding:4px 7px; background:var(--surface); }
+.planner-saved article > button:first-child { flex:1; min-width:0; min-height:50px; padding:4px; text-align:left; font-size:14px; line-height:1.55; }
+.planner-saved article strong { display:block; font-weight:650; }
+.planner-saved article span { display:block; margin-top:3px; color:var(--color-muted); font-size:12px; }
+.planner-saved article > button:last-child { display:grid; width:38px; min-height:42px; flex:none; place-items:center; color:var(--color-muted); }
+.planner-saved article > button:hover { color:var(--color-pine-deep); }
 .planner-result { min-width: 0; background: var(--surface); outline: none; scroll-margin-top: 77px; }
 .planner-preview { min-width: 0; }
 .planner-preview > figure { position: relative; height: 260px; overflow: hidden; background: var(--color-sage); }
@@ -166,9 +165,6 @@
   .planner-preview > figure { height: 230px; }
 }
 @media (max-width:639px) {
-  .planner-flow { gap: 12px; padding: 12px 10px; }
-  .planner-flow > span { gap: 5px; font-size: 12px; }
-  .planner-flow i { width: 20px; height: 20px; font-size: 11px; }
   .planner-settings { padding: 22px 20px; }
   .planner-setting-intro h3 { font-size: 25px; }
   .planner-form { display: block; }
@@ -194,8 +190,6 @@
   .trip-takeaway { padding: 12px; }
 }
 @media (max-width:359px) {
-  .planner-flow { gap: 8px; }
-  .planner-flow i { display: none; }
   .planner-settings { padding-inline: 16px; }
   .planner-field-pair { gap: 8px; }
   .planner-field input, .planner-field select { font-size: 12px; }

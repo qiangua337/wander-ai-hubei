@@ -116,11 +116,53 @@
 .route-atlas .route-preview-days button[aria-pressed="true"] { border-color: #8c332e; }
 .route-atlas .route-preview-day h4 { color: var(--atlas-ink); font-size: clamp(19px, 2vw, 24px); }
 .route-atlas .route-preview-start { margin-block: 5px 9px; font-size: 13px; }
+.route-schedule-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 2px 10px;
+  margin-block: 2px 6px;
+}
+.route-atlas .route-schedule-toolbar .route-preview-start { margin-block: 3px; }
+.route-schedule-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 44px;
+  padding-inline: 9px;
+  border-radius: 5px;
+  background: #f2e2d6;
+  color: var(--atlas-ink);
+  font-size: 13px;
+  font-weight: 620;
+}
+.route-schedule-toggle:hover { background: #ead3c4; }
+.route-schedule-toggle[aria-expanded="true"] svg { transform: rotate(180deg); }
 .route-atlas .route-preview-stops li { padding-block: 7px; border-color: #e5cec0; }
 .route-atlas .route-preview-stops strong { color: #382921; font-size: 14px; }
 .route-atlas .route-preview-stops small { display: block; margin-top: 2px; overflow: visible; font-size: 12px; }
 .route-atlas .route-preview-duration { color: #6d554b; font-size: 12px; }
 .route-optional { margin-inline-start: 6px; color: var(--atlas-accent); font-size: 11px; }
+.route-preview-stops.is-complete .is-move { background: #f6e8dd; }
+.route-schedule-kind {
+  display: inline-block;
+  margin-inline-end: 6px;
+  color: #684e41;
+  font-size: 11px;
+  font-weight: 650;
+}
+.is-move .route-schedule-kind { color: var(--atlas-accent); }
+.route-schedule-note {
+  display: grid;
+  gap: 4px;
+  margin-top: 4px;
+  padding-block: 7px 2px;
+  border-top: 1px solid var(--atlas-edge);
+  color: #684e41;
+  font-size: 12px;
+  line-height: 1.6;
+}
 
 .route-preview-ending {
   display: grid;
@@ -201,4 +243,5 @@
   .route-atlas .route-preview-content { padding: 13px; }
   .route-preview-ending { grid-template-columns: 1fr; }
   .route-preview-actions { display: grid; grid-template-columns: minmax(0, 1fr); }
+  .route-schedule-toolbar { justify-content: flex-start; }
 }

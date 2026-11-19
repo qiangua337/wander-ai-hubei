@@ -2,7 +2,7 @@ import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState } fro
 import { createPortal } from 'react-dom';
 import { ArrowUp, ArrowRight, ArrowUpRight, Bookmark, Check, ChevronDown, Clock3, Heart, LayoutGrid, Link2, List, Menu, MessageCircle, Route, Search, X } from 'lucide-react';
 import { Brand, Button, InputField, SelectField } from './components/ui';
-import { Modal } from './components/Modal';
+import { Modal, type ModalBack } from './components/Modal';
 import { DestinationCard } from './components/DestinationCard';
 import { CityDirectory } from './components/CityDirectory';
 import { HomeHero } from './components/HomeHero';
@@ -13,6 +13,7 @@ import { TravelFaq } from './components/TravelFaq';
 import { JourneyInvitation } from './components/TravelStories';
 import { ExploreSummary } from './components/ExploreSummary';
 import { CatalogueCityHeader, CatalogueSharePanel, RecentlyViewed } from './components/CatalogueHighlights';
+import type { GuideView } from './components/TravelGuide';
 import { readBrowseShare, recentPlaceIds, shareBrowseUrl } from './browse-share';
 import type { SupportAction } from './support';
 import { guideFromSearch, sortDestinations, type DestinationSort } from './discovery';
@@ -28,9 +29,12 @@ const Planner = lazy(() => import('./components/Planner').then(module => ({ defa
 const Wishlist = lazy(() => import('./components/Wishlist').then(module => ({ default: module.Wishlist })));
 const SupportDesk = lazy(() => import('./components/SupportDesk').then(module => ({ default: module.SupportDesk })));
 
-type ModalState = { type: 'guide'; cityId: string; placeId?: string; tab?: 'practical'; previousPlaceId?: string }
-  | { type: 'planner'; profile?: Profile; dayIndex?: number }
-  | { type: 'wishlist' } | { type: 'support'; openForm?: boolean; days?: number; cityId?: string } | { type: 'credits' }
+type SupportModal = { type: 'support'; openForm?: boolean; days?: number; cityId?: string };
+type WishlistModal = { type: 'wishlist'; returnTo?: SupportModal };
+type GuideModal = { type: 'guide'; cityId: string; placeId?: string; tab?: 'practical'; previousPlaceId?: string;
+  view?: GuideView; returnTo?: SupportModal | WishlistModal };
+type ReturnTarget = GuideModal | SupportModal | WishlistModal;
+type ModalState = ReturnTarget | { type: 'planner'; profile?: Profile; dayIndex?: number; returnTo?: ReturnTarget } | { type: 'credits' }
   | { type: 'catalogue-share'; link: string } | { type: 'info'; title: string; body: string } | null;
 const mainNav = [['popular', '热门去处'], ['routes', '经典路线'], ['destinations', '目的地'], ['culture', '荆楚文化'], ['travel-life', '吃住指南']] as const;
 const filters: { key: Filter; label: string }[] = [{ key: 'all', label: '全部' }, { key: 'nature', label: '山水自然' }, { key: 'city', label: '古城文博' }, { key: 'family', label: '亲子研学' }, { key: 'saved', label: '已收藏' }];
@@ -90,6 +94,11 @@ export default function App() {
   const resultsHeading = useRef<HTMLHeadingElement>(null);
   const listingStart = useRef<HTMLDivElement>(null);
   const closeModal = useCallback(() => setModal(null), []);
+  const modalBack = (returnTo?: ReturnTarget): ModalBack | undefined => {
+    if (!returnTo) return;
+    const label = { support: '返回小游', wishlist: '返回收藏', guide: '返回攻略' }[returnTo.type];
+    return { label, onClick: () => setModal(returnTo) };
+  };
   useEffect(() => { try { localStorage.setItem('wander-saved', JSON.stringify(saved)); } catch { /* Favorites remain available in this session. */ } }, [saved]);
   const viewingPlace = modal?.type === 'guide' ? modal.placeId : undefined;
   useEffect(() => { try { localStorage.setItem('wander-recent-places', JSON.stringify(recentPlaces)); } catch { /* History remains available in this session. */ } }, [recentPlaces]);
@@ -140,9 +149,9 @@ export default function App() {
     setModal({ type: 'support', openForm, days, cityId });
   };
   const openPlace = (place: Destination) => setModal({ type: 'guide', cityId: place.cityId, placeId: place.id });
-  const openRelatedPlace = (place: Destination) => {
-    const previousPlaceId = modal?.type === 'guide' && modal.cityId === place.cityId && modal.placeId !== place.id ? modal.placeId : undefined;
-    setModal({ type: 'guide', cityId: place.cityId, placeId: place.id, previousPlaceId });
+  const openRelatedPlace = (place: Destination, guide: GuideModal) => {
+    const previousPlaceId = guide.cityId === place.cityId && guide.placeId !== place.id ? guide.placeId : undefined;
+    setModal({ type: 'guide', cityId: place.cityId, placeId: place.id, previousPlaceId, returnTo: guide.returnTo });
   };
   const toggleSave = (place: Destination) => {
     const wasSaved = saved.includes(place.id);
@@ -151,22 +160,27 @@ export default function App() {
   };
   const chooseCity = (id: string) => { setActiveCity(id); setSelection(id); setLimit(12); };
   const reset = () => { chooseCity('all'); setKeyword(''); setFilter('all'); setDuration('any'); setOrder('recommended'); };
-  const revealDestinations = (id: string, term = '', category: Filter = 'all') => {
+  const revealDestinations = (id: string, term = '', category: Filter = 'all', resultFirst = false) => {
     chooseCity(id); setKeyword(term); setFilter(category); setDuration('any'); setOrder('recommended');
     setCatalogueView('places');
-    window.requestAnimationFrame(scrollToCities);
+    window.requestAnimationFrame(() => {
+      if (resultFirst && window.matchMedia('(max-width:767px)').matches && listingStart.current) {
+        listingStart.current.focus({ preventScroll: true });
+        listingStart.current.scrollIntoView({ block: 'start' });
+      } else scrollToCities();
+    });
   };
   const showSaved = () => { setModal({ type: 'wishlist' }); setMobileMenu(false); };
-  const planCity = (id: string) => setModal({ type: 'planner', profile: defaultProfile(id, date, Number(travelers)) });
-  const showTemplate = (id: string, dayIndex?: number) => {
+  const planCity = (id: string, returnTo?: ReturnTarget) => setModal({ type: 'planner', profile: defaultProfile(id, date, Number(travelers)), returnTo });
+  const showTemplate = (id: string, dayIndex?: number, returnTo?: ReturnTarget) => {
     const template = templates.find(item => item.id === id);
-    if (template) setModal({ type: 'planner', profile: { ...defaultProfile(template.cityId, date, Number(travelers)), template: id }, dayIndex });
+    if (template) setModal({ type: 'planner', profile: { ...defaultProfile(template.cityId, date, Number(travelers)), template: id }, dayIndex, returnTo });
   };
   const exploreMode = (mode: 'nature' | 'city' | 'family' | 'food') => {
     if (mode === 'food') { document.getElementById('travel-life')?.scrollIntoView({ block: 'start' }); return; }
     revealDestinations(selection, '', mode);
   };
-  const search = (term: string) => revealDestinations(selection, term);
+  const search = (term: string) => revealDestinations(selection, term, 'all', Boolean(term));
   const showCatalogueShare = () => {
     if (catalogueView === 'places' && filter === 'saved') return;
     const link = shareBrowseUrl({ city: activeCity, filter: filter === 'saved' ? 'all' : filter, duration, keyword, order, view: catalogueView });
@@ -174,14 +188,18 @@ export default function App() {
   };
   const showInfo = (title: string, body: string) => setModal({ type: 'info', title, body });
   const supportAction = (action: SupportAction) => {
-    if (action.kind === 'plan' && action.profile) { setModal({ type: 'planner', profile: normalizeProfile(action.profile), dayIndex: action.dayIndex }); return; }
-    if (action.kind === 'wishlist') { showSaved(); return; }
+    const returnTo: SupportModal = { type: 'support' };
+    if (action.kind === 'plan' && action.profile) { setModal({ type: 'planner', profile: normalizeProfile(action.profile), dayIndex: action.dayIndex, returnTo }); return; }
+    if (action.kind === 'wishlist') { setModal({ type: 'wishlist', returnTo }); return; }
     if (action.kind === 'explore') { closeModal(); revealDestinations('all'); return; }
-    if (action.kind === 'template' && action.templateId) { showTemplate(action.templateId); return; }
-    if (action.kind === 'place' && action.placeId && Object.hasOwn(destinationById, action.placeId)) { openPlace(destinationById[action.placeId]); return; }
+    if (action.kind === 'template' && action.templateId) { showTemplate(action.templateId, undefined, returnTo); return; }
+    if (action.kind === 'place' && action.placeId && Object.hasOwn(destinationById, action.placeId)) {
+      setModal({ type: 'guide', cityId: destinationById[action.placeId].cityId, placeId: action.placeId, returnTo });
+      return;
+    }
     if (action.cityId && Object.hasOwn(cityById, action.cityId)) {
-      if (action.kind === 'plan') planCity(action.cityId);
-      else if (action.kind === 'city') setModal({ type: 'guide', cityId: action.cityId, tab: action.tab });
+      if (action.kind === 'plan') planCity(action.cityId, returnTo);
+      else if (action.kind === 'city') setModal({ type: 'guide', cityId: action.cityId, tab: action.tab, returnTo });
     }
   };
   const copyPlan = async (text: string) => {
@@ -270,7 +288,7 @@ export default function App() {
             </div>
             <div className="catalogue-main-column">
               {activeGuide && <CatalogueCityHeader city={activeGuide} onGuide={() => setModal({ type: 'guide', cityId: activeCity })} onPlan={() => planCity(activeCity)} />}
-              <div ref={listingStart} className="catalogue-results-start" aria-hidden="true" />
+              <div ref={listingStart} className="catalogue-results-start" tabIndex={-1} role="group" aria-label="景点搜索结果" />
               <ExploreSummary cityId={activeCity} count={visible.length} order={order} onOrder={value => { setOrder(value); setLimit(12); }} onChangeCity={id => {
                 chooseCity(id);
                 window.requestAnimationFrame(() => listingStart.current?.scrollIntoView({ block: 'start' }));
@@ -304,7 +322,7 @@ export default function App() {
       <div className="footer-legal"><p>© 2026 Wander AI · 寻游湖北</p><div><button onClick={() => showInfo('隐私说明', '最近浏览、目的地收藏、规划草稿和已保存行程保存在当前浏览器，可删除或清理网站数据。目录分享只包含公开筛选条件。行程分享包含所选旅行设置与日期，不包含自由备注。小游依据站内资料在本页匹配，不上传问题。对话保留在当前页面，刷新后清空。')}>隐私说明</button><a href="#top">返回顶部<ArrowUp size={13} /></a></div></div>
     </div></footer>
 
-    <div className="travel-tools">
+    <div className={'travel-tools' + (showQuickNav ? ' is-docked' : '')}>
       {showQuickNav && <a href="#top" aria-label="返回顶部" className="back-to-top"><ArrowUp size={18} /></a>}
       <button type="button" className="support-launcher" onClick={() => showSupport()} aria-label="打开湖北旅行问答">
         <span className="support-launcher-icon"><MessageCircle size={24} aria-hidden="true" /></span>
@@ -312,7 +330,7 @@ export default function App() {
       </button>
     </div>
     <nav className="mobile-quicknav" aria-label="手机快捷导航">
-      <a href="#destinations" aria-current={activeSection === 'destinations' ? 'location' : undefined}><Search size={19} />找景点</a>
+      <a href="#destinations" onClick={() => setCatalogueView('places')} aria-current={activeSection === 'destinations' ? 'location' : undefined}><Search size={19} />找景点</a>
       <a href="#routes" aria-current={activeSection === 'routes' ? 'location' : undefined}><Route size={19} />经典路线</a>
       <button type="button" className="mobile-assistant-entry" onClick={() => showSupport()}><MessageCircle size={21} />小游助手</button>
       <button type="button" onClick={showPlanner}><Bookmark size={19} />我的行程</button>
@@ -323,21 +341,25 @@ export default function App() {
         initialParty={Number(travelers)} initialDate={date} onClose={closeModal} onAction={supportAction} />
     </Suspense>}
     {toast && createPortal(<div role="status" aria-live="polite" className="site-toast fixed left-1/2 z-[70] flex max-w-[92vw] -translate-x-1/2 items-center gap-2 rounded-2xl bg-ink px-5 py-3 text-xs leading-6 text-white shadow-xl"><Check size={16} className="shrink-0 text-seafoam" />{toast}</div>, document.body)}
-    {modal?.type === 'guide' && <Modal title={modal.placeId ? destinationById[modal.placeId].title : `${cityById[modal.cityId].shortName}旅行攻略`} onClose={closeModal} wide sheet dialogClassName="guide-dialog">
+    {modal?.type === 'guide' && <Modal title={modal.placeId ? destinationById[modal.placeId].title : `${cityById[modal.cityId].shortName}旅行攻略`} onClose={closeModal} back={modalBack(modal.returnTo)} wide sheet dialogClassName="guide-dialog">
       <Suspense fallback={<DialogLoading />}>
         <TravelGuide key={`${modal.cityId}-${modal.placeId || 'city'}-${modal.tab || 'overview'}`} city={cityById[modal.cityId]} place={modal.placeId ? destinationById[modal.placeId] : undefined} initialTab={modal.tab}
           previousPlace={modal.previousPlaceId ? destinationById[modal.previousPlaceId] : undefined}
-          onBackToPreviousPlace={modal.previousPlaceId ? () => openPlace(destinationById[modal.previousPlaceId!]) : undefined}
-          date={date} travelers={travelers} onCopy={copyPlan} onOpenPlace={openRelatedPlace} onPlan={profile => setModal({ type: 'planner', profile })}
+          onBackToPreviousPlace={modal.previousPlaceId ? () => setModal({ ...modal, placeId: modal.previousPlaceId, previousPlaceId: undefined, view: undefined }) : undefined}
+          initialView={modal.view} date={date} travelers={travelers} onCopy={copyPlan}
+          onOpenPlace={place => openRelatedPlace(place, modal)}
+          onPlan={(profile, view) => setModal({ type: 'planner', profile, returnTo: { ...modal, view } })}
           onExplore={() => { closeModal(); revealDestinations(modal.cityId); }} saved={modal.placeId ? saved.includes(modal.placeId) : undefined}
           onSave={modal.placeId ? () => toggleSave(destinationById[modal.placeId!]) : undefined} />
       </Suspense>
     </Modal>}
     {modal?.type === 'planner' && <Suspense fallback={<Modal title="我的行程" onClose={closeModal}><DialogLoading /></Modal>}>
-      <Planner initialCity={activeCity} initialDate={date} travelers={travelers} initialProfile={modal.profile} initialDayIndex={modal.dayIndex} onClose={closeModal} onCopy={copyPlan} />
+      <Planner initialCity={activeCity} initialDate={date} travelers={travelers} initialProfile={modal.profile} initialDayIndex={modal.dayIndex} onClose={closeModal} back={modalBack(modal.returnTo)} onCopy={copyPlan} />
     </Suspense>}
     {modal?.type === 'wishlist' && <Suspense fallback={<Modal title="我的收藏" onClose={closeModal}><DialogLoading /></Modal>}>
-      <Wishlist saved={saved} onClose={closeModal} onOpenPlace={openPlace} onRemove={toggleSave} onPlan={planCity} onExplore={() => { closeModal(); revealDestinations('all'); }} />
+      <Wishlist saved={saved} onClose={closeModal} back={modalBack(modal.returnTo)}
+        onOpenPlace={place => setModal({ type: 'guide', cityId: place.cityId, placeId: place.id, returnTo: modal })}
+        onRemove={toggleSave} onPlan={id => planCity(id, modal)} onExplore={() => { closeModal(); revealDestinations('all'); }} />
     </Suspense>}
     {modal?.type === 'credits' && <CreditsDialog onClose={closeModal} />}
     {modal?.type === 'catalogue-share' && <Modal title="分享湖北目的地目录" onClose={closeModal}><CatalogueSharePanel link={modal.link} /></Modal>}

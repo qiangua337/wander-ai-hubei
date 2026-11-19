@@ -1,4 +1,4 @@
-import { useId, useRef, useState } from 'react';
+import { useEffect, useId, useRef, useState } from 'react';
 import { ArrowLeft, ArrowRight, ArrowUpRight, BedDouble, CalendarClock, ClipboardCheck, Clock3, Copy, Download, Heart, MapPin, Route, Share2, TrainFront, Utensils } from 'lucide-react';
 import { cityPhotos, type CityGuide, type Destination } from '../data';
 import { availableTripDays } from '../data/attraction-routes';
@@ -20,6 +20,8 @@ const tabs = [
   { id: 'practical', label: '交通吃住' },
   { id: 'sources', label: '出行资料' },
 ] as const;
+type GuideTab = (typeof tabs)[number]['id'];
+export type GuideView = { tab: GuideTab; chapter: number; scrollTop?: number };
 const practicalSections = [
   { id: 'transport', label: '到达与接驳', icon: TrainFront },
   { id: 'stay', label: '住宿片区', icon: BedDouble },
@@ -28,18 +30,32 @@ const practicalSections = [
 ] as const;
 type PracticalSection = (typeof practicalSections)[number]['id'];
 
-export function TravelGuide({ city, place, date, travelers, onCopy, saved, onSave, onOpenPlace, onPlan, onExplore, initialTab = 'overview', previousPlace, onBackToPreviousPlace }: {
+export function TravelGuide({ city, place, date, travelers, onCopy, saved, onSave, onOpenPlace, onPlan, onExplore, initialTab = 'overview', initialView, previousPlace, onBackToPreviousPlace }: {
   city: CityGuide; place?: Destination; date: string; travelers: string; saved?: boolean;
   onCopy: (text: string) => void; onSave?: () => void; onOpenPlace: (place: Destination) => void;
-  onPlan: (profile: Profile) => void; onExplore: () => void; initialTab?: (typeof tabs)[number]['id'];
+  onPlan: (profile: Profile, view: GuideView) => void; onExplore: () => void; initialTab?: GuideTab; initialView?: GuideView;
   previousPlace?: Destination; onBackToPreviousPlace?: () => void;
 }) {
   const id = useId();
   const match = place && routeForPlace(place.id);
   const chapters = availableTripDays(city);
-  const [tab, setTab] = useState<(typeof tabs)[number]['id']>(initialTab);
-  const [chapter, setChapter] = useState(match?.chapter ?? 0);
+  const [tab, setTab] = useState<GuideTab>(() => initialView?.tab ?? initialTab);
+  const [chapter, setChapter] = useState(() => initialView && Number.isInteger(initialView.chapter) && chapters[initialView.chapter]
+    ? initialView.chapter : match?.chapter ?? 0);
   const body = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    if (!initialView) return;
+    // Modal sets its initial focus and resets its own scroll.
+    // Restore the reading position after that setup has completed.
+    const frame = window.requestAnimationFrame(() => {
+      const dialog = body.current?.closest<HTMLElement>('.guide-dialog');
+      if (typeof initialView.scrollTop === 'number' && Number.isFinite(initialView.scrollTop)) {
+        dialog?.scrollTo({ top: Math.max(0, initialView.scrollTop), behavior: 'instant' });
+      }
+      dialog?.querySelector<HTMLButtonElement>('.guide-plan-action')?.focus({ preventScroll: true });
+    });
+    return () => window.cancelAnimationFrame(frame);
+  }, [initialView]);
   const photo = cityPhotos[city.id];
   const image = displayPhoto(place ? place.image : photo?.filename && `/images/${photo.filename}`, true);
   const otherPlaces = placesByCity[city.id].filter(other => other.id !== place?.id);
@@ -47,7 +63,11 @@ export function TravelGuide({ city, place, date, travelers, onCopy, saved, onSav
   const alternatives = otherPlaces.filter(other => !related.includes(other));
   const sameTheme = place ? alternatives.filter(other => other.category === place.category) : [];
   const morePlaces = [...related, ...sameTheme, ...alternatives.filter(other => !sameTheme.includes(other))].slice(0, 3);
-  const chapterProfile = (index: number) => ({ ...defaultProfile(city.id, date, Number(travelers)), indices: [index] });
+  const chapterProfile = (index: number): Profile => ({
+    ...defaultProfile(city.id, date, Number(travelers)),
+    arrival: 'full-day',
+    indices: [index],
+  });
   const oneDay = chapterProfile(chapter);
   const day = buildTrip(oneDay)[0];
   const schedule = buildDaySchedule(day, oneDay, undefined, true);
@@ -58,9 +78,12 @@ export function TravelGuide({ city, place, date, travelers, onCopy, saved, onSav
   const meals = schedule.rows.filter(row => row.kind === 'meal');
   const stay = schedule.rows.find(row => row.kind === 'stay');
   const routeSources = [...new Map([...schedule.sources, ...city.sources].map(source => [source.url, source])).values()];
-  const generalPlan = () => onPlan(defaultProfile(city.id, date, Number(travelers)));
+  const openPlanner = (profile: Profile) => onPlan(profile, {
+    tab, chapter, scrollTop: body.current?.closest<HTMLElement>('.guide-dialog')?.scrollTop,
+  });
+  const generalPlan = () => openPlanner(defaultProfile(city.id, date, Number(travelers)));
   const useSelectedRoute = tab === 'route' || (match && tab !== 'overview' && chapter !== match.chapter);
-  const openPlan = () => onPlan(useSelectedRoute ? oneDay : chapterProfile(match?.chapter ?? chapter));
+  const openPlan = () => openPlanner(useSelectedRoute ? oneDay : chapterProfile(match?.chapter ?? chapter));
   const text = () => formatPlan(city, city.days, date, travelers);
   const showTab = (next: typeof tab, focus = false) => {
     setTab(next);

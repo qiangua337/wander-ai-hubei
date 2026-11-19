@@ -31,6 +31,7 @@ const routeOptions = templates.map(template => {
 export function RouteTemplates({ onChoose }: { onChoose: (templateId: string, dayIndex: number) => void }) {
   const prefix = useId();
   const [choice, setChoice] = useState({ templateIndex: 0, dayIndex: 0 });
+  const [showFullSchedule, setShowFullSchedule] = useState(false);
   const { template, profile, days, photo, photoCityId, image, lodging, transferDays, mountainDays } = routeOptions[choice.templateIndex];
   const { dayIndex } = choice;
   const day = days[dayIndex];
@@ -38,6 +39,7 @@ export function RouteTemplates({ onChoose }: { onChoose: (templateId: string, da
   const schedule = buildDaySchedule(day, profile, days[dayIndex - 1], lastDay);
   const firstLeg = schedule.rows.find(row => row.kind === 'move');
   const preview = schedule.rows.filter(row => row === firstLeg || row.kind === 'visit' || row.meal === '午餐').slice(0, 4);
+  const scheduleRows = showFullSchedule ? schedule.rows : preview;
   const dinner = schedule.rows.find(row => row.meal === '晚餐');
 
   return <section id="routes" aria-labelledby="routes-title" className="route-editorial route-atlas">
@@ -69,24 +71,39 @@ export function RouteTemplates({ onChoose }: { onChoose: (templateId: string, da
             <div className="route-preview-days" role="group" aria-label="预览路线的某一天">
               {days.map((item, index) => <button type="button" key={index} aria-pressed={index === dayIndex} aria-controls={prefix + '-day'} aria-label={`预览第 ${index + 1} 天 · ${cityById[item.cityId].shortName}`} onClick={() => setChoice(current => ({ ...current, dayIndex: index }))}>第 {index + 1} 天</button>)}
             </div>
-            <div id={prefix + '-day'} className="route-preview-day" aria-live="polite">
-              <h4>{day.transfer ? `${day.transfer} · 接驳日` : schedule.title || day.title}</h4>
-              <p className="route-preview-start"><Clock3 size={15} aria-hidden="true" /><strong>{schedule.start}</strong><span>{schedule.from}</span></p>
-              <ol className="route-preview-stops">
-                {preview.map(row => {
+            <div id={prefix + '-day'} className="route-preview-day">
+              <h4 aria-live="polite">{day.transfer ? `${day.transfer} · 接驳日` : schedule.title || day.title}</h4>
+              <div className="route-schedule-toolbar">
+                <p className="route-preview-start"><Clock3 size={15} aria-hidden="true" /><strong>{schedule.start}</strong><span>{schedule.from}</span></p>
+                <button type="button" className="route-schedule-toggle" aria-expanded={showFullSchedule} aria-controls={prefix + '-times'}
+                  onClick={() => setShowFullSchedule(open => !open)}>
+                  {showFullSchedule ? '收起完整时间表' : '展开完整时间表'}<ChevronDown size={15} aria-hidden="true" />
+                </button>
+              </div>
+              <ol id={prefix + '-times'} className={`route-preview-stops${showFullSchedule ? ' is-complete' : ''}`} aria-label={showFullSchedule ? '当天完整时间表' : '当天行程摘要'}>
+                {scheduleRows.map((row, index) => {
                   const duration = scheduleDuration(row);
-                  const detail = row.kind === 'move' || row.meal === '午餐' ? row.detail?.split('。')[0] : undefined;
-                  return <li key={row.title}>
-                    <span className="route-preview-time">{row.time ? <time dateTime={row.time}>{row.time}</time> : row.phase}</span>
-                    <span><strong>{row.title}</strong>{row.optional && <span className="route-optional">可选</span>}{detail && <small>{detail}</small>}</span>
+                  const detail = showFullSchedule ? row.detail : row.kind === 'move' || row.meal === '午餐' ? row.detail?.split('。')[0] : undefined;
+                  const label = row.meal || { move: '交通', visit: '游览', meal: '用餐', stay: '住宿' }[row.kind];
+                  return <li key={`${row.title}-${index}`} className={`route-schedule-row is-${row.kind}`}>
+                    <span className="route-preview-time">{row.time ? <time dateTime={row.time}>{row.time}{row.deadline ? ' 前' : ''}</time> : row.phase}</span>
+                    <span>
+                      {showFullSchedule && <span className="route-schedule-kind">{label}</span>}
+                      <strong>{row.title}</strong>{row.optional && <span className="route-optional">可选</span>}
+                      {detail && <small>{detail}</small>}
+                    </span>
                     {duration && <span className="route-preview-duration">{duration}</span>}
                   </li>;
                 })}
               </ol>
-              <div className="route-preview-ending">
+              {showFullSchedule && <p className="route-schedule-note">
+                {schedule.note && <span>{schedule.note}</span>}
+                <span>所列时间为规划预留。车船与景区接驳请按当天安排核对。{lastDay && '已确定返程时，可在规划中填写车次时间和上车站。'}</span>
+              </p>}
+              {!showFullSchedule && <div className="route-preview-ending">
                 {dinner && <p><Utensils size={16} aria-hidden="true" /><span><strong>{dinner.time ? `${dinner.time} · ` : ''}{dinner.title}</strong>{dinner.detail && <small>{dinner.detail}</small>}</span></p>}
                 <p className="route-preview-stay"><BedDouble size={17} aria-hidden="true" /><span>{lastDay ? '延住参考' : '这一晚住'} <strong>{day.overnight.split(/[；（]/, 1)[0]}</strong></span></p>
-              </div>
+              </div>}
             </div>
             <div className="route-preview-actions">
               <button type="button" className="route-preview-use" onClick={() => onChoose(template.id, dayIndex)}>按这条路线规划<ArrowRight size={17} aria-hidden="true" /></button>

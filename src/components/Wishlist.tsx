@@ -2,20 +2,21 @@ import { useId, useRef, useState } from 'react';
 import { ArrowDown, ArrowUpRight, Clock3, Heart, Landmark, MapPin, Mountain, Route, X } from 'lucide-react';
 import { cityById, destinationById, type Destination } from '../data';
 import { displayPhoto } from '../data/photos';
-import { Modal } from './Modal';
+import { Modal, type ModalBack } from './Modal';
 import { Button } from './ui';
 import './wishlist.css';
 
 type WishlistProps = {
   saved: string[];
   onClose: () => void;
+  back?: ModalBack;
   onOpenPlace: (place: Destination) => void;
   onRemove: (place: Destination) => void;
   onPlan: (cityId: string) => void;
   onExplore: () => void;
 };
 
-export function Wishlist({ saved, onClose, onOpenPlace, onRemove, onPlan, onExplore }: WishlistProps) {
+export function Wishlist({ saved, onClose, back, onOpenPlace, onRemove, onPlan, onExplore }: WishlistProps) {
   const prefix = useId();
   const root = useRef<HTMLDivElement>(null);
   const [feedback, setFeedback] = useState('');
@@ -27,7 +28,7 @@ export function Wishlist({ saved, onClose, onOpenPlace, onRemove, onPlan, onExpl
     window.requestAnimationFrame(() => root.current?.querySelector<HTMLButtonElement>('.wishlist-place-open, .wishlist-empty button')?.focus({ preventScroll: true }));
   };
 
-  return <Modal title="我的旅行心愿单" onClose={onClose} wide>
+  return <Modal title="我的旅行心愿单" onClose={onClose} back={back} wide>
     <div ref={root} className="wishlist-content">
       <div className="wishlist-intro"><div><p><Heart size={15} />把喜欢的地方，留给下一次出发</p><h3>从心动，走到出发。</h3><span>先按城市看看想去哪里，再安排合适的天数与节奏。</span></div><div className="wishlist-counts"><span><strong>{places.length}</strong> 个去处</span><span><strong>{cityIds.length}</strong> 座城市</span></div></div>
       <p role="status" aria-live="polite" className={'wishlist-feedback ' + (feedback ? 'has-message' : '')}>{feedback}</p>

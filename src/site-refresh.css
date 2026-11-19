@@ -88,6 +88,18 @@
 #faq .faq-questions p { font-size:14px; }
 .journey-invitation .invitation-shade { background:linear-gradient(95deg,#361e20ed,#4e2927b8 49%,#321d1b54); }
 
+.dialog-header.has-actions { display:grid; grid-template-columns:minmax(0,1fr) auto auto; gap:8px; }
+.dialog-header-actions { display:flex; align-items:center; gap:6px; }
+.dialog-header-actions button { display:inline-flex; align-items:center; justify-content:center; gap:5px; min-height:40px; padding:5px 8px; border:1px solid #ddc2b5; border-radius:5px; background:#fffaf4; color:var(--color-pine-deep); font-size:13px; font-weight:620; white-space:nowrap; }
+.dialog-header-actions button:hover { border-color:#b27667; background:#f6e4d9; }
+.dialog-header-actions button>svg { flex:none; }
+.catalogue-results-start:focus { outline:none; }
+.travel-tools.is-docked .support-launcher { min-height:46px; padding:5px 10px 5px 6px; gap:6px; border-radius:8px; }
+.travel-tools.is-docked .support-launcher-icon { width:31px; height:31px; }
+.travel-tools.is-docked .support-launcher-icon svg { width:18px; }
+.travel-tools.is-docked .support-launcher strong { font-size:13px; }
+.travel-tools.is-docked .support-launcher small { display:none; }
+
 @media (min-width:768px) {
   #destinations .city-index-grid { grid-template-columns:repeat(2,minmax(0,1fr)); }
   #destinations .city-index-group { grid-column:1 / -1; }
@@ -115,6 +127,11 @@
 @media (max-width:430px) {
   .life-more-options { grid-template-columns:1fr; }
   .culture-places strong { font-size:13px; }
+  .dialog-header.has-actions { gap:3px; padding-inline:10px; }
+  .dialog-header.has-actions>h2 { font-size:16px; line-height:1.45; overflow-wrap:anywhere; }
+  .dialog-header-actions { gap:3px; }
+  .dialog-header-actions button { gap:3px; min-height:40px; padding-inline:5px; font-size:12px; }
+  .dialog-header-actions button>svg { width:13px; }
 }
 @media (max-width:340px) {
   .catalogue-heading-actions .catalogue-views>button { padding-inline:4px; gap:3px; font-size:12px; }

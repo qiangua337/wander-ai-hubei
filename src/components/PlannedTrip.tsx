@@ -17,7 +17,7 @@ export function PlannedTrip({ profile, onCopy, onSave, onEdit, onUpdateReturn, o
   dayIndex: number; onChooseDay: (dayIndex: number) => void;
 }) {
   const [tab, setTab] = useState('route');
-  const [saveState, setSaveState] = useState('');
+  const [saveState, setSaveState] = useState<{ dayIndex: number; message: string }>();
   const [checked, setChecked] = useState<string[]>([]);
   const panel = useRef<HTMLDivElement>(null);
   const days = buildTrip(profile), budget = estimateBudget(profile, days.length), cityIds = [...new Set(days.map(day => day.cityId))];
@@ -50,7 +50,7 @@ export function PlannedTrip({ profile, onCopy, onSave, onEdit, onUpdateReturn, o
       {(profile.origin || profile.arrival || profile.mobility === 'gentle') && <p className="trip-summary-conditions">{profile.origin ? '从' + profile.origin + '出发 · ' : ''}{profile.arrival ? arrivalLabels[profile.arrival] + ' · ' : ''}{mobilityLabels[profile.mobility || 'standard']}</p>}
       <p className="trip-summary-conditions">{returnLabel}</p>
       {profile.budgetLimit && <p className="trip-summary-conditions">目标预算：{profile.budgetScope === 'per-person' ? '每人' : '全团'} ¥{profile.budgetLimit.toLocaleString()}，与本地规划预留比较。</p>}
-      <div className="trip-summary-actions"><button onClick={() => setSaveState(onSave() ? '已保存到当前浏览器' : '保存失败，请下载清单')}><Bookmark size={14} />{saveState || '存到我的行程'}</button><button onClick={onEdit}><Pencil size={14} />调整条件</button></div>
+      <div className="trip-summary-actions"><button onClick={() => setSaveState({ dayIndex, message: onSave() ? '已保存到当前浏览器' : '保存失败，请下载清单' })}><Bookmark size={14} />{saveState?.dayIndex === dayIndex ? saveState.message : '存到我的行程'}</button><button onClick={onEdit}><Pencil size={14} />调整条件</button></div>
       <div className="trip-summary-metrics"><span><strong>{days.length}</strong> 天行程</span><span><strong>{budget.nights}</strong> 晚住宿</span><span><strong>{cityIds.length}</strong> 座城市</span></div>
       <button className="trip-budget-preview" aria-label="查看预算明细" onClick={() => selectTab('budget')}><Wallet size={18} /><span>全团预算预留<strong>¥{budget.total[0].toLocaleString()}–{budget.total[1].toLocaleString()}</strong></span><span>看明细<ArrowUpRight size={14} /></span></button>
     </header>
