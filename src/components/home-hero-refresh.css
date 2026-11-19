@@ -1,0 +1,481 @@
+.hero-edition {
+  --cover-wine: #40181d;
+  --cover-ink: #2b1419;
+  --cover-paper: #fff9ee;
+  --cover-warm: #f3c9a9;
+  background: radial-gradient(ellipse at 18% 82%, #f2ddd2, transparent 55%), var(--color-cream);
+}
+
+.hero-edition .journey-cover {
+  background: linear-gradient(120deg, var(--cover-wine), var(--cover-ink));
+}
+
+.hero-edition .journey-landscape {
+  inset-inline-start: 27%;
+}
+
+.hero-edition .journey-landscape img {
+  object-position: 56% 58%;
+}
+
+.hero-edition .journey-cover::after {
+  background:
+    linear-gradient(90deg, #40181d 26%, #40181df0 33%, #40181d83 48%, #23141517 66%, transparent 87%),
+    linear-gradient(0deg, #1f151ad9, transparent 43%);
+}
+
+.hero-edition .journey-cover-content {
+  min-height: clamp(462px, 37vw, 555px);
+  padding-block: clamp(34px, 4vw, 68px) clamp(67px, 6vw, 91px);
+}
+
+.hero-edition .journey-cover-content::before {
+  inset: 20px -14px 48px;
+  border: 0;
+  border-top: 1px solid #f5ceb649;
+  border-right: 1px solid #f5ceb628;
+}
+
+.hero-edition .journey-kicker {
+  gap: 10px;
+  letter-spacing: .14em;
+}
+
+.hero-edition .journey-kicker::before {
+  width: 22px;
+  height: 1px;
+  background: #d7a58a;
+}
+
+.hero-edition .journey-intro h1 {
+  margin-top: 13px;
+  font-size: clamp(53px, 5.4vw, 84px);
+  line-height: 1.115;
+  letter-spacing: .008em;
+  text-shadow: 0 2px 18px #260e1855;
+}
+
+.hero-edition .journey-intro h1 span {
+  color: var(--cover-warm);
+}
+
+.hero-edition .journey-description {
+  max-width: 365px;
+  margin-top: 17px;
+  color: #ffede3;
+  line-height: 1.8;
+}
+
+.hero-edition .journey-cover-actions {
+  gap: 5px 11px;
+  margin-top: 22px;
+}
+
+.hero-edition .journey-start,
+.hero-edition .journey-routes {
+  min-height: 46px;
+  padding-inline: 14px;
+  border: 1px solid transparent;
+  border-radius: 5px;
+}
+
+.hero-edition .journey-start {
+  border-color: #ffdfc8;
+  background: var(--cover-paper);
+  color: #60292b;
+}
+
+.hero-edition .journey-start:hover {
+  background: #f6d5bf;
+}
+
+.hero-edition .journey-routes {
+  border-color: #ffefde57;
+  background: #31161d74;
+  color: #fff8f0;
+}
+
+.hero-edition .journey-routes:hover {
+  border-color: #ffe5cd8c;
+  background: #4c222a;
+}
+
+.hero-edition .journey-location {
+  bottom: 59px;
+  min-height: 48px;
+  gap: 8px;
+  padding-inline: 10px;
+  border-color: #fce5d35c;
+  border-radius: 5px;
+  background: #24191ad9;
+}
+
+.hero-edition .journey-location strong {
+  font-size: 13px;
+}
+
+.hero-edition .journey-location small {
+  font-size: 11px;
+}
+
+.hero-edition .journey-location:hover {
+  background: #47262a;
+}
+
+.hero-edition .journey-workbench {
+  grid-template-columns: minmax(0, 1fr) clamp(186px, 19vw, 259px);
+  align-items: stretch;
+  gap: 12px;
+  margin-top: -30px;
+  padding: 12px 14px;
+  border: 1px solid #e1c8bb;
+  border-radius: 9px;
+  background: #fffaf4;
+  box-shadow: 0 18px 44px #411d2020;
+}
+
+.hero-edition .journey-workbench-controls {
+  display: grid;
+  align-content: start;
+  gap: 8px;
+  min-width: 0;
+}
+
+.hero-edition .journey-modes {
+  gap: 16px;
+}
+
+.hero-edition .journey-modes > button {
+  min-height: 37px;
+  padding-inline: 4px;
+}
+
+.hero-edition .journey-field {
+  background: #faf4ed;
+}
+
+.hero-edition .journey-search-submit,
+.hero-edition .journey-field {
+  min-height: 58px;
+}
+
+.hero-edition .journey-hot-search {
+  gap: 0 7px;
+}
+
+.hero-edition .journey-hot-search button {
+  min-height: 32px;
+  padding-inline: 6px;
+}
+
+.hero-edition .journey-plan-note {
+  min-height: 32px;
+  margin: 0;
+  align-content: center;
+  color: var(--color-muted);
+  font-size: 12px;
+}
+
+.hero-edition .journey-ask {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: center;
+  align-content: center;
+  gap: 9px;
+  margin: 0;
+  padding: 12px;
+  border: 1px solid #834648;
+  border-radius: 6px 6px 6px 2px;
+  background: linear-gradient(145deg, #743536, #4e2229);
+  color: #fff9ee;
+  text-align: left;
+  white-space: normal;
+}
+
+.hero-edition .journey-ask:hover {
+  background: linear-gradient(145deg, #893f40, #5d272e);
+  color: white;
+}
+
+.hero-edition .journey-ask-icon {
+  display: grid;
+  width: 37px;
+  height: 37px;
+  place-items: center;
+  border: 1px solid #f3c9a96a;
+  border-radius: 50%;
+  background: #f3c9a917;
+}
+
+.hero-edition .journey-ask-label {
+  display: grid;
+  gap: 3px;
+  line-height: 1.4;
+}
+
+.hero-edition .journey-ask-label strong {
+  font-size: 18px;
+  font-weight: 650;
+}
+
+.hero-edition .journey-ask-label small {
+  color: #f6dbca;
+  font-size: 12px;
+  font-weight: 450;
+}
+
+.hero-edition .journey-ask-arrow {
+  color: var(--cover-warm);
+}
+
+.hero-edition .discovery-paths {
+  margin-top: 21px;
+  padding-bottom: 27px;
+}
+
+.hero-edition .discovery-paths h2 {
+  margin-bottom: 9px;
+}
+
+.hero-edition .discovery-grid {
+  gap: 11px;
+}
+
+.hero-edition .discovery-grid > button {
+  position: relative;
+  display: flex;
+  align-items: end;
+  justify-content: space-between;
+  gap: 8px;
+  isolation: isolate;
+  overflow: hidden;
+  min-height: clamp(96px, 9vw, 136px);
+  padding: 13px;
+  border: 1px solid #552e2b;
+  border-radius: 6px;
+  background: #53302e;
+  color: #fff7ec;
+}
+
+.hero-edition .discovery-grid > button::before {
+  position: absolute;
+  z-index: -1;
+  inset: 0;
+  background: linear-gradient(0deg, #26151bf2 0%, #27151ba8 40%, #29181c10 84%);
+  content: "";
+}
+
+.hero-edition .discovery-grid > button:hover {
+  border-color: #95514a;
+}
+
+.hero-edition .discovery-grid > button:focus-visible {
+  outline-offset: 3px;
+}
+
+.hero-edition .discovery-grid img {
+  position: absolute;
+  z-index: -2;
+  inset: 0;
+  display: block;
+  height: 100%;
+  border-radius: 0;
+  object-fit: cover;
+  object-position: 50% 55%;
+  transition: transform .28s ease-out;
+}
+
+.hero-edition .discovery-grid > button:hover img {
+  transform: scale(1.04);
+}
+
+.hero-edition .discovery-grid > button:nth-child(4) img {
+  object-position: 50% 62%;
+}
+
+.hero-edition .discovery-grid strong {
+  font-size: 16px;
+  line-height: 1.35;
+}
+
+.hero-edition .discovery-grid small {
+  margin-top: 2px;
+  color: #ffeddf;
+  font-size: 12px;
+}
+
+.hero-edition .discovery-grid > button > svg {
+  display: block;
+  flex-shrink: 0;
+  color: #ffe4cf;
+}
+
+@media (max-width: 1050px) {
+  .hero-edition .journey-plan-mode {
+    grid-template-columns: minmax(0, 1.2fr) repeat(2, minmax(0, 1fr));
+  }
+
+  .hero-edition .journey-plan-mode .journey-search-submit {
+    grid-column: 1 / -1;
+    min-height: 42px;
+  }
+}
+
+@media (max-width: 767px) {
+  .hero-edition .journey-landscape {
+    inset-inline-start: 0;
+  }
+
+  .hero-edition .journey-landscape img {
+    object-position: 58% 55%;
+  }
+
+  .hero-edition .journey-cover::after {
+    background:
+      linear-gradient(90deg, #351720e8, #391b2395 55%, #21171732),
+      linear-gradient(0deg, #2b171fba, transparent 43%);
+  }
+
+  .hero-edition .journey-cover-content {
+    min-height: 352px;
+    padding-block: 27px 59px;
+  }
+
+  .hero-edition .journey-cover-content::before {
+    inset: 10px -5px 31px;
+  }
+
+  .hero-edition .journey-intro h1 {
+    margin-top: 8px;
+    font-size: clamp(41px, 10vw, 61px);
+  }
+
+  .hero-edition .journey-description {
+    max-width: min(92%, 290px);
+    margin-top: 12px;
+    font-size: 15px;
+    line-height: 1.65;
+  }
+
+  .hero-edition .journey-cover-actions {
+    gap: 5px 8px;
+    margin-top: 14px;
+  }
+
+  .hero-edition .journey-start,
+  .hero-edition .journey-routes {
+    min-height: 43px;
+    padding-inline: 9px;
+  }
+
+  .hero-edition .journey-location {
+    bottom: 27px;
+    min-height: 34px;
+    gap: 5px;
+    padding: 3px 7px;
+  }
+
+  .hero-edition .journey-location strong {
+    font-size: 11px;
+  }
+
+  .hero-edition .journey-location > svg {
+    width: 14px;
+  }
+
+  .hero-edition .journey-workbench {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 7px;
+    margin-top: -16px;
+    padding: 8px;
+  }
+
+  .hero-edition .journey-workbench-controls {
+    gap: 6px;
+  }
+
+  .hero-edition .journey-modes > button {
+    min-height: 39px;
+    font-size: 13px;
+  }
+
+  .hero-edition .journey-plan-mode {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .hero-edition .journey-search-submit,
+  .hero-edition .journey-field {
+    min-height: 49px;
+  }
+
+  .hero-edition .journey-hot-search button {
+    min-height: 33px;
+  }
+
+  .hero-edition .journey-ask {
+    min-height: 47px;
+    padding: 4px 8px;
+  }
+
+  .hero-edition .journey-ask-icon {
+    width: 30px;
+    height: 30px;
+  }
+
+  .hero-edition .journey-ask-label {
+    grid-template-columns: auto minmax(0, 1fr);
+    align-items: baseline;
+    gap: 0 7px;
+  }
+
+  .hero-edition .journey-ask-label strong {
+    font-size: 15px;
+    white-space: nowrap;
+  }
+
+  .hero-edition .journey-ask-label small {
+    font-size: 11px;
+  }
+
+  .hero-edition .discovery-paths {
+    margin-top: 14px;
+    padding-bottom: 18px;
+  }
+
+  .hero-edition .discovery-grid {
+    gap: 6px;
+  }
+
+  .hero-edition .discovery-grid > button {
+    min-height: 76px;
+    padding: 7px 8px;
+  }
+
+  .hero-edition .discovery-grid strong {
+    font-size: 14px;
+  }
+
+  .hero-edition .discovery-grid small {
+    font-size: 10px;
+  }
+
+  .hero-edition .discovery-grid > button > svg {
+    width: 13px;
+  }
+}
+
+@media (max-width: 350px) {
+  .hero-edition .journey-intro h1 {
+    font-size: 38px;
+  }
+
+  .hero-edition .journey-cover-content {
+    min-height: 329px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .hero-edition .discovery-grid img {
+    transition: none;
+  }
+}

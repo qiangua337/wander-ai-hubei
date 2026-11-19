@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { BedDouble, MapPin, TrainFront, Utensils } from 'lucide-react';
+import { ArrowDown, BedDouble, ChevronDown, MapPin, TrainFront, Utensils } from 'lucide-react';
 import { cityById, cityPhotos } from '../data';
 import { practical } from '../data/practical';
 import { displayPhoto, editorialPhotos } from '../data/photos';
@@ -14,8 +14,9 @@ export function TravelLife({ fallbackCity, onExplore, onPlan }: { fallbackCity: 
   const cityId = chosenCity || (Object.hasOwn(cityById, fallbackCity) ? fallbackCity : 'wuhan');
   const city = cityById[cityId];
   const photo = cityId === 'wuhan' ? editorialPhotos.noodles : cityPhotos[cityId];
-  const stay = practical[cityId].stays[0];
-  const food = practical[cityId].food[0];
+  const [stay, ...otherStays] = practical[cityId].stays;
+  const [food, ...otherFood] = practical[cityId].food;
+  const shopCount = localFoodShops[cityId]?.length || 0;
 
   return <section id="travel-life" aria-labelledby="life-title" className="life-section section-space">
     <div className="page-width">
@@ -29,7 +30,7 @@ export function TravelLife({ fallbackCity, onExplore, onPlan }: { fallbackCity: 
           {cityById[id].shortName}
         </button>)}
       </div>
-      <div role="region" aria-label={`${city.shortName}吃住交通`} className={'life-panel' + (photo?.filename ? ' has-photo' : '')}>
+      <div key={cityId} role="region" aria-label={`${city.shortName}吃住交通`} className={'life-panel' + (photo?.filename ? ' has-photo' : '')}>
         {photo?.filename && <figure className="life-photo"><img key={cityId} src={displayPhoto(`/images/${photo.filename}`)} alt={photo.alt || photo.subject} width="800" height="900" loading="lazy" decoding="async" /><figcaption><MapPin size={14} />{cityId === 'wuhan' ? photo.subject : `${city.shortName} · ${photo.subject}`}</figcaption></figure>}
         <div className="life-content">
           <div className="life-notes">
@@ -49,12 +50,24 @@ export function TravelLife({ fallbackCity, onExplore, onPlan }: { fallbackCity: 
               <PracticalMapLinks links={food.mapLinks} />
             </article>
           </div>
+          {(otherStays.length > 0 || otherFood.length > 0) && <div className="life-more-options">
+            {otherStays.length > 0 && <details>
+              <summary><BedDouble size={16} aria-hidden="true" /><span>比较其他住宿片区</span><small>{otherStays.length} 处</small><ChevronDown size={15} aria-hidden="true" /></summary>
+              <ul>{otherStays.map(option => <li key={option.area}><h4>{option.area}</h4><p>{option.bestFor}。{option.reason}</p><p>{option.check}</p><PracticalMapLinks links={option.mapLinks} /></li>)}</ul>
+            </details>}
+            {otherFood.length > 0 && <details>
+              <summary><Utensils size={15} aria-hidden="true" /><span>看看更多吃法和片区</span><small>{otherFood.length} 处</small><ChevronDown size={15} aria-hidden="true" /></summary>
+              <ul>{otherFood.map(option => <li key={option.area}><h4>{option.area}</h4><p>{option.order}</p><p>{option.timing}</p><PracticalMapLinks links={option.mapLinks} /></li>)}</ul>
+            </details>}
+          </div>}
           <div className="life-arrival"><TrainFront size={18} /><p><strong>怎么到、怎么走</strong>{city.arrival}</p></div>
-          <div className="life-actions"><Button onClick={() => onPlan(cityId)}>安排{city.shortName}吃住行</Button><Button variant="neutral" onClick={() => onExplore(cityId)}>继续探索{city.shortName}</Button></div>
+          <div className="life-actions"><Button onClick={() => onPlan(cityId)}>请小游排{city.shortName}行程</Button><Button variant="neutral" onClick={() => onExplore(cityId)}>继续探索{city.shortName}</Button>
+            {shopCount > 0 && <a href="#life-shop-list" className="life-shop-jump">看 {shopCount} 家具体店铺<ArrowDown size={15} aria-hidden="true" /></a>}
+          </div>
           <p className="life-footnote">片区与餐食为编辑建议；房价、供餐和交通接驳请在出发前确认。</p>
         </div>
       </div>
-      <LocalFoodShops key={cityId} cityId={cityId} />
+      {shopCount > 0 && <div id="life-shop-list"><LocalFoodShops key={cityId} cityId={cityId} /></div>}
     </div>
   </section>;
 }

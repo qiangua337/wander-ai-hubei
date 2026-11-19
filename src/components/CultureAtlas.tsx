@@ -1,7 +1,7 @@
 import { useId, useState } from 'react';
-import { ArrowUpRight, ExternalLink } from 'lucide-react';
+import { ArrowUpRight, BookOpen, ExternalLink } from 'lucide-react';
 import { culturalChapters } from '../data/editorial';
-import { destinationById } from '../data';
+import { cityById, destinationById } from '../data';
 import { displayPhoto } from '../data/photos';
 
 export function CultureAtlas({ onOpenPlace }: { onOpenPlace: (id: string) => void }) {
@@ -24,8 +24,16 @@ export function CultureAtlas({ onOpenPlace }: { onOpenPlace: (id: string) => voi
       <div className="culture-reading">
         <h3>{chapter.title}</h3><p className="culture-intro">{chapter.intro}</p>
         <ul>{chapter.points.map(point => <li key={point}>{point}</li>)}</ul>
-        <div className="culture-places">{chapter.placeIds.map(id => <button key={id} onClick={() => onOpenPlace(id)}>{destinationById[id].title}<ArrowUpRight size={15} strokeWidth={1.6} /></button>)}</div>
-        <p className="culture-reading-note">{chapter.reading}</p>
+        <div className="culture-field-notes">
+          <p className="culture-reading-note"><BookOpen size={17} aria-hidden="true" />{chapter.reading}</p>
+          <div className="culture-places">{chapter.placeIds.map(id => {
+            const place = destinationById[id];
+            return <button type="button" key={id} onClick={() => onOpenPlace(id)} aria-label={`查看${place.title}攻略`}>
+              <span><small>{cityById[place.cityId].shortName}</small><strong>{place.title}</strong></span>
+              <ArrowUpRight size={16} aria-hidden="true" />
+            </button>;
+          })}</div>
+        </div>
         <a className="culture-source" href={chapter.source.url} target="_blank" rel="noreferrer">{chapter.source.title}<ExternalLink size={12} /></a>
       </div>
     </div>

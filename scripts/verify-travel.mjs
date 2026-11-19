@@ -10,6 +10,7 @@ try {
   const { cities, cityById, destinations, featuredDestinations, imageCredits } = await server.ssrLoadModule('/src/data.ts');
   const { findDestinations, planDays, selectPlanDays, planDate, formatPlan } = await server.ssrLoadModule('/src/travel.ts');
   const { cityGroups, guideFromSearch, placesByCity, routeForPlace, shareGuideUrl, sortDestinations } = await server.ssrLoadModule('/src/discovery.ts');
+  const { readBrowseShare, recentPlaceIds, shareBrowseUrl } = await server.ssrLoadModule('/src/browse-share.ts');
   const { buildDaySchedule } = await server.ssrLoadModule('/src/day-schedule.ts');
   const { attractionRoutes, availableTripDays } = await server.ssrLoadModule('/src/data/attraction-routes.ts');
   const { practical } = await server.ssrLoadModule('/src/data/practical.ts');
@@ -54,6 +55,17 @@ try {
   assert.equal(findDestinations('all', '武汉 东湖', 'all', [])[0]?.id, 'east-lake');
   assert.deepEqual(cityGroups.flatMap(group => group.cities.map(city => city.id)).sort(), expectedCities);
   assert.deepEqual(Object.values(placesByCity).flat().map(place => place.id).sort(), destinations.map(place => place.id).sort());
+  const filters = { city: 'wuhan', filter: 'nature', duration: 'half', keyword: '东湖 & 湖边', order: 'duration', view: 'places' };
+  const browseLink = new URL(shareBrowseUrl({ ...filters, recent: ['enshi'], saved: ['tenglong'], travelers: '5' }));
+  assert.equal(browseLink.hash, '#destinations');
+  assert.deepEqual(readBrowseShare(browseLink.search), filters);
+  assert(!['recent', 'saved', 'travelers'].some(key => browseLink.searchParams.has(key)), 'Private fields must never enter catalogue links.');
+  assert.equal(readBrowseShare('?place=wuhan'), undefined, 'Existing place shares must not override catalogue browsing state.');
+  const invalid = readBrowseShare('?browse=1&city=toString&type=saved&duration=bad&order=bad');
+  assert.deepEqual(invalid, { city: 'all', filter: 'all', duration: 'any', keyword: '', order: 'recommended', view: 'places' });
+  const cityIndex = readBrowseShare(new URL(shareBrowseUrl({ ...filters, view: 'cities' })).search);
+  assert.deepEqual(cityIndex, { ...invalid, view: 'cities' });
+  assert.deepEqual(recentPlaceIds(['enshi', 'fake', 'enshi', 'toString', 'tenglong', null, 'wuhan', 'east-lake', 'xiling-gorge']), ['enshi', 'tenglong', 'wuhan', 'east-lake']);
   for (const place of destinations) {
     assert.deepEqual(guideFromSearch(new URL(shareGuideUrl(place.cityId, place.id)).search), { cityId: place.cityId, placeId: place.id });
     const match = routeForPlace(place.id);

@@ -1,7 +1,9 @@
 import { useId, useRef, useState } from 'react';
-import { ArrowRight, ArrowUpRight, Clock3, Copy, Download, Heart, MapPin, Route, Share2, TrainFront, Utensils } from 'lucide-react';
+import { ArrowLeft, ArrowRight, ArrowUpRight, BedDouble, CalendarClock, ClipboardCheck, Clock3, Copy, Download, Heart, MapPin, Route, Share2, TrainFront, Utensils } from 'lucide-react';
 import { cityPhotos, type CityGuide, type Destination } from '../data';
-import { attractionRouteAt, availableTripDays } from '../data/attraction-routes';
+import { availableTripDays } from '../data/attraction-routes';
+import { placeContexts } from '../data/editorial';
+import { localFoodShops } from '../data/food-shops';
 import { displayPhoto } from '../data/photos';
 import { placesByCity, routeForPlace, shareGuideUrl } from '../discovery';
 import { buildTrip, defaultProfile, formatDetailedPlan, type Profile } from '../planning';
@@ -18,16 +20,23 @@ const tabs = [
   { id: 'practical', label: '交通吃住' },
   { id: 'sources', label: '出行资料' },
 ] as const;
+const practicalSections = [
+  { id: 'transport', label: '到达与接驳', icon: TrainFront },
+  { id: 'stay', label: '住宿片区', icon: BedDouble },
+  { id: 'food', label: '地方菜', icon: Utensils },
+  { id: 'shops', label: '具体门店', icon: MapPin },
+] as const;
+type PracticalSection = (typeof practicalSections)[number]['id'];
 
-export function TravelGuide({ city, place, date, travelers, onCopy, saved, onSave, onOpenPlace, onPlan, onExplore, initialTab = 'overview' }: {
+export function TravelGuide({ city, place, date, travelers, onCopy, saved, onSave, onOpenPlace, onPlan, onExplore, initialTab = 'overview', previousPlace, onBackToPreviousPlace }: {
   city: CityGuide; place?: Destination; date: string; travelers: string; saved?: boolean;
   onCopy: (text: string) => void; onSave?: () => void; onOpenPlace: (place: Destination) => void;
   onPlan: (profile: Profile) => void; onExplore: () => void; initialTab?: (typeof tabs)[number]['id'];
+  previousPlace?: Destination; onBackToPreviousPlace?: () => void;
 }) {
   const id = useId();
   const match = place && routeForPlace(place.id);
   const chapters = availableTripDays(city);
-  const featuredRoute = match && attractionRouteAt(city, match.chapter);
   const [tab, setTab] = useState<(typeof tabs)[number]['id']>(initialTab);
   const [chapter, setChapter] = useState(match?.chapter ?? 0);
   const body = useRef<HTMLDivElement>(null);
@@ -35,12 +44,19 @@ export function TravelGuide({ city, place, date, travelers, onCopy, saved, onSav
   const image = displayPhoto(place ? place.image : photo?.filename && `/images/${photo.filename}`, true);
   const otherPlaces = placesByCity[city.id].filter(other => other.id !== place?.id);
   const related = match ? otherPlaces.filter(other => routeForPlace(other.id)?.chapter === match.chapter) : [];
-  const morePlaces = [...related, ...otherPlaces.filter(other => !related.includes(other))].slice(0, 3);
+  const alternatives = otherPlaces.filter(other => !related.includes(other));
+  const sameTheme = place ? alternatives.filter(other => other.category === place.category) : [];
+  const morePlaces = [...related, ...sameTheme, ...alternatives.filter(other => !sameTheme.includes(other))].slice(0, 3);
   const chapterProfile = (index: number) => ({ ...defaultProfile(city.id, date, Number(travelers)), indices: [index] });
   const oneDay = chapterProfile(chapter);
-  const attraction = attractionRouteAt(city, chapter);
   const day = buildTrip(oneDay)[0];
   const schedule = buildDaySchedule(day, oneDay, undefined, true);
+  const overviewChapter = match?.chapter ?? chapter;
+  const overviewProfile = overviewChapter === chapter ? oneDay : chapterProfile(overviewChapter);
+  const overviewSchedule = overviewChapter === chapter ? schedule : buildDaySchedule(buildTrip(overviewProfile)[0], overviewProfile, undefined, true);
+  const overviewVisits = overviewSchedule.rows.filter(row => row.kind === 'visit');
+  const meals = schedule.rows.filter(row => row.kind === 'meal');
+  const stay = schedule.rows.find(row => row.kind === 'stay');
   const routeSources = [...new Map([...schedule.sources, ...city.sources].map(source => [source.url, source])).values()];
   const generalPlan = () => onPlan(defaultProfile(city.id, date, Number(travelers)));
   const useSelectedRoute = tab === 'route' || (match && tab !== 'overview' && chapter !== match.chapter);
@@ -53,8 +69,23 @@ export function TravelGuide({ city, place, date, travelers, onCopy, saved, onSav
       if (focus) document.getElementById(`${id}-${next}`)?.focus({ preventScroll: true });
     });
   };
+  const showPlaceRoute = () => {
+    setChapter(overviewChapter);
+    showTab('route', true);
+  };
+  const goToPractical = (section: PracticalSection) => {
+    const target = section === 'shops' ? body.current?.querySelector<HTMLElement>('.local-food-shops')
+      : document.getElementById(`${id}-practical-${section}`);
+    if (!target) return;
+    target.tabIndex = -1;
+    target.focus({ preventScroll: true });
+    target.scrollIntoView({ block: 'start', behavior: 'instant' });
+  };
 
   return <div className="guide-content">
+    {previousPlace && onBackToPreviousPlace && <div className="guide-history">
+      <button type="button" onClick={onBackToPreviousPlace}><ArrowLeft size={16} aria-hidden="true" />返回{previousPlace.title}</button>
+    </div>}
     <div className={'guide-cover' + (image ? ' has-photo' : '')}>
       {image && <figure className="guide-photo">
         <img src={image} alt={place?.imageAlt || photo?.alt || place?.title || city.shortName} width="1040" height="520"
@@ -63,9 +94,13 @@ export function TravelGuide({ city, place, date, travelers, onCopy, saved, onSav
       </figure>}
       <div className="guide-overview-card">
         <p className="guide-location"><MapPin size={15} />{city.shortName}<span>{place?.tag || city.area}</span></p>
-        <h3>{place ? place.description.replace(/。$/, '') : city.tagline.replace(/。$/, '')}</h3>
-        <p className="guide-duration"><Clock3 size={16} />{place ? `建议游玩 ${place.duration}` : `${chapters.length} 条一日路线可选`}</p>
-        <button type="button" className="guide-share" onClick={() => onCopy(shareGuideUrl(city.id, place?.id))}><Share2 size={16} />分享攻略</button>
+        <h3>{place ? (placeContexts[place.id] || place.description).replace(/。$/, '') : city.tagline.replace(/。$/, '')}</h3>
+        <p className="guide-duration"><Clock3 size={16} aria-hidden="true" />{place ? `建议游玩 ${place.duration}` : `${chapters.length} 条一日路线可选`}</p>
+        <div className="guide-cover-tools">
+          <button type="button" onClick={showPlaceRoute}><CalendarClock size={16} aria-hidden="true" />看时间表</button>
+          <button type="button" onClick={() => showTab('practical', true)}><TrainFront size={16} aria-hidden="true" />交通吃住</button>
+          <button type="button" className="guide-share" onClick={() => onCopy(shareGuideUrl(city.id, place?.id))}><Share2 size={16} aria-hidden="true" />分享攻略</button>
+        </div>
       </div>
     </div>
     <div className="guide-tabs" role="tablist" aria-label="攻略内容">
@@ -79,13 +114,13 @@ export function TravelGuide({ city, place, date, travelers, onCopy, saved, onSav
     <div ref={body} id={`${id}-panel`} role="tabpanel" aria-labelledby={`${id}-${tab}`} className="guide-body">
       {tab === 'overview' && <>
         <div className="guide-read">
-          <section>
+          <section className="guide-read-story">
             <h3>{place ? '这里看什么' : `认识${city.shortName}`}</h3>
             <p>{place?.overview || city.intro}</p>
             {place && <ul className="guide-text-list">{place.highlights.map(item => <li key={item}>{item}</li>)}</ul>}
           </section>
           <aside>
-            <h3>出发前核对</h3>
+            <h3><ClipboardCheck size={19} aria-hidden="true" />出发前核对</h3>
             <ul className="guide-text-list">{(place?.tips || city.tips).map(item => <li key={item}>{item}</li>)}</ul>
             <button className="text-link" type="button" onClick={() => showTab('sources', true)}>查看官方资料<ArrowUpRight size={15} /></button>
           </aside>
@@ -94,16 +129,28 @@ export function TravelGuide({ city, place, date, travelers, onCopy, saved, onSav
           <span className="guide-route-icon"><Route size={22} strokeWidth={1.7} /></span>
           <div><h3>{match ? chapters[match.chapter].title : `${city.shortName}逐日路线`}</h3>
             <p>{match ? `这一日安排了「${match.visit}」。` : '按日查景点先后、接驳、餐食和住宿片区。'}</p>
-            {featuredRoute && <p className="guide-route-start">{featuredRoute.journey.start} 从{featuredRoute.journey.base}出发</p>}
+            <p className="guide-route-start"><Clock3 size={14} aria-hidden="true" />{overviewSchedule.start} · {overviewSchedule.from}</p>
+            {overviewVisits.length > 0 && <p className="guide-route-visits">{overviewVisits.map(row => row.title).join(' → ')}</p>}
           </div>
-          <button type="button" onClick={() => { if (match) setChapter(match.chapter); showTab('route', true); }}>看时间表<ArrowRight size={16} /></button>
+          <button type="button" onClick={showPlaceRoute}>看时间表<ArrowRight size={16} aria-hidden="true" /></button>
         </section>
         {morePlaces.length > 0 && <section className="guide-related">
-          <h3>同城去处</h3>
-          <ul>{morePlaces.map(other => <li key={other.id}><button type="button" onClick={() => onOpenPlace(other)}>
-            <strong>{other.title}</strong><span>{other.tag} · {other.duration}</span><ArrowUpRight size={16} />
-          </button></li>)}</ul>
-          <button type="button" className="text-link" onClick={onExplore}>浏览{city.shortName}全部景点<ArrowRight size={16} /></button>
+          <div className="guide-related-heading">
+            <h3>{related.length > 0 ? '同日路线与其他去处' : `继续逛${city.shortName}`}</h3>
+            <button type="button" className="text-link" onClick={onExplore}>看全部景点<ArrowRight size={16} aria-hidden="true" /></button>
+          </div>
+          <ul>{morePlaces.map(other => {
+            const thumbnail = displayPhoto(other.image);
+            return <li key={other.id}><button type="button" className={thumbnail ? 'has-thumbnail' : ''} onClick={() => onOpenPlace(other)}>
+              {thumbnail && <img src={thumbnail} alt="" width="140" height="140" loading="lazy" decoding="async" style={other.imagePosition ? { objectPosition: other.imagePosition } : undefined} />}
+              <span className="guide-related-copy">
+                <span className="guide-related-fit">{related.includes(other) ? '已在同日路线' : place ? '同城另选' : other.tag}</span>
+                <strong>{other.title}</strong>
+                <small>{place && `${other.tag} · `}{other.duration}</small>
+              </span>
+              <ArrowUpRight size={16} aria-hidden="true" />
+            </button></li>;
+          })}</ul>
         </section>}
       </>}
       {tab === 'route' && <section aria-label="按日浏览参考路线" className={'guide-route' + (chapters.length > 4 ? ' has-many-chapters' : '')}>
@@ -117,19 +164,23 @@ export function TravelGuide({ city, place, date, travelers, onCopy, saved, onSav
         <TripSchedule days={[day]} profile={oneDay} />
       </section>}
       {tab === 'practical' && <section className="guide-practical" aria-label="交通吃住">
-        {attraction && <section className="guide-practical-intro guide-route-practical">
-          <h3><MapPin size={18} />这条路线的吃住与接驳</h3>
+        <nav className="guide-practical-links" aria-label="快速查看吃住交通">
+          {practicalSections.filter(item => item.id !== 'shops' || localFoodShops[city.id]?.length).map(({ id, label, icon: Icon }) =>
+            <button key={id} type="button" onClick={() => goToPractical(id)}><Icon size={17} aria-hidden="true" />{label}</button>)}
+        </nav>
+        <section className="guide-practical-intro guide-route-practical">
+          <div className="guide-practical-heading"><div><h3><Route size={18} aria-hidden="true" />按当前一日路线安排</h3><p>{chapters[chapter].title}</p></div>
+            <button type="button" className="text-link" onClick={() => showTab('route', true)}>看时间表<ArrowRight size={15} aria-hidden="true" /></button>
+          </div>
           <dl>
-            <div><dt>出发</dt><dd>{attraction.journey.start} 从{attraction.journey.base}出发。{attraction.day.transport}</dd></div>
-            <div><dt>早餐</dt><dd>{attraction.detail.breakfast}</dd></div>
-            <div><dt>午餐</dt><dd>{attraction.detail.lunch}</dd></div>
-            <div><dt>晚餐</dt><dd>{attraction.detail.dinner}</dd></div>
-            <div><dt>住宿</dt><dd><strong>{attraction.journey.night}</strong>。{attraction.journey.lodgingNote}</dd></div>
+            <div><dt>出发</dt><dd><strong>{schedule.start} · {schedule.from}</strong><p>{day.transport}</p></dd></div>
+            {meals.map((row, index) => <div key={`${row.meal}-${index}`}><dt>{row.meal}{row.time && <time dateTime={row.time}>{row.time}</time>}</dt><dd><strong>{row.title}</strong>{row.detail && <p>{row.detail}</p>}</dd></div>)}
+            {stay && <div><dt>延住</dt><dd><strong>{stay.title}</strong>{stay.detail && <p>{stay.detail}</p>}</dd></div>}
           </dl>
-        </section>}
-        <div className="guide-practical-intro"><h3><TrainFront size={18} />怎么到{city.shortName}</h3><p>{city.arrival}</p><p>{city.season}</p></div>
-        <StaySuggestions city={city} />
-        <FoodSuggestions city={city} />
+        </section>
+        <section id={`${id}-practical-transport`} className="guide-practical-intro guide-practical-target"><h3><TrainFront size={18} aria-hidden="true" />怎么到{city.shortName}</h3><p>{city.arrival}</p><p>{city.season}</p></section>
+        <div id={`${id}-practical-stay`} className="guide-practical-target"><StaySuggestions city={city} /></div>
+        <div id={`${id}-practical-food`} className="guide-practical-target guide-practical-food"><FoodSuggestions city={city} /></div>
         <p className="guide-note"><Utensils size={15} />地方风味与住宿片区按实际行程选择。可到规划里查看顺路餐食。</p>
       </section>}
       {tab === 'sources' && <section className="guide-sources" aria-label="出行资料">
