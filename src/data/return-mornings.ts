@@ -16,6 +16,10 @@ export type ReturnWalk = {
 export const railwayEntrySource: ReturnSource = {
   title: '铁路 12306 · 进出站与候车', url: 'https://kyfw.12306.cn/otn/gonggao/enterAndExit.html',
 };
+export const wuchangStationTransitSource: ReturnSource = {
+  title: '武汉市交通运输局 · 昙华林周边公交与地铁',
+  url: 'https://jtj.wuhan.gov.cn/zwgk/zfxxgkml/qtzdgk/jytabl/202010/t20201020_1468914.shtml',
+};
 
 // These are short outdoor visits in the overnight area. Station buffers are planning allowances,
 // including local waiting and transfers, rather than measured journey times.

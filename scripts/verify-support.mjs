@@ -8,12 +8,24 @@ try {
   const { cities, cityById, destinations, destinationById } = await server.ssrLoadModule('/src/data.ts');
   const { practical } = await server.ssrLoadModule('/src/data/practical.ts');
   const { findFoodShops, localFoodShops } = await server.ssrLoadModule('/src/data/food-shops.ts');
+  const { dayJourneys, hankouFromWuchang } = await server.ssrLoadModule('/src/data/day-journeys.ts');
+  const { attractionRoutes } = await server.ssrLoadModule('/src/data/attraction-routes.ts');
+  const { returnWalks, railwayEntrySource, wuchangStationTransitSource } = await server.ssrLoadModule('/src/data/return-mornings.ts');
+  const { moveVisits, shortWalks } = await server.ssrLoadModule('/src/data/visit-alternatives.ts');
+  const { buildTripSchedules } = await server.ssrLoadModule('/src/visit-scheduling.ts');
   const { templates, buildTrip, estimateBudget, normalizeProfile, recommendDays } = await server.ssrLoadModule('/src/planning.ts');
   const { travelFaq } = await server.ssrLoadModule('/src/data/help.ts');
   const { answerSupport, planSupportTrip } = await server.ssrLoadModule('/src/support.ts');
   const before = JSON.stringify({ cities, destinations, practical, templates });
   const sourceUrls = new Set([
     ...cities.flatMap(city => city.sources.map(source => source.url)),
+    ...destinations.flatMap(place => (place.sources || []).map(source => source.url)),
+    ...[...Object.values(dayJourneys).flat(), hankouFromWuchang].flatMap(journey => (journey.sources || []).map(source => source.url)),
+    ...Object.values(attractionRoutes).flatMap(routes => (routes || []).flatMap(route => (route.journey.sources || []).map(source => source.url))),
+    ...Object.values(returnWalks).flatMap(walks => walks.flatMap(walk => walk.sources.map(source => source.url))),
+    railwayEntrySource.url,
+    wuchangStationTransitSource.url,
+    ...[...Object.values(moveVisits), ...shortWalks].flatMap(visit => visit.sources.map(source => source.url)),
     ...Object.values(localFoodShops).flatMap(shops => shops.flatMap(shop => shop.sources.map(source => source.url))),
   ]);
   const templateIds = new Set(templates.map(template => template.id));
@@ -31,7 +43,7 @@ try {
     for (const source of reply.sources) {
       assert.equal(typeof source.title, 'string');
       assert(source.title.length > 0);
-      assert(source.url.startsWith('https://') && sourceUrls.has(source.url), 'Sources must come from the editorial city or restaurant records.');
+      assert(source.url.startsWith('https://') && sourceUrls.has(source.url), 'Sources must come from the editorial city, journey, or restaurant records: ' + source.url);
     }
     for (const action of reply.actions) {
       assert(allowedActions.has(action.kind));
@@ -672,6 +684,43 @@ try {
   const crossTransfer = ask('宜昌和恩施五天，两个人');
   assert.equal(crossTransfer.plan?.template, 'west-five');
   assert.match(ask('第三天10:30出发', crossTransfer.context).text, /车船或返程接驳/);
+  const crossDays = buildTrip(crossTransfer.plan);
+  const { schedules: crossSchedules } = buildTripSchedules(crossDays, crossTransfer.plan);
+  const dayFour = { ...crossTransfer.context, visitDay: 3 };
+  const fourthTransport = ask('这天怎么走？', dayFour);
+  assert.equal(fourthTransport.context.cityId, 'enshi');
+  for (const row of crossSchedules[3].rows.filter(row => row.kind === 'move')) assert(fourthTransport.text.includes(row.title));
+  const implicitTransport = ask('那怎么走？', fourthTransport.context);
+  assert.equal(implicitTransport.text, fourthTransport.text);
+  const fourthStay = ask('这晚住哪里？', fourthTransport.context);
+  assert.match(fourthStay.text, /第 4 天[\s\S]*当晚住在恩施城区/);
+  const fourthLunch = ask('第 4 天中午吃哪家？', fourthStay.context);
+  assert.match(fourthLunch.text, /七星寨[\s\S]*暂无能配合这一段路线的具体门店/);
+  assert.equal(fourthLunch.foodShopIds, undefined, 'A gorge lunch cannot send visitors back to an urban dinner venue.');
+  const combined = ask('这天怎么走、晚饭吃哪家、住哪里？', fourthLunch.context);
+  assert.match(combined.text, /第 4 天[\s\S]*交通[\s\S]*用餐[\s\S]*住宿/);
+  assert.deepEqual(combined.foodShopIds, ['enshi-zhangguan']);
+  assert.match(ask('这一天的时间表', combined.context).text, /第 4 天[\s\S]*七星寨/);
+  const secondMeal = ask('第二天吃什么？', combined.context);
+  assert.match(secondMeal.text, /第 2 天[\s\S]*秭归/);
+  assert(secondMeal.text.includes(crossSchedules[1].rows.find(row => row.meal === '午餐').title));
+  assert.equal(secondMeal.context.cityId, 'yichang');
+  assert.equal(secondMeal.context.visitDay, 1);
+  for (const query of [fourthTransport, fourthStay, fourthLunch, combined, secondMeal]) {
+    assert.equal(query.plan, undefined, 'Reading an existing plan cannot create a revised version.');
+    assert.deepEqual(query.context.trip, crossTransfer.context.trip, 'A day number is not a new trip duration.');
+    assert.deepEqual(query.actions.find(action => action.profile).profile, crossTransfer.plan);
+    assert.equal(query.actions.find(action => action.profile).dayIndex, query.context.visitDay);
+  }
+  assert.match(ask('返程怎么安排？', dayFour).text, /第 5 天[\s\S]*返程时段还没确定/);
+  for (const query of ['第八天怎么走？', '第0天吃什么？']) {
+    const outsideDay = ask(query, dayFour);
+    assert.match(outsideDay.text, /共 5 天/);
+    assert.deepEqual(outsideDay.context, dayFour);
+  }
+  const returnFollowUp = ask('返程怎么安排？', { ...longerConnection.context, visitDay: 0 });
+  assert.equal(returnFollowUp.context.visitDay, 1);
+  assert.match(returnFollowUp.text, /昙华林主街短逛[\s\S]*12:00｜落脚片区就近午餐[\s\S]*12:30｜取行李[\s\S]*13:00 前[\s\S]*14:30 前/);
 
   const lateForLake = ask('第二天12:30出门', flexibleWeekend.context);
   assert(lateForLake.suggestions.includes('把东湖听涛 · 梨园挪到第 1 天'));

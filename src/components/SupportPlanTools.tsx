@@ -1,11 +1,11 @@
 import { useState } from 'react';
-import { ArrowRight, Copy, Download, GitCompareArrows, Pencil, Share2 } from 'lucide-react';
+import { ArrowRight, Copy, Download, GitCompareArrows, Pencil, RotateCcw, Share2 } from 'lucide-react';
 import { formatDetailedPlan, sharePlanUrl, type Profile } from '../planning';
 import { compareSupportPlans } from '../support-review';
 import { downloadPlan } from '../travel';
 import './support-plan-tools.css';
 
-export function SupportPlanTools({ profile, previous, onEdit }: { profile: Profile; previous?: Profile; onEdit: (profile: Profile) => void }) {
+export function SupportPlanTools({ profile, previous, onEdit, onRestore }: { profile: Profile; previous?: Profile; onEdit: (profile: Profile) => void; onRestore?: () => void }) {
   const [feedback, setFeedback] = useState('');
   const [comparing, setComparing] = useState(false);
   const comparison = previous && comparing ? compareSupportPlans(previous, profile) : undefined;
@@ -22,6 +22,7 @@ export function SupportPlanTools({ profile, previous, onEdit }: { profile: Profi
       <button type="button" onClick={() => { try { downloadPlan(formatDetailedPlan(profile), '小游具体'); setFeedback('文本清单已生成，请在浏览器下载中查看。'); } catch { setFeedback('暂时无法下载，可以复制清单保存。'); } }}><Download size={14} />下载清单</button>
       <button type="button" onClick={() => void copy(true)}><Share2 size={14} />分享链接</button>
       {previous && <button type="button" aria-expanded={comparing} onClick={() => setComparing(value => !value)}><GitCompareArrows size={14} />{comparing ? '收起比较' : '与修改前比较'}</button>}
+      {previous && onRestore && <button type="button" onClick={onRestore}><RotateCcw size={14} />恢复修改前</button>}
     </div>
     {feedback && <p className="support-plan-tool-feedback" role="status">{feedback}</p>}
     {comparison && <section className="support-plan-comparison" aria-label="与修改前的行程变化">

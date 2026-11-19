@@ -6,6 +6,7 @@ import { buildTrip, type Profile } from '../planning';
 import type { VisitChange } from '../visit-changes';
 import { buildTripSchedules } from '../visit-scheduling';
 import { supportTripDraftFromProfile } from '../support-review';
+import { copyTripDraft } from '../support-planning';
 import { Modal } from './Modal';
 import { SupportTripForm } from './SupportTripForm';
 import { SupportPlanPreview } from './SupportPlanPreview';
@@ -14,7 +15,7 @@ import { SelectField } from './ui';
 import { LocalFoodShops } from './LocalFoodShops';
 import './support-desk.css';
 
-type Message = { id: number; question: string; reply: SupportReply; baseProfile?: Profile };
+type Message = { id: number; question: string; reply: SupportReply; baseProfile?: Profile; baseContext?: SupportContext };
 const examples = ['武汉2天2人，最后一天15:30从武昌站返程', '恩施3天，2人，带长辈，少台阶', '从武汉出发，去宜昌2天2人', '怎么保存分享行程？'];
 const promptsFor = (cityId?: string) => cityId && cityById[cityId]
   ? [cityById[cityId].shortName + Math.min(2, cityById[cityId].days.length) + '天，2人，轻松游', cityById[cityId].shortName + '住哪里？', cityById[cityId].shortName + '吃哪家店？', '怎么保存行程？']
@@ -42,6 +43,8 @@ export function SupportDesk({ open, openForm = false, initialCity, initialDays, 
   const selected = messages.find(message => message.id === selectedId);
   const profile = selected?.reply.plan;
   const previous = selected?.baseProfile;
+  const currentDays = profile && context.trip ? buildTrip(profile) : [];
+  const selectedDay = Math.min(context.visitDay ?? activeDay, Math.max(0, currentDays.length - 1));
   const formVisible = Boolean(tripForm);
   const newTrip = tripForm === 'new';
 
@@ -80,17 +83,50 @@ export function SupportDesk({ open, openForm = false, initialCity, initialDays, 
       detail.current?.focus({ preventScroll: true });
     }
   }, [selectedId, detailOpen]);
-  const addReply = (question: string, reply: SupportReply, from: Profile | null | undefined = context.trip ? activeProfile : undefined, dayIndex = reply.dayIndex ?? 0) => {
+  const addReply = (question: string, reply: SupportReply, from: Profile | null | undefined = context.trip ? activeProfile : undefined,
+    dayIndex = reply.dayIndex ?? (reply.plan && from ? Math.min(context.visitDay ?? activeDay, buildTrip(reply.plan).length - 1) : 0)) => {
     const id = ++serial.current;
     const baseProfile = reply.plan && from ? from : undefined;
-    setMessages(before => [...before, { id, question, reply, baseProfile }].slice(-12));
-    setContext(reply.context); setSuggestions(reply.suggestions.length ? reply.suggestions.slice(0, 4) : promptsFor(reply.context.cityId));
+    const originalContext = baseProfile && [...messages].reverse().find(message => message.reply.plan === baseProfile)?.reply.context;
+    const baseContext = baseProfile ? {
+      ...(originalContext || { cityId: baseProfile.cityId }),
+      trip: copyTripDraft(originalContext?.trip || supportTripDraftFromProfile(baseProfile)),
+    } : undefined;
+    const nextReply = reply.plan ? { ...reply, dayIndex, context: { ...reply.context, visitDay: dayIndex } } : reply;
+    setMessages(before => {
+      const next = [...before, { id, question, reply: nextReply, baseProfile, baseContext }].slice(-12);
+      const active = before.find(message => message.id === selectedId);
+      return !reply.plan && active?.reply.plan && !next.includes(active) ? [active, ...next.slice(-11)] : next;
+    });
+    setContext(nextReply.context); setSuggestions(reply.suggestions.length ? reply.suggestions.slice(0, 4) : promptsFor(reply.context.cityId));
     setDraft(''); setTripForm(undefined); setEditingTrip(undefined); setFormError('');
     if (reply.plan) { setActiveProfile(reply.plan); setSelectedId(id); setActiveDay(dayIndex); setDetailOpen(true); }
     else if ((context.trip || reply.context.trip) && !reply.actions.some(action => action.profile)) { setSelectedId(undefined); setDetailOpen(false); }
     if (!reply.context.trip) setActiveProfile(undefined);
   };
-  const ask = (value: string) => { const question = value.trim().slice(0, 240); if (question) addReply(question, answerSupport(question, context)); };
+  const restorePrevious = (question = '恢复修改前的行程') => {
+    if (!previous || !selected || !profile) return;
+    const days = buildTrip(previous);
+    const dayIndex = Math.min(selectedDay, Math.max(0, days.length - 1));
+    const restoredContext = selected.baseContext || { cityId: previous.cityId, trip: supportTripDraftFromProfile(previous) };
+    const restoreSources = [...new Map(days.flatMap(day => cityById[day.cityId].sources).map(source => [source.url, source])).values()];
+    addReply(question, {
+      text: '已恢复修改前的方案，人数、日期、交通与返程安排已一并恢复。',
+      plan: previous, dayIndex,
+      context: { ...restoredContext, cityId: days[dayIndex]?.cityId || previous.cityId, trip: restoredContext.trip && copyTripDraft(restoredContext.trip), visitDay: dayIndex },
+      actions: [{ kind: 'plan', cityId: previous.cityId, profile: previous, dayIndex, label: '带入规划继续调整' }],
+      sources: restoreSources, suggestions: ['这天怎么走？', '这天吃什么？', '这晚住哪里？', '返程怎么安排？'],
+    }, profile, dayIndex);
+  };
+  const ask = (value: string) => {
+    const question = value.trim().slice(0, 240);
+    if (!question) return;
+    if (previous && /^(?:请|帮我)?(?:撤销(?:刚才|上次|这次)的?(?:行程)?修改|恢复(?:上一版|修改前)(?:的)?(?:方案|行程)?)[。！!？?]?$/.test(question)) {
+      restorePrevious(question);
+      return;
+    }
+    addReply(question, answerSupport(question, context));
+  };
   const openPlan = (message: Message) => {
     if (!message.reply.plan) return;
     setContext(message.reply.context);
@@ -166,7 +202,7 @@ export function SupportDesk({ open, openForm = false, initialCity, initialDays, 
     setFormError(reply.text);
   };
   if (!open) return null;
-  const showPlanDetail = Boolean(profile && !formVisible);
+  const showPlanDetail = Boolean(profile && !formVisible && detailOpen);
   const closeTripForm = () => { setTripForm(undefined); setFormError(''); };
   return <Modal title={formVisible ? '规划湖北行程' : showPlanDetail && detailOpen ? '小游 · 逐日行程' : '小游 · 湖北旅行问答'} onClose={onClose} dialogClassName={'support-dialog' + (showPlanDetail ? ' has-itinerary' : '')}>
     <div className={'support-layout' + (showPlanDetail ? ' has-itinerary' : '') + (showPlanDetail && detailOpen ? ' detail-open' : '')}>
@@ -179,9 +215,23 @@ export function SupportDesk({ open, openForm = false, initialCity, initialDays, 
           }} aria-expanded={formVisible}>{formVisible ? <MessageCircle size={15} /> : <Route size={15} />}{formVisible ? '返回问答' : '填写旅行条件'}</button>
           {!formVisible && <SelectField aria-label="问答城市" value={context.cityId || ''} onChange={event => chooseCity(event.target.value || undefined)}><option value="">全部湖北</option>{cities.map(city => <option key={city.id} value={city.id}>{city.shortName}</option>)}</SelectField>}
         </div>
+        {!formVisible && profile && currentDays.length > 0 && <section className="support-trip-context" aria-label="当前行程">
+          <div><strong>{currentDays.length} 天 · {profile.party} 人</strong><span>{[...new Set(currentDays.map(day => cityById[day.cityId].shortName))].join(' · ')}</span>{previous && <button type="button" className="support-undo-inline" onClick={() => restorePrevious()}>撤销上次修改</button>}</div>
+          <label><span className="sr-only">当前查看哪一天</span><SelectField aria-label="当前查看哪一天" value={selectedDay} onChange={event => {
+            const index = Number(event.target.value);
+            setActiveDay(index);
+            setContext(before => ({ ...before, cityId: currentDays[index].cityId, visitDay: index }));
+          }}>{currentDays.map((day, index) => <option key={index} value={index}>第 {index + 1} 天 · {cityById[day.cityId].shortName}</option>)}</SelectField></label>
+          <button type="button" onClick={() => { setActiveDay(selectedDay); setDetailOpen(true); }}>查看行程</button>
+        </section>}
         <div ref={log} tabIndex={-1} className="support-log" role={formVisible ? 'region' : 'log'} aria-label={formVisible ? '行程条件' : '旅行问答记录'} aria-live={formVisible ? 'off' : 'polite'} aria-relevant="additions">
           {formVisible ? <SupportTripForm draft={newTrip ? undefined : editingTrip || context.trip} initialCity={newTrip ? initial : context.cityId} initialDays={newTrip ? initialDays : undefined} initialParty={initialParty} initialDate={initialDate} error={formError} onClearError={() => setFormError('')} onSubmit={submitTripForm} onCancel={closeTripForm} /> : <>
-            <div className="support-welcome"><span className="support-avatar" aria-hidden="true"><Compass size={19} /></span><div><strong>这次想去哪儿？</strong><p>告诉我去哪、几天、几个人。也可以加上抵达和返程时段、体力或美食偏好，我会一起安排每天的吃住行。</p><small>行程依据本站编辑的湖北攻略整理。</small></div></div>
+            <div className="support-welcome"><span className="support-avatar" aria-hidden="true"><Compass size={22} /></span><div><strong>我是小游，帮你排好湖北之旅</strong><p>去哪、玩几天、几个人？告诉我想法，一起把景点、交通和吃住连起来。</p><small>也可以继续问某一天怎么走、吃哪家，或调整出发和返程。</small></div></div>
+            {!messages.length && <div className="support-start-actions" aria-label="开始使用小游">
+              <button type="button" onClick={() => { setEditingTrip(undefined); setTripForm('context'); setDetailOpen(false); }}><Route size={18} aria-hidden="true" /><span><strong>帮我规划行程</strong><small>选天数和人数，排每天的吃住行</small></span></button>
+              <button type="button" onClick={() => ask((context.cityId ? cityById[context.cityId].shortName : '') + '推荐具体店铺')}><MessageCircle size={17} aria-hidden="true" />找具体餐馆</button>
+              <button type="button" onClick={() => ask((context.cityId ? cityById[context.cityId].shortName : '') + '住哪里顺路？')}><Compass size={17} aria-hidden="true" />选住宿片区</button>
+            </div>}
             {messages.map(message => {
               const plan = message.reply.plan;
               const route = plan ? buildTrip(plan) : [];
@@ -197,17 +247,17 @@ export function SupportDesk({ open, openForm = false, initialCity, initialDays, 
             })}
           </>}
         </div>
-        {!formVisible && <><div className="support-suggestions" aria-label="可以继续问">{suggestions.map(question => <button key={question} onClick={() => ask(question)}>{question}</button>)}</div><form className="support-form" onSubmit={event => { event.preventDefault(); ask(draft); }}><label className="sr-only" htmlFor="support-question">输入旅行问题</label><textarea id="support-question" aria-label="输入旅行问题" rows={2} maxLength={240} value={draft} onChange={event => setDraft(event.target.value)} onKeyDown={event => { if (event.key === 'Enter' && !event.shiftKey && !event.nativeEvent.isComposing) { event.preventDefault(); ask(draft); } }} placeholder="例如：武汉2天2人，下午到，少台阶" /><button type="submit" disabled={!draft.trim()}><Send size={16} />发送</button></form></>}
+        {!formVisible && <><div className="support-suggestions" aria-label="可以继续问">{(currentDays.length ? ['这天怎么走？', '这天吃哪家？', '这晚住哪里？', '返程怎么安排？'] : suggestions).map(question => <button key={question} onClick={() => ask(question)}>{question}</button>)}</div><form className="support-form" onSubmit={event => { event.preventDefault(); ask(draft); }}><label className="sr-only" htmlFor="support-question">输入旅行问题</label><textarea id="support-question" aria-label="输入旅行问题" rows={2} maxLength={240} value={draft} onChange={event => setDraft(event.target.value)} onKeyDown={event => { if (event.key === 'Enter' && !event.shiftKey && !event.nativeEvent.isComposing) { event.preventDefault(); ask(draft); } }} placeholder={currentDays.length ? '继续问这天怎么走，或告诉我想改什么' : '例如：武汉2天2人，下午到，少台阶'} /><button type="submit" disabled={!draft.trim()}><Send size={16} />发送</button></form></>}
         {!formVisible && <p className="support-privacy">问题不上传，刷新清空对话。车船、开放与房价需核对当期信息。</p>}
       </div>
-      {profile && !formVisible && <aside className="support-detail" aria-label="行程详情">
-        <div className="support-detail-bar"><button className="support-back-chat" onClick={returnToChat}><ArrowLeft size={16} />返回对话</button><span>这份行程</span><button onClick={() => editPlan(profile)}>调整条件</button><button className="support-close-detail" onClick={() => { setSelectedId(undefined); returnToChat(); }} aria-label="收起行程详情"><X size={17} /></button></div>
+      {profile && showPlanDetail && <aside className="support-detail" aria-label="行程详情">
+        <div className="support-detail-bar"><button className="support-back-chat" onClick={returnToChat}><ArrowLeft size={16} />返回对话</button><span>这份行程</span><button onClick={() => editPlan(profile)}>调整条件</button><button className="support-close-detail" onClick={returnToChat} aria-label="收起行程详情"><X size={17} /></button></div>
         <div ref={detail} tabIndex={-1} role="region" aria-label="具体行程内容" className="support-detail-scroll">
           <SupportPlanPreview key={`preview-${selectedId}`} profile={profile}
             onUpdateReturn={next => updateDay(next, buildTrip(next).length - 1, 'return')}
             onUpdateStart={(next, index) => updateDay(next, index, 'start')} onVisitChange={updateVisit} dayIndex={activeDay}
-            onChooseDay={index => { setActiveDay(index); setContext(before => ({ ...before, visitDay: index })); }} />
-          <SupportPlanTools key={selectedId} profile={profile} previous={previous} onEdit={editPlan} />
+            onChooseDay={index => { setActiveDay(index); setContext(before => ({ ...before, cityId: currentDays[index]?.cityId || before.cityId, visitDay: index })); }} />
+          <SupportPlanTools key={selectedId} profile={profile} previous={previous} onEdit={editPlan} onRestore={() => restorePrevious()} />
           <button className="support-open-full" onClick={() => onAction({ kind: 'plan', cityId: profile.cityId, profile, dayIndex: activeDay, label: '保存与调整完整行程' })}>保存与调整完整行程<ArrowUpRight size={16} /></button>
           <p className="support-detail-footnote">这份预览在当前页面保留。进入完整行程后，可保存到本浏览器。</p>
         </div>

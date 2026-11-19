@@ -1,7 +1,7 @@
 import { dayJourneys, hankouFromWuchang, type DayJourney, type MinuteRange, type TravelLeg } from './data/day-journeys';
 import { cityById } from './data/cities';
 import { attractionRouteAt } from './data/attraction-routes';
-import { returnWalks, type ReturnSource } from './data/return-mornings';
+import { returnWalks, wuchangStationTransitSource, type ReturnSource } from './data/return-mornings';
 import type { PlannedDay, Profile } from './planning';
 import { formatClock, parseClock, returnBreakfastMinutes, returnBreakfastStart } from './return-timing';
 import { chapterKey, readDayStart } from './day-starts';
@@ -78,7 +78,7 @@ export function returnTransport(day: PlannedDay, profile: Profile) {
   if (!station || !day.stationSchedule || !area) return;
   if (day.cityId === 'wuhan' && station === '武昌站' && /^(?:武昌|司门口|昙华林)/.test(area) && profile.mode === 'public') {
     return { method: '可从昙华林一带步行到螃蟹岬站，乘 7 号线到武昌火车站，再按票面进站口步行。',
-      source: { title: '武汉市交通运输局 · 昙华林周边公交与地铁', url: 'https://jtj.wuhan.gov.cn/zwgk/zfxxgkml/qtzdgk/jytabl/202010/t20201020_1468914.shtml' } };
+      source: wuchangStationTransitSource };
   }
   return { method: profile.mode === 'drive' ? '按车站进站口导航，预留送站或停车后步行的时间。'
     : '从落脚处按票面站名核对公交、地铁或出租接驳。' };

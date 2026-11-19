@@ -174,6 +174,7 @@ export default function App() {
         <Brand onClick={() => setMobileMenu(false)} />
         <nav aria-label="主导航" className="desktop-nav">{mainNav.map(([id, label]) => <a key={id} href={'#' + id} aria-current={activeSection === id ? 'location' : undefined}>{label}</a>)}</nav>
         <div className="header-actions">
+          <button type="button" className="header-assistant" onClick={() => showSupport()}><MessageCircle size={17} aria-hidden="true" />小游助手</button>
           <button type="button" className="header-saved" onClick={showSaved} aria-label="我的收藏"><Heart size={19} /><span>收藏</span></button>
           <Button className="header-plan" onClick={showPlanner}>我的行程<ArrowUpRight size={16} /></Button>
           <button type="button" aria-label={mobileMenu ? '关闭菜单' : '打开菜单'} aria-expanded={mobileMenu} aria-controls="site-mobile-nav" onClick={() => setMobileMenu(!mobileMenu)} className="header-menu">{mobileMenu ? <X size={22} /> : <Menu size={22} />}</button>
@@ -259,11 +260,17 @@ export default function App() {
       <div className="footer-legal"><p>© 2026 Wander AI · 寻游湖北</p><div><button onClick={() => showInfo('隐私说明', '目的地收藏、规划草稿和已保存行程保存在当前浏览器，可删除或清理网站数据。分享链接包含所选旅行设置与日期，不包含自由备注。小游依据站内资料在本页匹配，不上传问题。对话保留在当前页面，刷新后清空。')}>隐私说明</button><a href="#top">返回顶部<ArrowUp size={13} /></a></div></div>
     </div></footer>
 
-    {showQuickNav && <div className="travel-tools"><a href="#top" aria-label="返回顶部" className="back-to-top"><ArrowUp size={18} /></a><button className="support-launcher" onClick={() => showSupport()} aria-label="打开湖北旅行问答"><MessageCircle size={18} />问小游</button></div>}
+    <div className="travel-tools">
+      {showQuickNav && <a href="#top" aria-label="返回顶部" className="back-to-top"><ArrowUp size={18} /></a>}
+      <button type="button" className="support-launcher" onClick={() => showSupport()} aria-label="打开湖北旅行问答">
+        <span className="support-launcher-icon"><MessageCircle size={24} aria-hidden="true" /></span>
+        <span><strong>小游 · 旅行助手</strong><small>排路线 · 查吃住</small></span>
+      </button>
+    </div>
     <nav className="mobile-quicknav" aria-label="手机快捷导航">
       <a href="#destinations" aria-current={activeSection === 'destinations' ? 'location' : undefined}><Search size={19} />找景点</a>
       <a href="#routes" aria-current={activeSection === 'routes' ? 'location' : undefined}><Route size={19} />经典路线</a>
-      <button type="button" onClick={() => showSupport()}><MessageCircle size={19} />问小游</button>
+      <button type="button" className="mobile-assistant-entry" onClick={() => showSupport()}><MessageCircle size={21} />小游助手</button>
       <button type="button" onClick={showPlanner}><Bookmark size={19} />我的行程</button>
     </nav>
     {supportVisited && <Suspense fallback={modal?.type === 'support' ? <Modal title="问小游" onClose={closeModal}><DialogLoading /></Modal> : null}>

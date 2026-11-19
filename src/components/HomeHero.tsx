@@ -73,7 +73,7 @@ export function HomeHero({ selection, travelers, onCity, onTravelers, onSearch, 
           <button type="button" aria-pressed={searchMode} onClick={() => setMode('search')}><Search size={17} />找景点</button>
           <button type="button" aria-pressed={!searchMode} onClick={() => setMode('plan')}><Route size={17} />规划行程</button>
         </div>
-        <button className="journey-ask" type="button" onClick={onAsk}><MessageCircle size={17} />问小游<ArrowUpRight size={15} /></button>
+        <button className="journey-ask" type="button" onClick={onAsk}><MessageCircle size={18} />小游帮你规划</button>
       </div>
       <form className={'journey-search-card ' + (searchMode ? 'journey-search-mode' : 'journey-plan-mode')}
         aria-label={searchMode ? '搜索湖北景点' : '快速规划湖北行程'} onSubmit={submit}>

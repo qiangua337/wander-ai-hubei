@@ -4,7 +4,7 @@ import { findFoodShops, localFoodShops, type FoodMeal } from './data/food-shops'
 import { travelFaq } from './data/help';
 import { placeAliases } from './data/destinations';
 import { buildTrip, templates, type Profile } from './planning';
-import { buildDaySchedule, describePlanDay } from './day-schedule';
+import { buildDaySchedule, describePlanDay, groupLodging, scheduleDuration, type ScheduleRow } from './day-schedule';
 import { chapterKey, dayStartWindow, readDayStart, setDayStart } from './day-starts';
 import { changeVisit, visitChangeKey, type VisitChange } from './visit-changes';
 import { adjustmentSummary, buildTripSchedules, preservesVisitChanges, visitChoices } from './visit-scheduling';
@@ -21,6 +21,7 @@ const cityAliases: Record<string, string[]> = {
   yichang: ['秭归', '长阳'], shiyan: ['丹江口'], huanggang: ['黄州', '罗田', '麻城'],
   xianning: ['通山', '咸安', '赤壁市'], jingmen: ['钟祥', '京山'],
 };
+const outsideHubeiPlace = /北京|上海|天津|重庆|广州|深圳|成都|杭州|南京|长沙|西安|洛阳|苏州|桂林|厦门|青岛|三亚|大理|丽江|张家界|郑州|济南|昆明|贵阳|海口|拉萨|乌鲁木齐|哈尔滨|长春|沈阳|太原|石家庄|福州|南昌|合肥|南宁|兰州|银川|西宁|呼和浩特|香港|澳门|台湾|云南|四川|贵州|湖南|广东|广西|河南|河北|浙江|江苏|山东|山西|陕西|海南|福建|江西|安徽|甘肃|青海|宁夏|新疆|西藏|内蒙古|辽宁|吉林|黑龙江/;
 const fallbackSuggestions = ['武汉住哪里顺路？', '宜昌和恩施五天怎么走？', '行程怎样保存和分享？'];
 const compact = (text: string) => text.replace(/[\s·，。？！、,!?：:；;（）()“”"'—–-]/g, '').toLowerCase();
 const validCity = (id?: string) => typeof id === 'string' && Object.hasOwn(cityById, id) ? id : undefined;
@@ -100,7 +101,7 @@ function answerGuide(question: string, context: SupportContext = {}): SupportRep
   places.forEach(place => { if (!mentionedCities.includes(place.cityId)) mentionedCities.push(place.cityId); });
   const place = places.length === 1 ? places[0] : undefined;
   // Resolve scope before carrying context into weather, prices, or other early replies.
-  const outsidePlace = /北京|上海|天津|重庆|广州|深圳|成都|杭州|南京|长沙|西安|洛阳|苏州|桂林|厦门|青岛|三亚|大理|丽江|张家界|郑州|济南|昆明|贵阳|海口|拉萨|乌鲁木齐|哈尔滨|长春|沈阳|太原|石家庄|福州|南昌|合肥|南宁|兰州|银川|西宁|呼和浩特|香港|澳门|台湾|云南|四川|贵州|湖南|广东|广西|河南|河北|浙江|江苏|山东|山西|陕西|海南|福建|江西|安徽|甘肃|青海|宁夏|新疆|西藏|内蒙古|辽宁|吉林|黑龙江/.test(scopeQuestion);
+  const outsidePlace = outsideHubeiPlace.test(scopeQuestion);
   const otherNamedPlace = /(?:去|到|在|换成|目的地[是为]?)([\u4e00-\u9fff]{2,8}(?:市|省|自治区|特别行政区))/.test(scopeQuestion);
   const outsideScope = !mentionedCities.length && (outsidePlace || otherNamedPlace);
   const namedShopCity = !outsideScope && !mentionedCities.length ? Object.entries(localFoodShops).find(([, shops]) => shops?.some(shop => normalized.includes(compact(shop.name.split('（')[0].replace(/^家阳/, '')))))?.[0] : undefined;
@@ -355,12 +356,103 @@ function answerDayStartChange(question: string, context: SupportContext): Suppor
   return adjustmentReply(reply, dayIndex, `第 ${dayIndex + 1} 天已按 ${time} 出门重排。\n${revised.headline}${suffix}`, [...new Set([...prompts, ...reply.suggestions])]);
 }
 
+function answerPlanDayQuestion(question: string, context: SupportContext): SupportReply | undefined {
+  if (!context.trip || outsideHubeiPlace.test(question) || /改|换|挪|调整|增加|减少|重新|生成|规划|订票|预订|天气|气温|余票|票价|房价|营业时间|开放时间/.test(question)) return;
+  const dayLabel = question.match(/第\s*(?:[0-9]{1,3}|[一二两三四五六七八九十]{1,3})\s*天|最后一天|首日|这一天|当天|这天|那天|这晚|那晚/);
+  const returning = /返程怎么|怎么返程|几点.*(?:去|到).*站|什么时候.*(?:去|到).*站|赶车.*安排/.test(question);
+  const everyDay = /每天.*(?:几点|什么时候|出门时间|出发时间|时间表)/.test(question);
+  const implicitDay = context.visitDay !== undefined && /^(?:那|请问)?(?:怎么走|怎么去|怎么坐车|吃什么|吃哪家|午饭吃什么|晚饭吃哪家|住哪里|住宿怎么选|几点出发|几点出门|时间表)$/.test(compact(question));
+  if (!dayLabel && !returning && !everyDay && !implicitDay) return;
+  const meal = /吃|用餐|早饭|午饭|晚饭|早餐|午餐|晚餐|餐厅|餐馆|店铺|过早/.test(question);
+  const staying = /住哪|住在|住宿|酒店|宾馆|民宿|连住|落脚/.test(question);
+  const moving = returning || /怎么走|怎么去|怎么坐|交通|地铁|公交|接驳|坐车|车程/.test(question);
+  const timeline = everyDay || /几点|出发|出门|时间表|详细时间|行程|玩什么|去哪|看什么/.test(question);
+  if (!meal && !staying && !moving && !timeline) return;
+  const current = planSupportTrip(context.trip);
+  if (!current.plan) return;
+  const profile = current.plan;
+  const days = buildTrip(profile);
+  const { schedules } = buildTripSchedules(days, profile);
+  const label = dayLabel?.[0];
+  const relative = implicitDay || (label && /^(?:这|当|那)/.test(label));
+  const index = everyDay ? context.visitDay ?? 0 : returning && !label ? days.length - 1 : relative ? context.visitDay ?? 0
+    : label === '最后一天' ? days.length - 1 : label?.startsWith('第') ? (daysInQuestion(label) ?? 0) - 1 : 0;
+  const suggestions = ['这天怎么走？', '这天吃哪家？', '这晚住哪里？', '返程怎么安排？'];
+  const action: SupportAction = { kind: 'plan', cityId: profile.cityId, profile, label: '打开这一天的行程', dayIndex: index };
+  if (!days[index]) return {
+    text: `这份行程共 ${days.length} 天，可以查看第 1 至第 ${days.length} 天。`,
+    actions: [{ ...action, dayIndex: 0 }], sources: [], suggestions,
+    context: { ...context, trip: copyTripDraft(context.trip) },
+  };
+  const day = days[index];
+  const namedCities = mentionedCityIds(compact(question));
+  if (namedCities.some(id => id !== day.cityId)) return;
+  const schedule = schedules[index];
+  const scopedContext = { cityId: day.cityId, trip: copyTripDraft(context.trip), visitDay: index };
+  const sources = [...new Map([...schedule.sources, ...cityById[day.cityId].sources].map(source => [source.url, source])).values()];
+  const heading = `第 ${index + 1} 天 · ${schedule.title || day.title}`;
+  const rowText = (row: ScheduleRow) => {
+    const when = row.time ? row.time + (row.deadline ? ' 前' : '') : row.phase || '按顺序';
+    const length = scheduleDuration(row);
+    return `${when}｜${row.title}${row.optional ? '（可选）' : ''}${length ? '（' + length + '）' : ''}${row.detail ? '\n' + row.detail : ''}`;
+  };
+  const respond = (text: string): SupportReply => ({ text, actions: [action], sources, suggestions, context: scopedContext });
+  if (everyDay) return respond(days.map((item, dayIndex) => `第 ${dayIndex + 1} 天 · ${schedules[dayIndex].start}\n${schedules[dayIndex].title || item.title}`).join('\n\n') + '\n\n可以继续问“第二天几点出发？”，或打开行程查看具体接驳。');
+  if (moving && !meal && !staying && returning && (!profile.departure || profile.departure === 'flexible') && index === days.length - 1) {
+    return respond(`${heading}\n\n返程时段还没确定，最后一天暂按正常游览安排。告诉我票面时间和上车站，我可以重新安排上午活动、取行李和去车站的时间。`);
+  }
+  if (moving && !meal && !staying && /返程怎么安排|几点|什么时候|时间表/.test(question)) {
+    return respond(describePlanDay(days, index, profile, schedule));
+  }
+  const mentionedMeals = [
+    /早餐|早饭|过早|早上[^，,、；;。！？?]*吃/.test(question) && '早餐',
+    /午餐|午饭|中午[^，,、；;。！？?]*吃/.test(question) && '午餐',
+    /晚餐|晚饭|晚上[^，,、；;。！？?]*吃/.test(question) && '晚餐',
+  ].filter(Boolean);
+  const selectedMeals = mentionedMeals.length ? mentionedMeals : ['早餐', '午餐', '晚餐'];
+  const mealRows = schedule.rows.filter(row => row.kind === 'meal' && row.meal && selectedMeals.includes(row.meal));
+  const specificFood = meal && /哪家|餐厅|餐馆|店铺|哪.*店|推荐.*店/.test(question.replace(/酒店|宾馆/g, ''));
+  const shops = specificFood ? (localFoodShops[day.cityId] || []).filter(shop => mealRows.some(row => {
+    if (/途中|到站|行前/.test(row.phase || '')) return false;
+    const location = row.title + (row.meal === '早餐' ? ' ' + schedule.from + ' ' + (row.detail || '') : '');
+    return shop.meals.includes(row.meal === '早餐' ? 'breakfast' : 'meal') && shop.neighborhoods.some(area => location.includes(area));
+  })) : [];
+  const sections: string[] = [];
+  if (moving) {
+    const rows = schedule.rows.filter(row => row.kind === 'move' || row.title === '取行李');
+    sections.push(`交通 · ${schedule.start} · ${schedule.from}\n\n${rows.length ? rows.map(rowText).join('\n\n') : day.transport}\n\n时间为规划预留，实际车船班次与路况请在出发前核对。`);
+  }
+  if (meal) {
+    const food = mealRows.length ? mealRows.map(rowText).join('\n\n') : '这天没有单独安排这一餐，可按当天交通时段就近补给。';
+    const fit = shops.length ? '按原定用餐片区，可参考下面的门店。先核对地址、供餐和排队情况，留够下一段交通的时间。'
+      : '暂无能配合这一段路线的具体门店，可按原计划就近吃饭或提前备餐。';
+    sections.push(['用餐', food, specificFood ? fit : ''].filter(Boolean).join('\n\n'));
+  }
+  if (staying) {
+    const block = groupLodging(days).find(item => item.firstNight <= index + 1 && item.lastNight >= index + 1);
+    const stay = block ? `当晚住在${block.area}。${block.lastNight > block.firstNight ? '第 ' + block.firstNight + '–' + block.lastNight + ' 晚连住，行李留在同一住处。' : ''}`
+      : `行程未计最后一晚。若要延住，可参考${day.overnight}。`;
+    sections.push(['住宿', stay, ...schedule.rows.filter(row => row.kind === 'stay').map(row => row.detail).filter(Boolean)].join('\n\n'));
+  }
+  if (!sections.length) return respond(describePlanDay(days, index, profile, schedule));
+  const combined = respond([heading, ...sections].join('\n\n'));
+  if (!specificFood) return combined;
+  return {
+    ...combined,
+    foodShopIds: shops.length ? shops.map(shop => shop.id) : undefined,
+    sources: [...new Map([...sources, ...shops.flatMap(shop => shop.sources)].map(source => [source.url, source])).values()],
+    actions: [{ ...action, label: '继续调整这份行程' }, { kind: 'city', cityId: day.cityId, tab: 'practical', label: '查看完整吃住指南' }],
+  };
+}
+
 export function answerSupport(question: string, context: SupportContext = {}): SupportReply {
   if (typeof question === 'string' && context.trip) {
     const timingChange = answerDayStartChange(question, context);
     if (timingChange) return timingChange;
     const visitChange = answerVisitChange(question, context);
     if (visitChange) return visitChange;
+    const dayQuestion = answerPlanDayQuestion(question, context);
+    if (dayQuestion) return dayQuestion;
   }
   if (typeof question === 'string' && context.trip && /几点出门|几点出发|时间表|详细时间|景点之间怎么走/.test(question)
     && /^(?:(?:看看|展开|想看|看)?\s*(?:第[一二三四五六七1-7]天|最后一天|每天))[^，,。；;]*[？?。！!\s]*$/.test(question.trim())) {
@@ -380,7 +472,7 @@ export function answerSupport(question: string, context: SupportContext = {}): S
       return { text, actions, sources: current.sources, suggestions: current.suggestions, context: current.context };
     }
   }
-  const otherDestination = typeof question === 'string' && /北京|上海|天津|重庆|广州|深圳|成都|杭州|南京|长沙|西安|洛阳|苏州|桂林|厦门|青岛|三亚|大理|丽江|张家界|郑州|济南|昆明|贵阳|海口|拉萨|乌鲁木齐|哈尔滨|长春|沈阳|太原|石家庄|福州|南昌|合肥|南宁|兰州|银川|西宁|呼和浩特|香港|澳门|台湾|云南|四川|贵州|湖南|广东|广西|河南|河北|浙江|江苏|山东|山西|陕西|海南|福建|江西|安徽|甘肃|青海|宁夏|新疆|西藏|内蒙古|辽宁|吉林|黑龙江/.test(question);
+  const otherDestination = typeof question === 'string' && outsideHubeiPlace.test(question);
   let scopedQuestion = question;
   let diningDay: number | undefined;
   const diningDayLabel = typeof question === 'string' && question.match(/第[一二三四五六七1-7]天|最后一天|首日/);
@@ -410,5 +502,5 @@ export function answerSupport(question: string, context: SupportContext = {}): S
       ? actions.map(action => action.kind === 'plan' && !action.profile ? resume : action)
       : [resume, ...actions];
   }
-  return { ...result, actions, context: { ...result.context, trip: previous, ...(diningDay !== undefined ? { visitDay: diningDay } : {}) } };
+  return { ...result, actions, context: { ...result.context, trip: previous, visitDay: diningDay ?? context.visitDay } };
 }

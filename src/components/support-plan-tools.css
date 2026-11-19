@@ -1,6 +1,6 @@
 .support-plan-tools { margin-top:12px; font-size:12px; }
 .support-plan-tool-buttons { display:flex; flex-wrap:wrap; gap:7px; }
-.support-plan-tool-buttons>button { display:inline-flex; align-items:center; justify-content:center; gap:6px; min-height:36px; border:1px solid var(--color-line); border-radius:7px; padding:6px 9px; background:white; color:var(--color-pine); }
+.support-plan-tool-buttons>button { display:inline-flex; align-items:center; justify-content:center; gap:6px; min-height:44px; border:1px solid var(--color-line); border-radius:7px; padding:6px 9px; background:white; color:var(--color-pine); font-size:14px; }
 .support-plan-tool-buttons>button:hover,.support-plan-tool-buttons>button[aria-expanded=true] { background:var(--color-sage); border-color:#d4a7b4; }
 .support-plan-tool-buttons>button>svg { flex-shrink:0; }
 .support-plan-tool-feedback { margin-top:8px; color:var(--color-pine); font-size:12px; line-height:1.8; }
