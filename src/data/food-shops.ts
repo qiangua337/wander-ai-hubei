@@ -1,8 +1,13 @@
 import { district, mapPlace, type PracticalMapLink } from './practical-maps';
 import type { Source } from './types';
 
-type LocalFoodShop = {
+export type FoodMeal = 'breakfast' | 'meal' | 'snack';
+export const foodMealLabels: Record<FoodMeal, string> = { breakfast: '过早早餐', meal: '午晚正餐', snack: '街边小吃' };
+export type LocalFoodShop = {
+  id: string;
   name: string;
+  meals: readonly FoodMeal[];
+  neighborhoods: readonly string[];
   area: string;
   address: string;
   dish: string;
@@ -15,7 +20,10 @@ type LocalFoodShop = {
 export const localFoodShops: Partial<Record<string, readonly LocalFoodShop[]>> = {
   jingzhou: [
     {
+      id: 'jingzhou-laojiefang',
       name: '老街坊饭庄（张居正街店）',
+      meals: ['meal'],
+      neighborhoods: ['荆州古城', '古城东门', '张居正街', '张居正故居', '宾阳楼'],
       area: '荆州古城东门 · 午餐或晚餐',
       address: '荆州区张居正街18号，近黄金堂路口',
       dish: '砂锅鸡汤，或加一道荆沙鱼糕',
@@ -28,7 +36,10 @@ export const localFoodShops: Partial<Record<string, readonly LocalFoodShop[]>> =
       map: mapPlace('老街坊饭庄（张居正街店）', 'B0FFIR0V1E'),
     },
     {
+      id: 'jingzhou-fushou',
       name: '福寿早堂面（江汉南路店）',
+      meals: ['breakfast'],
+      neighborhoods: ['沙市', '江汉南路', '沙市老街', '沙市码头'],
       area: '沙市 · 早餐',
       address: '沙市区江汉南路182号',
       dish: '高汤大连面',
@@ -43,7 +54,26 @@ export const localFoodShops: Partial<Record<string, readonly LocalFoodShop[]>> =
   ],
   wuhan: [
     {
+      id: 'wuhan-xiashi',
+      name: '夏氏砂锅（雪松路总店）',
+      meals: ['meal'],
+      neighborhoods: ['汉口', '万松园', '雪松路'],
+      area: '汉口万松园 · 午餐或晚餐',
+      address: '江汉区雪松路73号',
+      dish: '排骨藕汤，配一份酱油炒饭或时蔬',
+      routeFit: '适合住汉口、逛万松园时安排。武昌游览日先在武昌吃饭，晚间跨江另留交通时间。',
+      evidence: '武汉商务2026年7月的雪松路报道具体介绍了排骨藕汤，高德门店页可核对这家总店地址。',
+      sources: [
+        { title: '武汉商务雪松路报道', url: 'https://sw.wuhan.gov.cn/xwdt/gzdt/202607/t20260720_2822684.shtml' },
+        { title: '高德总店地址', url: 'https://www.amap.com/place/B001B0I2B4' },
+      ],
+      map: mapPlace('夏氏砂锅（雪松路总店）', 'B001B0I2B4'),
+    },
+    {
+      id: 'wuhan-zhaoshifu',
       name: '家阳赵师傅油饼包烧麦（粮道街店）',
+      meals: ['breakfast', 'snack'],
+      neighborhoods: ['武昌', '粮道街', '司门口', '昙华林', '黄鹤楼'],
       area: '武昌粮道街 · 早餐',
       address: '武昌区粮道街139号',
       dish: '油饼包烧麦，适合趁热分着吃',
@@ -56,7 +86,10 @@ export const localFoodShops: Partial<Record<string, readonly LocalFoodShop[]>> =
       map: mapPlace('赵师傅油饼包烧麦', 'B001B09GR7'),
     },
     {
+      id: 'wuhan-xiongtai',
       name: '熊太婆原汤水饺（粮道街店）',
+      meals: ['breakfast', 'snack'],
+      neighborhoods: ['武昌', '粮道街', '胭脂路', '昙华林', '司门口', '黄鹤楼'],
       area: '武昌粮道街 · 早餐或简餐',
       address: '武昌区粮道街与胭脂路交会处',
       dish: '原汤水饺，武汉这里吃的是带汤的小馄饨',
@@ -71,7 +104,26 @@ export const localFoodShops: Partial<Record<string, readonly LocalFoodShop[]>> =
   ],
   yichang: [
     {
+      id: 'yichang-shalongyan',
+      name: '沙龙宴（夷陵广场店）',
+      meals: ['meal'],
+      neighborhoods: ['西陵', '夷陵广场', '均瑶广场', '宜昌城区'],
+      area: '西陵夷陵广场 · 午餐或晚餐',
+      address: '西陵区西陵一路16号，均瑶广场旁',
+      dish: '宜昌肥鱼或沙龙凤爪，按人数搭配时蔬',
+      routeFit: '住夷陵广场或从景区返宜昌城区后就近用餐。点鱼前先问重量、做法与价格。',
+      evidence: '门店官网列有夷陵广场店地址及本土楚菜，2026年三峡日报也报道了这家分店举办的活动。',
+      sources: [
+        { title: '商家菜单与门店说明', url: 'https://www.shalongyan.com/faq.html' },
+        { title: '三峡日报分店报道', url: 'https://epaper.cn3x.com.cn/sxrb/content/202601/30/c331152.html' },
+      ],
+      map: district('宜昌西陵区', '420502', '沙龙宴（夷陵广场店）'),
+    },
+    {
+      id: 'yichang-zhengxinji',
       name: '郑信记凉虾（中山路店）',
+      meals: ['snack'],
+      neighborhoods: ['西陵', '老城', '致祥路', '解放路', '二马路'],
       area: '西陵老城 · 饭后小吃',
       address: '西陵区致祥路13号',
       dish: '红糖凉虾，米浆做的小吃',
@@ -86,7 +138,10 @@ export const localFoodShops: Partial<Record<string, readonly LocalFoodShop[]>> =
   ],
   enshi: [
     {
+      id: 'enshi-zhangguan',
       name: '张关合渣（航空大道店）',
+      meals: ['meal'],
+      neighborhoods: ['恩施城区', '航空路', '航空大道', '舞阳坝'],
       area: '恩施城区 · 午餐或晚餐',
       address: '恩施市航空大道62号，近金三角',
       dish: '肉末合渣，按同行人数配时蔬',
@@ -99,4 +154,31 @@ export const localFoodShops: Partial<Record<string, readonly LocalFoodShop[]>> =
       map: district('恩施市', '422801', '张关合渣（航空大道店）'),
     },
   ],
+  xiangyang: [
+    {
+      id: 'xiangyang-wangfu',
+      name: '王府面馆（绿影壁店）',
+      meals: ['breakfast'],
+      neighborhoods: ['襄城', '襄阳古城', '王府绿影壁', '绿影壁', '北街'],
+      area: '襄阳古城 · 早餐',
+      address: '襄城区绿影壁巷3号，近南街与民主路口',
+      dish: '牛肉面或牛杂面，少辣先向店家说明',
+      routeFit: '古城住宿后先吃面，再走南街、北街和汉江岸线，早上留在襄城这一侧。',
+      evidence: '荆楚网2025年的襄阳旅行报道列出绿影壁巷这家店，另一篇国庆走访也点名王府绿影壁旁的门店。',
+      sources: [
+        { title: '荆楚网襄阳旅行报道', url: 'https://www.cnhubei.com/content/2025-03/19/content_19032284.html' },
+        { title: '2025年国庆门店走访', url: 'https://m.cnhubei.com/content/2025-09/30/content_19544917.html' },
+      ],
+      map: district('襄城区', '420602', '王府面馆 绿影壁'),
+    },
+  ],
 };
+
+export function findFoodShops(cityId: string, query = '', meal?: FoodMeal): readonly LocalFoodShop[] {
+  const shops = localFoodShops[cityId] || [];
+  const named = shops.filter(shop => query.includes(shop.name.split('（')[0].replace(/^家阳/, '')));
+  if (named.length) return meal ? named.filter(shop => shop.meals.includes(meal)) : named;
+  const inArea = shops.filter(shop => shop.neighborhoods.some(area => query.includes(area)));
+  const candidates = inArea.length ? inArea : shops;
+  return meal ? candidates.filter(shop => shop.meals.includes(meal)) : candidates;
+}

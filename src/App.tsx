@@ -16,7 +16,8 @@ import type { SupportAction } from './support';
 import { guideFromSearch, sortDestinations, type DestinationSort } from './discovery';
 import { defaultProfile, normalizeProfile, parsePlanUrl, templates, validDate, type Profile } from './planning';
 import { CreditsDialog } from './components/SiteDialogs';
-import { cities, cityById, destinations, destinationById, featuredDestinations, type Destination } from './data';
+import { cities, cityById, cityPhotos, destinations, destinationById, featuredDestinations, type Destination } from './data';
+import { displayPhoto } from './data/photos';
 import { findDestinations, type DurationFilter, type Filter } from './travel';
 
 const TravelGuide = lazy(() => import('./components/TravelGuide').then(module => ({ default: module.TravelGuide })));
@@ -24,7 +25,7 @@ const Planner = lazy(() => import('./components/Planner').then(module => ({ defa
 const Wishlist = lazy(() => import('./components/Wishlist').then(module => ({ default: module.Wishlist })));
 const SupportDesk = lazy(() => import('./components/SupportDesk').then(module => ({ default: module.SupportDesk })));
 
-type ModalState = { type: 'guide'; cityId: string; placeId?: string } | { type: 'planner'; profile?: Profile; dayIndex?: number } | { type: 'wishlist' } | { type: 'support'; openForm?: boolean; days?: number } | { type: 'credits' } | { type: 'info'; title: string; body: string } | null;
+type ModalState = { type: 'guide'; cityId: string; placeId?: string; tab?: 'practical' } | { type: 'planner'; profile?: Profile; dayIndex?: number } | { type: 'wishlist' } | { type: 'support'; openForm?: boolean; days?: number } | { type: 'credits' } | { type: 'info'; title: string; body: string } | null;
 const mainNav = [['popular', '热门去处'], ['routes', '经典路线'], ['destinations', '目的地'], ['culture', '荆楚文化'], ['travel-life', '吃住指南']] as const;
 const filters: { key: Filter; label: string }[] = [{ key: 'all', label: '全部' }, { key: 'nature', label: '山水自然' }, { key: 'city', label: '古城文博' }, { key: 'family', label: '亲子研学' }, { key: 'saved', label: '已收藏' }];
 const blankBrowse = { city: 'all', selection: 'all', filter: 'all' as Filter, keyword: '', limit: 12, duration: 'any' as DurationFilter, date: '', travelers: '2', order: 'recommended' as DestinationSort, view: 'places' as 'places' | 'cities' };
@@ -144,7 +145,7 @@ export default function App() {
     if (action.kind === 'place' && action.placeId && Object.hasOwn(destinationById, action.placeId)) { openPlace(destinationById[action.placeId]); return; }
     if (action.cityId && Object.hasOwn(cityById, action.cityId)) {
       if (action.kind === 'plan') planCity(action.cityId);
-      else if (action.kind === 'city') setModal({ type: 'guide', cityId: action.cityId });
+      else if (action.kind === 'city') setModal({ type: 'guide', cityId: action.cityId, tab: action.tab });
     }
   };
   const copyPlan = async (text: string) => {
@@ -208,6 +209,12 @@ export default function App() {
               <button type="button" aria-pressed={catalogueView === 'cities'} onClick={() => setCatalogueView('cities')}><LayoutGrid size={15} />城市索引</button>
             </div>
           </div>
+          {catalogueView === 'places' && activeCity === 'all' && !keyword && <div role="group" aria-label="热门旅行城市" className="city-quick-picks">
+            {['wuhan', 'yichang', 'enshi', 'xiangyang', 'jingzhou', 'shiyan'].map(id => <button type="button" key={id} onClick={() => revealDestinations(id)}>
+              <img src={displayPhoto('/images/' + cityPhotos[id].filename)} alt="" width="88" height="66" loading="lazy" decoding="async" />
+              <span>{cityById[id].shortName}</span>
+            </button>)}
+          </div>}
           {catalogueView === 'cities' ? <CityDirectory onChoose={id => revealDestinations(id)} /> : <div className="catalogue-layout">
             <div className="catalogue-filters" ref={catalogueFilters} tabIndex={-1}>
               <div className="catalogue-tools">
@@ -265,7 +272,7 @@ export default function App() {
     {toast && createPortal(<div role="status" aria-live="polite" className="site-toast fixed left-1/2 z-[70] flex max-w-[92vw] -translate-x-1/2 items-center gap-2 rounded-2xl bg-ink px-5 py-3 text-xs leading-6 text-white shadow-xl"><Check size={16} className="shrink-0 text-seafoam" />{toast}</div>, document.body)}
     {modal?.type === 'guide' && <Modal title={modal.placeId ? destinationById[modal.placeId].title : `${cityById[modal.cityId].shortName}旅行攻略`} onClose={closeModal} wide sheet dialogClassName="guide-dialog">
       <Suspense fallback={<DialogLoading />}>
-        <TravelGuide key={`${modal.cityId}-${modal.placeId || 'city'}`} city={cityById[modal.cityId]} place={modal.placeId ? destinationById[modal.placeId] : undefined}
+        <TravelGuide key={`${modal.cityId}-${modal.placeId || 'city'}-${modal.tab || 'overview'}`} city={cityById[modal.cityId]} place={modal.placeId ? destinationById[modal.placeId] : undefined} initialTab={modal.tab}
           date={date} travelers={travelers} onCopy={copyPlan} onOpenPlace={openPlace} onPlan={profile => setModal({ type: 'planner', profile })}
           onExplore={() => { closeModal(); revealDestinations(modal.cityId); }} saved={modal.placeId ? saved.includes(modal.placeId) : undefined}
           onSave={modal.placeId ? () => toggleSave(destinationById[modal.placeId!]) : undefined} />

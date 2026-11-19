@@ -454,7 +454,7 @@ export function answerTripQuestion(question: string, context: SupportContext, me
   const constraintEdited = ['origin', 'arrival', 'departure', 'departureStation', 'returnLogistics', 'mobility', 'budget', 'budgetLimit', 'budgetScope'].some(key => Object.hasOwn(parsed.patch, key));
   const explicit = /规划|具体行程|行程推荐|推荐行程|推荐路线|生成.*行程|安排.*行程|帮.*(?:计划|安排|行程|路线)|定制|做.*攻略|制定|制订/.test(question);
   const modify = /改|换|调整|重新|增加|减少|人数.*(?:加|减|多|少)|多带|少带|喜欢|偏好|想看|想吃|希望|轻松一点|慢一点|慢点|不要太赶|不赶|快一点|经典节奏|不自驾|先不填日期|取消日期/.test(question);
-  const ordinary = /住哪|住宿.*推荐|吃什么|有什么.*美食|美食.*(?:什么|推荐)|怎么(?:去|坐车|到)|交通.*(?:方式|安排)|季节|什么时候|怎么放慢|适合.*(?:亲子|孩子)|预算|花费|费用/.test(question);
+  const ordinary = /住哪|住宿.*推荐|吃什么|吃哪|哪家|餐馆|餐厅|面馆|店铺|早饭|午饭|晚饭|有什么.*美食|美食.*(?:什么|推荐)|怎么(?:去|坐车|到)|交通.*(?:方式|安排)|季节|什么时候|怎么放慢|适合.*(?:亲子|孩子)|预算|花费|费用/.test(question);
   if (hasPlace && !explicit && !/整体|全程|行程/.test(question)
     && !((parsed.patch.departure || parsed.patch.returnLogistics || parsed.errorField === 'logistics') && (previous || parsed.hasDays))) return undefined;
   if (ordinary && !explicit && !parsed.hasDays && !constraintEdited && !(previous && ((modify && parsed.fields) || (previous.awaiting && parsed.hasParty) || previous.awaiting === 'budget-scope'))) return undefined;

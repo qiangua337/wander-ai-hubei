@@ -7,11 +7,15 @@ const server = await createServer({ root, configFile: false, server: { middlewar
 try {
   const { cities, cityById, destinations, destinationById } = await server.ssrLoadModule('/src/data.ts');
   const { practical } = await server.ssrLoadModule('/src/data/practical.ts');
+  const { findFoodShops, localFoodShops } = await server.ssrLoadModule('/src/data/food-shops.ts');
   const { templates, buildTrip, estimateBudget, normalizeProfile, recommendDays } = await server.ssrLoadModule('/src/planning.ts');
   const { travelFaq } = await server.ssrLoadModule('/src/data/help.ts');
   const { answerSupport, planSupportTrip } = await server.ssrLoadModule('/src/support.ts');
   const before = JSON.stringify({ cities, destinations, practical, templates });
-  const sourceUrls = new Set(cities.flatMap(city => city.sources.map(source => source.url)));
+  const sourceUrls = new Set([
+    ...cities.flatMap(city => city.sources.map(source => source.url)),
+    ...Object.values(localFoodShops).flatMap(shops => shops.flatMap(shop => shop.sources.map(source => source.url))),
+  ]);
   const templateIds = new Set(templates.map(template => template.id));
   const allowedActions = new Set(['city', 'place', 'plan', 'template', 'wishlist', 'explore']);
   let checked = 0;
@@ -27,7 +31,7 @@ try {
     for (const source of reply.sources) {
       assert.equal(typeof source.title, 'string');
       assert(source.title.length > 0);
-      assert(source.url.startsWith('https://') && sourceUrls.has(source.url), 'Only existing official sources are allowed.');
+      assert(source.url.startsWith('https://') && sourceUrls.has(source.url), 'Sources must come from the editorial city or restaurant records.');
     }
     for (const action of reply.actions) {
       assert(allowedActions.has(action.kind));
@@ -39,6 +43,7 @@ try {
       if (action.kind === 'city' || action.kind === 'plan') assert(action.cityId);
       if (action.kind === 'place') assert(action.placeId);
       if (action.kind === 'template') assert(action.templateId);
+      if (action.tab) assert.equal(action.kind, 'city', 'Dining actions must open a city guide.');
       if (action.profile) {
         assert.equal(action.kind, 'plan', 'A complete profile opens the existing planner.');
         assert.deepEqual(normalizeProfile(action.profile), action.profile, 'The planner action must carry a valid complete profile.');
@@ -80,6 +85,20 @@ try {
     assert.equal(arrival.context.cityId, city.id);
     assert(arrival.text.includes(city.arrival), 'A follow-up should retain the city and use its travel advice.');
   }
+
+  const wuhanDinner = ask('武汉晚饭去哪吃？');
+  assert.deepEqual(wuhanDinner.foodShopIds, ['wuhan-xiashi'], 'Dinner recommendations need a proper meal.');
+  assert(wuhanDinner.actions.some(action => action.kind === 'city' && action.tab === 'practical'));
+  const yichangMeal = ask('宜昌午餐推荐哪家店？');
+  assert.deepEqual(yichangMeal.foodShopIds, ['yichang-shalongyan'], 'A dessert shop cannot stand in for lunch.');
+  assert.deepEqual(ask('武汉粮道街早餐吃哪家？').foodShopIds, ['wuhan-zhaoshifu', 'wuhan-xiongtai']);
+  assert.deepEqual(ask('荆州古城东门午饭吃哪家？').foodShopIds, ['jingzhou-laojiefang']);
+  assert.deepEqual(ask('沙市早餐吃什么？', { cityId: 'jingzhou' }).foodShopIds, ['jingzhou-fushou']);
+  assert.deepEqual(ask('襄阳古城早饭推荐哪家？').foodShopIds, ['xiangyang-wangfu']);
+  assert.equal(ask('夏氏砂锅在哪里？', { cityId: 'jingzhou' }).context.cityId, 'wuhan', 'A named store should resolve its own city.');
+  assert.deepEqual(findFoodShops('wuhan', '黄鹤楼午餐', 'meal'), [], 'Do not send Wuchang visitors across the river for lunch.');
+  assert.deepEqual(findFoodShops('jingzhou', '荆州古城早餐', 'breakfast'), [], 'Do not mislabel a Shashi breakfast as an old-town stop.');
+  assert.deepEqual(findFoodShops('yichang', '郑信记凉虾午饭', 'meal'), [], 'Named dessert searches still respect the requested meal.');
 
   const missingCity = ask('推荐住在哪里？');
   assert(/城市|目的地|哪里|哪座|哪里玩/.test(missingCity.text));
@@ -282,6 +301,10 @@ try {
   const foodWhilePlanning = ask('恩施有什么好吃的？', stayWhilePlanning.context);
   assert(!foodWhilePlanning.plan && foodWhilePlanning.text.includes(practical.enshi.food[0].order), 'Food discovery is not automatically a request to edit the trip.');
   assert.deepEqual(foodWhilePlanning.context.trip, familyTrip.context.trip);
+  const shopWhilePlanning = ask('恩施晚饭去哪家店？', familyTrip.context);
+  assert.deepEqual(shopWhilePlanning.foodShopIds, ['enshi-zhangguan']);
+  assert.deepEqual(shopWhilePlanning.context.trip, familyTrip.context.trip, 'Finding a restaurant must preserve all trip settings.');
+  assert(shopWhilePlanning.actions.some(action => action.profile && action.label === '继续调整这份行程'));
   const ordinaryFood = ask('恩施有什么美食推荐？', familyTrip.context);
   assert(!ordinaryFood.plan && ordinaryFood.text.includes(practical.enshi.food[0].order), 'An ordinary food query must not change the trip interest merely because it contains food.');
   const ordinaryTransport = ask('公共交通怎么安排？', familyTrip.context);
@@ -339,6 +362,15 @@ try {
   assert.equal(crossBudget.rooms, 2);
   assert.equal(crossBudget.nights, 6);
   const fiveComplete = planDraft({ cityIds: ['yichang', 'enshi'], days: 5, party: 2, interest: 'food' });
+  const dinnerDay = buildTrip(fiveComplete.plan).findIndex(day => day.cityId === 'enshi');
+  const dayFoodReply = ask(`第${dinnerDay + 1}天晚饭吃哪家？`, fiveComplete.context);
+  assert.equal(dayFoodReply.context.cityId, 'enshi', 'A cross-city dining follow-up must use that day’s city.');
+  assert.deepEqual(dayFoodReply.foodShopIds, ['enshi-zhangguan']);
+  assert.deepEqual(dayFoodReply.context.trip, fiveComplete.context.trip);
+  assert.equal(dayFoodReply.actions.find(action => action.profile)?.dayIndex, dinnerDay);
+  assert.equal(ask('第七天晚饭吃哪家？', fiveComplete.context).foodShopIds, undefined);
+  const outsideDayFood = ask('第四天去北京晚饭吃哪家？', fiveComplete.context);
+  assert(!outsideDayFood.context.cityId && !outsideDayFood.foodShopIds, 'A day label cannot override an explicit out-of-province city.');
   assert(fiveComplete.plan && fiveComplete.plan.template === 'west-five' && buildTrip(fiveComplete.plan).length === 5);
   assert(/固定|既定|主线|不改变|保留/.test(fiveComplete.text), 'Cross-city preference labels must not pretend to change a fixed template.');
   const fiveDated = ask('2026-12-08', fiveComplete.context);

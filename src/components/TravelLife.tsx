@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { ArrowUpRight, BedDouble, MapPin, TrainFront, Utensils } from 'lucide-react';
+import { BedDouble, MapPin, TrainFront, Utensils } from 'lucide-react';
 import { cityById, cityPhotos } from '../data';
 import { practical } from '../data/practical';
 import { displayPhoto, editorialPhotos } from '../data/photos';
@@ -7,6 +7,7 @@ import { Button, SelectField } from './ui';
 import { CityOptions } from './CityPicker';
 import { LocalFoodShops } from './LocalFoodShops';
 import { PracticalMapLinks } from './PracticalMapLinks';
+import { localFoodShops } from '../data/food-shops';
 
 export function TravelLife({ fallbackCity, onExplore, onPlan }: { fallbackCity: string; onExplore: (cityId: string) => void; onPlan: (cityId: string) => void }) {
   const [chosenCity, setChosenCity] = useState('');
@@ -23,6 +24,11 @@ export function TravelLife({ fallbackCity, onExplore, onPlan }: { fallbackCity: 
         <label className="life-city-select"><span><MapPin size={15} />切换城市</span><SelectField aria-label="吃住指南城市" value={cityId} onChange={event => setChosenCity(event.target.value)}><CityOptions /></SelectField></label>
       </div>
 
+      <div role="group" aria-label="快速查看吃住城市" className="life-city-picks">
+        {Object.keys(localFoodShops).map(id => <button type="button" key={id} aria-pressed={cityId === id} onClick={() => setChosenCity(id)}>
+          {cityById[id].shortName}
+        </button>)}
+      </div>
       <div role="region" aria-label={`${city.shortName}吃住交通`} className={'life-panel' + (photo?.filename ? ' has-photo' : '')}>
         {photo?.filename && <figure className="life-photo"><img key={cityId} src={displayPhoto(`/images/${photo.filename}`)} alt={photo.alt || photo.subject} width="800" height="900" loading="lazy" decoding="async" /><figcaption><MapPin size={14} />{cityId === 'wuhan' ? photo.subject : `${city.shortName} · ${photo.subject}`}</figcaption></figure>}
         <div className="life-content">
@@ -44,11 +50,11 @@ export function TravelLife({ fallbackCity, onExplore, onPlan }: { fallbackCity: 
             </article>
           </div>
           <div className="life-arrival"><TrainFront size={18} /><p><strong>怎么到、怎么走</strong>{city.arrival}</p></div>
-          <div className="life-actions"><Button onClick={() => onPlan(cityId)}>安排{city.shortName}吃住行<ArrowUpRight size={16} /></Button><Button variant="neutral" onClick={() => onExplore(cityId)}>继续探索{city.shortName}<ArrowUpRight size={16} /></Button></div>
+          <div className="life-actions"><Button onClick={() => onPlan(cityId)}>安排{city.shortName}吃住行</Button><Button variant="neutral" onClick={() => onExplore(cityId)}>继续探索{city.shortName}</Button></div>
           <p className="life-footnote">片区与餐食为编辑建议；房价、供餐和交通接驳请在出发前确认。</p>
         </div>
       </div>
-      <LocalFoodShops cityId={cityId} />
+      <LocalFoodShops key={cityId} cityId={cityId} />
     </div>
   </section>;
 }

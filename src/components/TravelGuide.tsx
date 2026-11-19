@@ -19,16 +19,16 @@ const tabs = [
   { id: 'sources', label: '出行资料' },
 ] as const;
 
-export function TravelGuide({ city, place, date, travelers, onCopy, saved, onSave, onOpenPlace, onPlan, onExplore }: {
+export function TravelGuide({ city, place, date, travelers, onCopy, saved, onSave, onOpenPlace, onPlan, onExplore, initialTab = 'overview' }: {
   city: CityGuide; place?: Destination; date: string; travelers: string; saved?: boolean;
   onCopy: (text: string) => void; onSave?: () => void; onOpenPlace: (place: Destination) => void;
-  onPlan: (profile: Profile) => void; onExplore: () => void;
+  onPlan: (profile: Profile) => void; onExplore: () => void; initialTab?: (typeof tabs)[number]['id'];
 }) {
   const id = useId();
   const match = place && routeForPlace(place.id);
   const chapters = availableTripDays(city);
   const featuredRoute = match && attractionRouteAt(city, match.chapter);
-  const [tab, setTab] = useState<(typeof tabs)[number]['id']>('overview');
+  const [tab, setTab] = useState<(typeof tabs)[number]['id']>(initialTab);
   const [chapter, setChapter] = useState(match?.chapter ?? 0);
   const body = useRef<HTMLDivElement>(null);
   const photo = cityPhotos[city.id];

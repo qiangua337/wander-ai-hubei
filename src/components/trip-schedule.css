@@ -65,3 +65,11 @@
   .trip-schedule-rows .schedule-row { grid-template-columns:42px 18px minmax(0,1fr); gap:5px; }
   .trip-schedule-day { padding-inline:12px; }
 }
+.trip-food-options { margin:14px 0; padding:12px 15px; border:1px solid #ddc3b1; border-radius:7px; background:#fffaf4; }
+.trip-food-options>summary { display:flex; align-items:center; gap:8px; min-height:44px; cursor:pointer; list-style:none; color:var(--color-pine-deep); font-size:1rem; font-weight:620; }
+.trip-food-options>summary>svg:last-child { margin-left:auto; }
+.trip-food-options[open]>summary>svg:last-child { transform:rotate(180deg); }
+.trip-food-options>p { color:var(--color-muted); font-size:14px; line-height:1.8; }
+.trip-food-options .food-shops-heading h3 { font-size:19px; }
+.trip-food-options .food-shops-grid { grid-template-columns:1fr; }
+.trip-food-options .local-food-shops { margin-top:12px; }

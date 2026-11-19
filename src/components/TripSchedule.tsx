@@ -1,5 +1,5 @@
 import { useId } from 'react';
-import { ArrowRight, BedDouble, Clock3, Footprints, MapPin, Route, Utensils } from 'lucide-react';
+import { ArrowRight, BedDouble, ChevronDown, Clock3, Footprints, MapPin, Route, Utensils } from 'lucide-react';
 import { groupLodging, scheduleDuration } from '../day-schedule';
 import { adjustmentSummary, buildTripSchedules, visitChoices } from '../visit-scheduling';
 import type { VisitChange } from '../visit-changes';
@@ -9,6 +9,9 @@ import { planDate } from '../travel';
 import { ReturnDayEditor } from './ReturnDayEditor';
 import { DayStartEditor } from './DayStartEditor';
 import { VisitChangePanel } from './VisitChangePanel';
+import { LocalFoodShops } from './LocalFoodShops';
+import { localFoodShops } from '../data/food-shops';
+import { cityById } from '../data';
 import './trip-schedule.css';
 
 const rowStyle = {
@@ -97,6 +100,11 @@ export function TripSchedule({ days, profile, onUpdateReturn, onUpdateStart, onV
           </li>;
         })}
       </ol>
+      {localFoodShops[day.cityId]?.length ? <details key={key} className="trip-food-options">
+        <summary><Utensils size={17} aria-hidden="true" /><span>在{cityById[day.cityId].shortName}吃哪家</span><ChevronDown size={16} aria-hidden="true" /></summary>
+        <p>按今天停留的片区选店，店铺卡里可查看位置与顺路建议。</p>
+        <LocalFoodShops cityId={day.cityId} />
+      </details> : null}
       <details className="trip-schedule-notes">
         <summary>行前提醒与资料<ArrowRight size={15} /></summary>
         {schedule.title ? <p>按上方重排后的路线核对预约、开放入口与返程交通。</p> : <><p>{day.tip}</p><p>{day.transport}</p></>}

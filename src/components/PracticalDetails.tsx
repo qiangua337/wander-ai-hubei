@@ -32,6 +32,6 @@ export function FoodSuggestions({ city }: { city: CityGuide }) {
         </article>)}
       </div>
     </section>
-    <LocalFoodShops cityId={city.id} />
+    <LocalFoodShops key={city.id} cityId={city.id} />
   </>;
 }

@@ -11,12 +11,13 @@ import { SupportTripForm } from './SupportTripForm';
 import { SupportPlanPreview } from './SupportPlanPreview';
 import { SupportPlanTools } from './SupportPlanTools';
 import { SelectField } from './ui';
+import { LocalFoodShops } from './LocalFoodShops';
 import './support-desk.css';
 
 type Message = { id: number; question: string; reply: SupportReply; baseProfile?: Profile };
 const examples = ['武汉2天2人，最后一天15:30从武昌站返程', '恩施3天，2人，带长辈，少台阶', '从武汉出发，去宜昌2天2人', '怎么保存分享行程？'];
 const promptsFor = (cityId?: string) => cityId && cityById[cityId]
-  ? [cityById[cityId].shortName + Math.min(2, cityById[cityId].days.length) + '天，2人，轻松游', cityById[cityId].shortName + '住哪里？', cityById[cityId].shortName + '吃什么？', '怎么保存行程？']
+  ? [cityById[cityId].shortName + Math.min(2, cityById[cityId].days.length) + '天，2人，轻松游', cityById[cityId].shortName + '住哪里？', cityById[cityId].shortName + '吃哪家店？', '怎么保存行程？']
   : examples;
 
 export function SupportDesk({ open, openForm = false, initialCity, initialDays, initialParty, initialDate, onClose, onAction }: {
@@ -186,6 +187,7 @@ export function SupportDesk({ open, openForm = false, initialCity, initialDays, 
               const route = plan ? buildTrip(plan) : [];
               const cityNames = [...new Set(route.map(day => cityById[day.cityId].shortName))];
               return <div key={message.id} className="support-turn"><div className="support-question"><span>你</span><p>{message.question}</p></div><div className="support-reply"><span className="support-avatar" aria-hidden="true"><Compass size={17} /></span><div><p>{message.reply.text}</p>
+              {message.reply.foodShopIds?.length && message.reply.context.cityId ? <LocalFoodShops cityId={message.reply.context.cityId} shopIds={message.reply.foodShopIds} compact /> : null}
               {plan && <button className={'support-plan-peek' + (selectedId === message.id ? ' is-selected' : '')} onClick={() => openPlan(message)} aria-pressed={selectedId === message.id}>
                 <span><Route size={16} />{cityNames.join(' → ')}</span><strong>{route.length} 天 · {plan.party} 人</strong><small>打开这份行程并继续修改<ArrowRight size={14} /></small>
               </button>}

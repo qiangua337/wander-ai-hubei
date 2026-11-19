@@ -1,5 +1,6 @@
 import { cities, cityById, destinations, destinationById, type CityGuide, type Destination } from './data';
 import { practical } from './data/practical';
+import { findFoodShops, localFoodShops, type FoodMeal } from './data/food-shops';
 import { travelFaq } from './data/help';
 import { placeAliases } from './data/destinations';
 import { buildTrip, templates, type Profile } from './planning';
@@ -12,8 +13,8 @@ import { answerTripQuestion, copyTripDraft, extractTripOrigin, localClockPattern
 export { planSupportTrip, type SupportTripDraft } from './support-planning';
 
 export type SupportContext = { cityId?: string; trip?: SupportTripDraft; visitDay?: number };
-export type SupportAction = { kind: 'city' | 'place' | 'plan' | 'template' | 'wishlist' | 'explore'; label: string; cityId?: string; placeId?: string; templateId?: string; profile?: Profile; dayIndex?: number };
-export type SupportReply = { text: string; sources: { title: string; url: string }[]; actions: SupportAction[]; suggestions: string[]; context: SupportContext; plan?: Profile; dayIndex?: number };
+export type SupportAction = { kind: 'city' | 'place' | 'plan' | 'template' | 'wishlist' | 'explore'; label: string; cityId?: string; placeId?: string; templateId?: string; profile?: Profile; dayIndex?: number; tab?: 'practical' };
+export type SupportReply = { text: string; sources: { title: string; url: string }[]; actions: SupportAction[]; suggestions: string[]; context: SupportContext; plan?: Profile; dayIndex?: number; foodShopIds?: string[] };
 
 const cityAliases: Record<string, string[]> = {
   wuhan: ['武昌', '汉口', '汉阳', '江城'], enshi: ['恩施', '利川', '建始', '咸丰'],
@@ -102,7 +103,8 @@ function answerGuide(question: string, context: SupportContext = {}): SupportRep
   const outsidePlace = /北京|上海|天津|重庆|广州|深圳|成都|杭州|南京|长沙|西安|洛阳|苏州|桂林|厦门|青岛|三亚|大理|丽江|张家界|郑州|济南|昆明|贵阳|海口|拉萨|乌鲁木齐|哈尔滨|长春|沈阳|太原|石家庄|福州|南昌|合肥|南宁|兰州|银川|西宁|呼和浩特|香港|澳门|台湾|云南|四川|贵州|湖南|广东|广西|河南|河北|浙江|江苏|山东|山西|陕西|海南|福建|江西|安徽|甘肃|青海|宁夏|新疆|西藏|内蒙古|辽宁|吉林|黑龙江/.test(scopeQuestion);
   const otherNamedPlace = /(?:去|到|在|换成|目的地[是为]?)([\u4e00-\u9fff]{2,8}(?:市|省|自治区|特别行政区))/.test(scopeQuestion);
   const outsideScope = !mentionedCities.length && (outsidePlace || otherNamedPlace);
-  const cityId = mentionedCities.length === 1 ? mentionedCities[0] : mentionedCities.length === 0 && !outsideScope ? previousCity : undefined;
+  const namedShopCity = !outsideScope && !mentionedCities.length ? Object.entries(localFoodShops).find(([, shops]) => shops?.some(shop => normalized.includes(compact(shop.name.split('（')[0].replace(/^家阳/, '')))))?.[0] : undefined;
+  const cityId = mentionedCities.length === 1 ? mentionedCities[0] : mentionedCities.length === 0 && !outsideScope ? namedShopCity || previousCity : undefined;
   const city = cityId ? cityById[cityId] : undefined;
   const actions = city ? [cityAction(city.id), planAction(city.id)] : [{ kind: 'explore' as const, label: '按城市探索湖北' }];
   const placeActions = place ? [placeAction(place), ...actions] : actions;
@@ -163,7 +165,7 @@ function answerGuide(question: string, context: SupportContext = {}): SupportRep
     return reply(`你提到了${names}。${routeIntent ? '本站暂没有完全对应这组城市的经典模板；跨城需要给交通单独留时间。' : '吃住和接驳要按城市分别看。'}先选一座城市，我再给你具体建议。`, undefined, mentionedCities.slice(0, 4).map(cityAction), [], mentionedCities.slice(0, 3).map(id => `${cityById[id].shortName}怎么玩？`));
   }
   const stayIntent = /住哪|住在|住宿|酒店|宾馆|落脚|民宿/.test(q);
-  const foodIntent = /吃|美食|过早|小吃|早餐|午餐|晚餐|特产|口味|辣不辣/.test(q);
+  const foodIntent = Boolean(namedShopCity) || /吃|美食|过早|小吃|早餐|午餐|晚餐|早饭|午饭|晚饭|特产|口味|辣不辣|餐厅|餐馆|面馆|店铺|推荐.{0,4}店/.test(q);
   const transportIntent = /交通|怎么去|如何去|怎么到|如何到|怎么走|自驾|高铁|火车|公交|地铁|接驳|机场|车站|包车/.test(q);
   const familyIntent = /亲子|孩子|带娃|宝宝|儿童|老人|长辈|爸妈|父母|老年|轻松|休闲|不累|慢游|体力/.test(q);
   const seasonIntent = /季节|什么时候去|几月|春天|夏天|秋天|冬天|春季|夏季|秋季|冬季|月份/.test(q);
@@ -189,7 +191,16 @@ function answerGuide(question: string, context: SupportContext = {}): SupportRep
   }
   if (city && foodIntent) {
     const food = practical[city.id].food.map(item => `${item.area}\n${item.order}\n顺路安排：${item.timing}`).join('\n\n');
-    return reply(`${city.shortName}的地方餐桌，可以这样顺路安排：\n\n${food}\n\n餐馆现价、营业与供应请在出发前核对。`, city.id, actions);
+    const meal: FoodMeal | undefined = /早餐|早饭|过早/.test(q) ? 'breakfast' : /午餐|晚餐|午饭|晚饭|正餐/.test(q) ? 'meal' : /小吃|甜点|甜品|凉虾/.test(q) ? 'snack' : undefined;
+    const shops = findFoodShops(city.id, q, meal);
+    const specific = Boolean(meal || namedShopCity || /哪家|店|餐厅|餐馆|面馆/.test(q));
+    const intro = shops.length ? `${city.shortName}可以先看${shops.map(shop => shop.name).join('、')}。按下面的地址和片区选一家。`
+      : `${city.shortName}${meal ? '这个时段' : ''}的具体门店资料还需要补充，可以先按下面的片区和菜式找。`;
+    const result = reply(`${intro}${shops.length && specific ? '' : '\n\n' + food}`, city.id,
+      [{ kind: 'city', cityId: city.id, label: '查看完整吃住指南', tab: 'practical' }, planAction(city.id)],
+      shops.length ? [...new Map(shops.flatMap(shop => shop.sources).map(source => [source.url, source])).values()] : city.sources.slice(0, 2),
+      [`${city.shortName}早餐吃哪家？`, `${city.shortName}晚饭去哪吃？`, `${city.shortName}住哪里顺路？`]);
+    return { ...result, foodShopIds: shops.map(shop => shop.id) };
   }
   if (place && transportIntent) {
     const aliases = [place.title, ...(placeAliases[place.id] || [])].map(compact);
@@ -369,19 +380,35 @@ export function answerSupport(question: string, context: SupportContext = {}): S
       return { text, actions, sources: current.sources, suggestions: current.suggestions, context: current.context };
     }
   }
-  const result = answerGuide(question, context);
+  const otherDestination = typeof question === 'string' && /北京|上海|天津|重庆|广州|深圳|成都|杭州|南京|长沙|西安|洛阳|苏州|桂林|厦门|青岛|三亚|大理|丽江|张家界|郑州|济南|昆明|贵阳|海口|拉萨|乌鲁木齐|哈尔滨|长春|沈阳|太原|石家庄|福州|南昌|合肥|南宁|兰州|银川|西宁|呼和浩特|香港|澳门|台湾|云南|四川|贵州|湖南|广东|广西|河南|河北|浙江|江苏|山东|山西|陕西|海南|福建|江西|安徽|甘肃|青海|宁夏|新疆|西藏|内蒙古|辽宁|吉林|黑龙江/.test(question);
+  let scopedQuestion = question;
+  let diningDay: number | undefined;
+  const diningDayLabel = typeof question === 'string' && question.match(/第[一二三四五六七1-7]天|最后一天|首日/);
+  if (context.trip && diningDayLabel && !otherDestination && /吃哪|哪家|推荐.{0,8}(?:店|餐厅|餐馆)|(?:早餐|午餐|晚餐|早饭|午饭|晚饭).*吃/.test(question)
+    && !/改|换|挪|调整|增加|减少/.test(question) && !mentionedCityIds(compact(question)).length) {
+    const current = planSupportTrip(context.trip);
+    if (current.plan) {
+      const days = buildTrip(current.plan);
+      diningDay = requestedDayIndex(diningDayLabel[0], days.length);
+      if (!days[diningDay]) return {
+        ...reply(`这份行程共 ${days.length} 天。可以按行程里的日期问我吃哪家。`, context.cityId, current.actions, []),
+        context: { ...context, trip: copyTripDraft(context.trip) },
+      };
+      scopedQuestion = cityById[days[diningDay].cityId].shortName + question.replace(diningDayLabel[0], '');
+    }
+  }
+  const result = answerGuide(scopedQuestion, context);
   if (!context.trip || result.context.trip) return result;
   const previous = copyTripDraft(context.trip), cityIds = previous.cityIds || [];
-  const otherDestination = typeof question === 'string' && /北京|上海|天津|重庆|广州|深圳|成都|杭州|南京|长沙|西安|洛阳|苏州|桂林|厦门|青岛|三亚|大理|丽江|张家界|郑州|济南|昆明|贵阳|海口|拉萨|乌鲁木齐|哈尔滨|长春|沈阳|太原|石家庄|福州|南昌|合肥|南宁|兰州|银川|西宁|呼和浩特|香港|澳门|台湾|云南|四川|贵州|湖南|广东|广西|河南|河北|浙江|江苏|山东|山西|陕西|海南|福建|江西|安徽|甘肃|青海|宁夏|新疆|西藏|内蒙古|辽宁|吉林|黑龙江/.test(question);
   if (!result.context.cityId && otherDestination) return result;
   if (result.context.cityId && cityIds.length && !cityIds.includes(result.context.cityId)) return result;
   const profile = planSupportTrip(previous).plan;
   let actions = result.actions;
   if (profile) {
-    const resume: SupportAction = { kind: 'plan', cityId: profile.cityId, label: '继续调整这份行程', profile: { ...profile, indices: [...profile.indices] } };
+    const resume: SupportAction = { kind: 'plan', cityId: profile.cityId, label: '继续调整这份行程', profile: { ...profile, indices: [...profile.indices] }, ...(diningDay !== undefined ? { dayIndex: diningDay } : {}) };
     actions = actions.some(action => action.kind === 'plan')
       ? actions.map(action => action.kind === 'plan' && !action.profile ? resume : action)
       : [resume, ...actions];
   }
-  return { ...result, actions, context: { ...result.context, trip: previous } };
+  return { ...result, actions, context: { ...result.context, trip: previous, ...(diningDay !== undefined ? { visitDay: diningDay } : {}) } };
 }
