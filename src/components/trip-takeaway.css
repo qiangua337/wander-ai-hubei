@@ -1,0 +1,59 @@
+.trip-takeaway.trip-export {
+  z-index: 21;
+  gap: 6px;
+  padding: 8px max(10px, env(safe-area-inset-right)) max(8px, env(safe-area-inset-bottom)) max(10px, env(safe-area-inset-left));
+  border-top-color: #e4d1c3;
+  background: #fffcf7;
+  box-shadow: 0 -5px 20px #3c21180d;
+  backdrop-filter: none;
+}
+
+.trip-export > button {
+  display: inline-flex;
+  min-width: 0;
+  min-height: 44px;
+  align-items: center;
+  justify-content: center;
+  gap: 5px;
+  padding-inline: 5px;
+  border-radius: 5px;
+  font-size: 13px;
+  font-weight: 630;
+  line-height: 1.4;
+  white-space: nowrap;
+}
+
+.trip-export > button svg { flex-shrink: 0; }
+.trip-share-trigger { border: 1px solid var(--color-pine-deep); background: var(--color-pine-deep); color: #fffaf3; }
+.trip-share-trigger:hover, .trip-share-trigger[aria-expanded="true"] { background: var(--color-pine); }
+
+.trip-share-panel {
+  position: absolute;
+  inset-inline-end: max(10px, env(safe-area-inset-right));
+  inset-block-end: calc(100% + 7px);
+  width: min(390px, calc(100% - 20px));
+  max-height: min(320px, calc(100dvh - 162px));
+  overflow: auto;
+  padding: 9px 13px 12px;
+  border: 1px solid #d7b7a8;
+  border-radius: 8px;
+  background: #fffaf4;
+  box-shadow: 0 8px 36px #3c211828;
+}
+
+.trip-share-heading { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.trip-share-heading h4 { color: var(--color-pine-deep); font-size: 16px; font-weight: 680; }
+.trip-share-heading button { display: grid; width: 40px; height: 40px; flex: none; place-items: center; border-radius: 4px; color: var(--color-pine-deep); }
+.trip-share-heading button:hover { background: var(--color-sage); }
+.trip-share-panel > p { color: var(--color-ink); font-size: 13px; line-height: 1.7; }
+.trip-share-panel .trip-share-note { margin-top: 4px; color: var(--color-muted); font-size: 12px; }
+.trip-share-panel > label { display: block; margin-top: 10px; color: var(--color-pine-deep); font-size: 12px; font-weight: 650; }
+.trip-share-panel > input { height: 40px; margin-top: 3px; font-size: 16px; }
+.trip-share-actions { display: flex; align-items: center; flex-wrap: wrap; gap: 6px 10px; margin-top: 9px; }
+.trip-share-actions button { gap: 6px; }
+.trip-share-actions p { color: var(--color-pine-deep); font-size: 12px; }
+
+@media (min-width: 768px) {
+  .trip-takeaway.trip-export { padding: 12px; }
+  .trip-share-panel > input { font-size: 13px; }
+}

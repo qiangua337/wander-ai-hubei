@@ -12,6 +12,8 @@ try {
   const { cityGroups, guideFromSearch, placesByCity, routeForPlace, shareGuideUrl, sortDestinations } = await server.ssrLoadModule('/src/discovery.ts');
   const { readBrowseShare, recentPlaceIds, shareBrowseUrl } = await server.ssrLoadModule('/src/browse-share.ts');
   const { buildDaySchedule } = await server.ssrLoadModule('/src/day-schedule.ts');
+  const { buildTripSchedules } = await server.ssrLoadModule('/src/visit-scheduling.ts');
+  const { planWishlist } = await server.ssrLoadModule('/src/wishlist-planning.ts');
   const { attractionRoutes, availableTripDays } = await server.ssrLoadModule('/src/data/attraction-routes.ts');
   const { practical } = await server.ssrLoadModule('/src/data/practical.ts');
   const { practicalMapUrl } = await server.ssrLoadModule('/src/data/practical-maps.ts');
@@ -75,6 +77,55 @@ try {
     assert(day, `Missing route for ${place.title}`);
     assert(buildDaySchedule(day, profile, undefined, true).rows.some(row => row.kind === 'visit' && row.title === match.visit),
       `${place.title} must open an itinerary that actually visits it`);
+  }
+  const selections = ['east-lake', 'wuhan', 'hubei-museum', 'east-lake', 'quyuan', '__proto__'];
+  Object.freeze(selections);
+  const fromFavorites = planWishlist('wuhan', selections, '2026-12-08', 3);
+  assert.deepEqual(fromFavorites.profile.indices, [0, 1]);
+  assert.deepEqual(fromFavorites.days.map(day => day.placeIds), [['wuhan'], ['hubei-museum', 'east-lake']],
+    'Selected places sharing a chapter count as one day and follow the time table order.');
+  assert.deepEqual(fromFavorites.included, ['wuhan', 'hubei-museum', 'east-lake']);
+  assert.deepEqual(fromFavorites.skipped.map(item => item.id), ['quyuan', '__proto__']);
+  assert.match(fromFavorites.skipped[0].reason, /宜昌.*单独/);
+  assert.equal(fromFavorites.profile.party, 3);
+  assert.equal(fromFavorites.profile.date, '2026-12-08');
+  assert.equal(fromFavorites.profile.arrival, 'full-day');
+  assert.equal(fromFavorites.profile.departure, 'flexible');
+  assert.equal(fromFavorites.profile.budgetLimit, undefined);
+  assert.equal(estimateBudget(fromFavorites.profile, fromFavorites.days.length).nights, 1);
+  assert.deepEqual(parsePlanUrl(new URL(sharePlanUrl(fromFavorites.profile)).search), fromFavorites.profile);
+  const changedCrossing = planWishlist('wuhan', ['qingchuan', 'hankou', 'wuhan'], '', 2);
+  assert.deepEqual(changedCrossing.days.map(day => day.placeIds), [['wuhan'], ['hankou']]);
+  assert.deepEqual(changedCrossing.skipped.map(item => item.id), ['qingchuan']);
+  assert.match(changedCrossing.skipped[0].reason, /汉口.*单独/);
+  assert.match(changedCrossing.days[1].title, /汉口/);
+  const noSelectedAttraction = planWishlist('wuhan', ['wuhan', 'qingchuan'], '', 2);
+  assert.deepEqual(noSelectedAttraction.profile.indices, [0], 'Do not keep a day when its only selected place was displaced by a combined chapter.');
+  const qingchuanAlone = planWishlist('wuhan', ['qingchuan'], '', 1);
+  assert.deepEqual(qingchuanAlone.included, ['qingchuan']);
+  assert.deepEqual(qingchuanAlone.days[0].conditionalPlaceIds, ['qingchuan'], 'The actual schedule offers Qingchuan Pavilion or Guqin Terrace.');
+  assert.equal(qingchuanAlone.profile.group, 'solo');
+  assert.equal(planWishlist('wuhan', ['wuhan'], '2026-02-31', 99).profile.date, '');
+  assert.equal(planWishlist('wuhan', ['wuhan'], '', 99).profile.party, 2);
+  assert.equal(planWishlist('wuhan', ['enshi'], '', 2).profile, undefined, 'An out-of-city favorite never creates a fallback itinerary.');
+  assert.equal(planWishlist('constructor', ['wuhan'], '', 2).profile, undefined);
+  assert.deepEqual(planWishlist('wuhan', [], '', 2), { profile: undefined, days: [], included: [], skipped: [] });
+  for (const city of cities) {
+    const sameCity = placesByCity[city.id].map(place => place.id).reverse();
+    const planned = planWishlist(city.id, sameCity, '', 6);
+    const builtDays = buildTrip(planned.profile);
+    const { schedules } = buildTripSchedules(builtDays, planned.profile);
+    assert.deepEqual([...planned.included, ...planned.skipped.map(item => item.id)].sort(), [...sameCity].sort(), city.id);
+    assert.deepEqual(planned.profile.indices, builtDays.map(day => day.originalIndex), city.id);
+    assert.equal(planned.days.length, builtDays.length, city.id);
+    for (const [index, day] of planned.days.entries()) {
+      assert(day.placeIds.length > 0 && day.chapter === builtDays[index].originalIndex, city.id);
+      for (const id of day.placeIds) {
+        const route = routeForPlace(id);
+        const row = schedules[index].rows.find(row => row.kind === 'visit' && !row.provisional && row.title === route.visit);
+        assert(row && route.chapter === day.chapter, `An included favorite must appear as an actual visit: ${id}`);
+      }
+    }
   }
   const added = Object.entries(attractionRoutes).flatMap(([cityId, routes]) => routes.map(route => ({ cityId, ...route })));
   assert.deepEqual(added.map(route => route.placeId).sort(),

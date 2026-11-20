@@ -14,6 +14,7 @@ import { JourneyInvitation } from './components/TravelStories';
 import { ExploreSummary } from './components/ExploreSummary';
 import { CatalogueCityHeader, CatalogueSharePanel, RecentlyViewed } from './components/CatalogueHighlights';
 import type { GuideView } from './components/TravelGuide';
+import type { WishlistView } from './components/Wishlist';
 import { readBrowseShare, recentPlaceIds, shareBrowseUrl } from './browse-share';
 import type { SupportAction } from './support';
 import { guideFromSearch, sortDestinations, type DestinationSort } from './discovery';
@@ -30,7 +31,7 @@ const Wishlist = lazy(() => import('./components/Wishlist').then(module => ({ de
 const SupportDesk = lazy(() => import('./components/SupportDesk').then(module => ({ default: module.SupportDesk })));
 
 type SupportModal = { type: 'support'; openForm?: boolean; days?: number; cityId?: string };
-type WishlistModal = { type: 'wishlist'; returnTo?: SupportModal };
+type WishlistModal = { type: 'wishlist'; returnTo?: SupportModal; view?: WishlistView };
 type GuideModal = { type: 'guide'; cityId: string; placeId?: string; tab?: 'practical'; previousPlaceId?: string;
   view?: GuideView; returnTo?: SupportModal | WishlistModal };
 type ReturnTarget = GuideModal | SupportModal | WishlistModal;
@@ -156,7 +157,7 @@ export default function App() {
   const toggleSave = (place: Destination) => {
     const wasSaved = saved.includes(place.id);
     setSaved(previous => previous.includes(place.id) ? previous.filter(id => id !== place.id) : [...previous, place.id]);
-    setToast(wasSaved ? `已取消收藏「${place.title}」` : `已收藏「${place.title}」，在「我的收藏」中查看`);
+    setToast(wasSaved ? `已取消收藏「${place.title}」` : `已收藏「${place.title}」，可在「我的收藏」排行程`);
   };
   const chooseCity = (id: string) => { setActiveCity(id); setSelection(id); setLimit(12); };
   const reset = () => { chooseCity('all'); setKeyword(''); setFilter('all'); setDuration('any'); setOrder('recommended'); };
@@ -357,9 +358,10 @@ export default function App() {
       <Planner initialCity={activeCity} initialDate={date} travelers={travelers} initialProfile={modal.profile} initialDayIndex={modal.dayIndex} onClose={closeModal} back={modalBack(modal.returnTo)} onCopy={copyPlan} />
     </Suspense>}
     {modal?.type === 'wishlist' && <Suspense fallback={<Modal title="我的收藏" onClose={closeModal}><DialogLoading /></Modal>}>
-      <Wishlist saved={saved} onClose={closeModal} back={modalBack(modal.returnTo)}
-        onOpenPlace={place => setModal({ type: 'guide', cityId: place.cityId, placeId: place.id, returnTo: modal })}
-        onRemove={toggleSave} onPlan={id => planCity(id, modal)} onExplore={() => { closeModal(); revealDestinations('all'); }} />
+      <Wishlist saved={saved} date={date} travelers={Number(travelers)} initialView={modal.view} onClose={closeModal} back={modalBack(modal.returnTo)}
+        onOpenPlace={(place, view) => setModal({ type: 'guide', cityId: place.cityId, placeId: place.id, returnTo: { ...modal, view } })}
+        onRemove={toggleSave} onPlan={(profile, view) => setModal({ type: 'planner', profile, returnTo: { ...modal, view } })}
+        onExplore={() => { closeModal(); revealDestinations('all'); }} />
     </Suspense>}
     {modal?.type === 'credits' && <CreditsDialog onClose={closeModal} />}
     {modal?.type === 'catalogue-share' && <Modal title="分享湖北目的地目录" onClose={closeModal}><CatalogueSharePanel link={modal.link} /></Modal>}

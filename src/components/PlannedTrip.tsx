@@ -1,5 +1,5 @@
-import { useRef, useState } from 'react';
-import { ArrowRight, ArrowUpRight, BedDouble, Bookmark, ChevronDown, CircleCheck, Copy, Download, Pencil, Route, Share2, Utensils, Wallet } from 'lucide-react';
+import { useEffect, useId, useRef, useState } from 'react';
+import { ArrowRight, ArrowUpRight, BedDouble, Bookmark, ChevronDown, CircleCheck, Copy, Download, Pencil, Route, Share2, Utensils, Wallet, X } from 'lucide-react';
 import { cityById } from '../data';
 import { groupLodging, journeyForDay } from '../day-schedule';
 import { buildTripSchedules } from '../visit-scheduling';
@@ -8,7 +8,8 @@ import { arrivalLabels, getDepartureLabel, mobilityLabels, getTripIssues, buildT
 import { downloadPlan } from '../travel';
 import { FoodSuggestions, StaySuggestions } from './PracticalDetails';
 import { TripSchedule } from './TripSchedule';
-import { Button } from './ui';
+import { Button, InputField } from './ui';
+import './trip-takeaway.css';
 
 export function PlannedTrip({ profile, onCopy, onSave, onEdit, onUpdateReturn, onUpdateStart, onVisitChange, dayIndex, onChooseDay }: {
   profile: Profile; onCopy: (text: string) => void; onSave: () => boolean; onEdit: () => void;
@@ -92,6 +93,78 @@ export function PlannedTrip({ profile, onCopy, onSave, onEdit, onUpdateReturn, o
     </div>
     <section aria-label="出发前核对清单" className="trip-departure-checks"><div><CircleCheck size={19} /><h4>出发前，再确认这几件事</h4><span>{checked.length} / {checks.length}</span></div><p>把预订和接驳核对好，路上更从容。</p><ul>{checks.map(item => <li key={item.id}><label><input type="checkbox" checked={checked.includes(item.id)} onChange={() => setChecked(previous => previous.includes(item.id) ? previous.filter(id => id !== item.id) : [...previous, item.id])} /><span><strong>{item.title}</strong><small>{item.detail}</small></span></label></li>)}</ul><small>勾选仅作本次检查，不写入保存、分享或下载清单。</small></section>
     <details className="trip-source-links"><summary>路线资料与预订前核对</summary><p>景点事实参考官方资料；片区选择、餐食组合、时间与预算为编辑规划建议，未查询实时库存或车程。</p><div>{sources.map(source => <a key={source.url} href={source.url} target="_blank" rel="noreferrer">{source.title}<ArrowUpRight size={12} /></a>)}</div></details>
-    <div className="trip-takeaway"><Button aria-label="复制清单" onClick={() => onCopy(formatDetailedPlan(profile))} variant="neutral" className="whitespace-nowrap px-2 text-xs"><Copy size={15} /><span>复制<span className="hidden sm:inline">清单</span></span></Button><Button aria-label="下载行程" onClick={() => downloadPlan(formatDetailedPlan(profile), '湖北具体')} className="whitespace-nowrap px-2 text-xs"><Download size={15} /><span>下载<span className="hidden sm:inline">行程</span></span></Button><Button aria-label="分享链接" onClick={() => onCopy(sharePlanUrl(profile))} variant="neutral" className="whitespace-nowrap px-2 text-xs"><Share2 size={15} /><span>分享<span className="hidden sm:inline">链接</span></span></Button></div>
+    <TripTakeaway profile={profile} onCopy={onCopy} />
+  </div>;
+}
+
+function TripTakeaway({ profile, onCopy }: { profile: Profile; onCopy: (text: string) => void }) {
+  const id = useId();
+  const bar = useRef<HTMLDivElement>(null);
+  const trigger = useRef<HTMLButtonElement>(null);
+  const heading = useRef<HTMLHeadingElement>(null);
+  const link = useRef<HTMLInputElement>(null);
+  const [open, setOpen] = useState(false);
+  const [status, setStatus] = useState('');
+  const url = sharePlanUrl(profile);
+
+  useEffect(() => {
+    if (!open) return;
+    heading.current?.focus({ preventScroll: true });
+    const dismissOutside = (event: PointerEvent) => {
+      if (event.target instanceof Node && !bar.current?.contains(event.target)) setOpen(false);
+    };
+    window.addEventListener('pointerdown', dismissOutside);
+    return () => window.removeEventListener('pointerdown', dismissOutside);
+  }, [open]);
+
+  const close = () => {
+    setOpen(false);
+    trigger.current?.focus({ preventScroll: true });
+  };
+  const copyLink = async () => {
+    try {
+      await navigator.clipboard.writeText(url);
+      setStatus('链接已复制');
+    } catch {
+      if (link.current?.getClientRects().length) {
+        link.current.focus({ preventScroll: true });
+        link.current.select();
+      }
+      setStatus('请选中链接手动复制');
+    }
+  };
+
+  return <div ref={bar} className="trip-takeaway trip-export" onBlur={event => {
+    if (event.relatedTarget && !event.currentTarget.contains(event.relatedTarget)) setOpen(false);
+  }} onKeyDown={event => {
+    if (!open || event.key !== 'Escape') return;
+    event.preventDefault();
+    event.stopPropagation();
+    close();
+  }}>
+    <p id={id + '-text-info'} className="sr-only">文字清单含每日安排、住宿、餐食、预算和你的备注。</p>
+    <Button aria-label="复制清单" aria-describedby={id + '-text-info'} onClick={() => onCopy(formatDetailedPlan(profile))}
+      variant="neutral" className="whitespace-nowrap px-2 text-xs"><Copy size={15} aria-hidden="true" />复制清单</Button>
+    <Button aria-label="下载行程" aria-describedby={id + '-text-info'} onClick={() => downloadPlan(formatDetailedPlan(profile), '湖北具体')}
+      variant="neutral" className="whitespace-nowrap px-2 text-xs"><Download size={15} aria-hidden="true" />下载行程</Button>
+    <button ref={trigger} type="button" className="trip-share-trigger" aria-controls={id} aria-expanded={open} aria-label="分享链接" onClick={() => {
+      if (open) close();
+      else { setStatus(''); setOpen(true); }
+    }}><Share2 size={15} aria-hidden="true" />分享链接</button>
+    <section id={id} className="trip-share-panel" aria-labelledby={id + '-title'} hidden={!open}>
+      <div className="trip-share-heading">
+        <h4 id={id + '-title'} ref={heading} tabIndex={-1}>分享这份行程</h4>
+        <button type="button" aria-label="关闭分享面板" onClick={close}><X size={18} aria-hidden="true" /></button>
+      </div>
+      <p>打开链接可查看同一份路线、日期、人数和出行设置。</p>
+      <p className="trip-share-note">自由备注随复制或下载的文字清单保留，不写入分享链接。</p>
+      <label htmlFor={id + '-url'}>行程链接</label>
+      <InputField id={id + '-url'} ref={link} type="url" readOnly value={url}
+        onFocus={event => event.currentTarget.select()} onClick={event => event.currentTarget.select()} />
+      <div className="trip-share-actions">
+        <Button type="button" onClick={() => void copyLink()} className="px-3 text-sm"><Copy size={15} aria-hidden="true" />复制链接</Button>
+        <p role="status">{status}</p>
+      </div>
+    </section>
   </div>;
 }

@@ -145,7 +145,7 @@ function answerGuide(question: string, context: SupportContext = {}): SupportRep
     return reply(travelFaq.find(item => item.q.includes('保存'))?.a || '规划结果可以保存在当前浏览器，也可以复制、下载或分享。', cityId, [...(city ? [planAction(city.id)] : []), { kind: 'wishlist', label: '打开旅行心愿单' }], [], ['如何查看我的收藏？', '武汉两天怎么玩？']);
   }
   if (/收藏|心愿单|心愿清单/.test(q)) {
-    return reply('点击景点卡片的爱心即可收藏。心愿单按城市整理，可查看攻略、移除景点或进入该城市规划。收藏只保存在当前浏览器；城市编辑路线可以调整，收藏地点不会自动全部排入行程。', cityId, [{ kind: 'wishlist', label: '打开旅行心愿单' }], []);
+    return reply('点击景点卡片的爱心即可收藏。在心愿单里按城市勾选想去的景点，再点「查看行程」，就能看到分日路线和吃住交通。出现在同一条路线里的景点会排在同一天，当前时间表排不进去的会单独说明。收藏保存在当前浏览器。', cityId, [{ kind: 'wishlist', label: '打开旅行心愿单' }], []);
   }
   if (siteCostQuestion) return reply('本站的攻略浏览、收藏、行程整理和小游问答免费，无需注册。小游使用站内资料在本地匹配，无需 key。实际出行的门票、酒店与交通费用请向相关官方渠道确认。', cityId, actions, []);
   if (/登录|注册|账号|会员|隐私|聊天记录/.test(q)) {
